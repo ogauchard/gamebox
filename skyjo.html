@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Skyjo</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #10171f;
+    --panel: #18222e;
+    --line: #2b3a4c;
+    --text: #e8eef5;
+    --dim: #8ba0b6;
+    --accent: #ffce3a;
+    /* Les cartes se dimensionnent sur la hauteur de fenêtre pour que la table
+       tienne sans défilement. Ratio hauteur/largeur d'une carte : 1.4 */
+    --card-w: clamp(26px, min(5vh, 11vw), 54px);    /* grilles des adversaires */
+    --my-card: clamp(40px, min(8vh, 19vw), 82px);   /* ma grille et les piles */
+    --gap: 5px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 0%, #1c2a3a 0%, var(--bg) 60%);
+    color: var(--text);
+    font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ------------------------------------------------------------- Structure */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0,0,0,.25);
+    flex: none;
+  }
+  header h1 {
+    font-size: 20px; letter-spacing: 3px; font-weight: 800;
+    color: var(--accent);
+  }
+  header .spacer { flex: 1; }
+  header .meta { color: var(--dim); font-size: 13px; }
+
+  button {
+    font: inherit; color: inherit;
+    background: #223142; border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 13px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #2c3f55; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: #17202a; border-color: var(--accent); font-weight: 700; }
+  button.primary:hover { background: #ffd960; }
+
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex; flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+    overflow: auto;
+    align-items: center;
+  }
+  /* Sans ceci, les blocs se compriment quand la table dépasse la fenêtre et
+     leur contenu déborde par-dessus le voisin au lieu de faire défiler. */
+  main > * { flex: none; }
+
+  #opponents {
+    display: flex; flex-wrap: wrap; gap: 18px; justify-content: center;
+  }
+
+  /* ---------------------------------------------------------------- Joueur */
+  .player {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 9px 11px 11px;
+  }
+  .player.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .player .name {
+    display: flex; align-items: baseline; gap: 8px;
+    font-weight: 700; margin-bottom: 7px; font-size: 14px;
+  }
+  .player .name .tag {
+    font-weight: 400; font-size: 12px; color: var(--dim);
+  }
+  .player .name .finisher { color: var(--accent); font-size: 12px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, var(--card-w));
+    gap: var(--gap);
+  }
+  #me { --card-w: var(--my-card); --gap: 8px; }
+  #me .name { font-size: 16px; }
+
+  /* ---------------------------------------------------------------- Cartes */
+  .card {
+    display: block;
+    position: relative;
+    /* Hauteur explicite plutôt qu'aspect-ratio : les faces sont positionnées
+       en absolu et ont besoin d'une hauteur de référence résolue. */
+    width: var(--card-w);
+    height: calc(var(--card-w) * 1.4);
+    padding: 0; border: 0; background: none;
+    font: inherit; color: inherit;
+    border-radius: 8px;
+    perspective: 600px;
+    cursor: default;
+    transition: transform .15s;
+  }
+  .card:disabled { opacity: 1; }   /* neutralise le grisage global des boutons */
+  .card .inner {
+    position: absolute; inset: 0;
+    transform-style: preserve-3d;
+    transition: transform .38s cubic-bezier(.4,.1,.3,1);
+  }
+  .card.up .inner { transform: rotateY(180deg); }
+  .card .face {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    backface-visibility: hidden;
+    font-weight: 800;
+    font-size: calc(var(--card-w) * .42);
+    box-shadow: 0 2px 5px rgba(0,0,0,.4);
+  }
+  .card .back {
+    background: repeating-linear-gradient(45deg, #4b3a6b 0 6px, #573f7d 6px 12px);
+    border: 2px solid #7a63a6;
+  }
+  .card .front {
+    transform: rotateY(180deg);
+    border: 2px solid rgba(0,0,0,.25);
+  }
+  /* Code couleur du jeu original */
+  .v-neg  { background: #1d4f8f; color: #fff; }
+  .v-zero { background: #37b6e0; color: #06344a; }
+  .v-low  { background: #46a94a; color: #08320a; }
+  .v-mid  { background: #f0c22c; color: #4a3800; }
+  .v-high { background: #d94a3f; color: #fff; }
+
+  .card.removed { visibility: hidden; }
+  /* L'anneau et le survol portent sur la carte, pas sur .inner, dont la
+     transformation 3D sert déjà au retournement. */
+  .card.selectable { cursor: pointer; box-shadow: 0 0 0 3px var(--accent); }
+  /* background: la règle générique button:hover teinterait la carte pendant
+     le retournement, quand le dos et la face laissent voir le support. */
+  .card.selectable:hover { transform: translateY(-5px); background: none; }
+
+  /* ----------------------------------------------------------------- Table */
+  #table {
+    display: flex; align-items: center; justify-content: center; gap: 26px;
+    padding: 4px 0;
+  }
+  .pile { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  /* Sans cette règle, le display:flex ci-dessus l'emporte sur le display:none
+     que le navigateur applique à l'attribut hidden : la pile « En main »
+     resterait affichée en permanence. */
+  .pile[hidden] { display: none; }
+  .pile .label { font-size: 12px; color: var(--dim); letter-spacing: .5px; }
+  .pile .slot {
+    width: var(--my-card);
+    height: calc(var(--my-card) * 1.4);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: calc(var(--my-card) * .42);
+    transition: transform .15s;
+  }
+  .slot.empty { border: 2px dashed var(--line); color: var(--dim); font-size: 13px; font-weight: 400; }
+  .slot.back {
+    background: repeating-linear-gradient(45deg, #4b3a6b 0 6px, #573f7d 6px 12px);
+    border: 2px solid #7a63a6;
+  }
+  .pile.clickable .slot { cursor: pointer; box-shadow: 0 0 0 3px var(--accent); }
+  .pile.clickable .slot:hover { transform: translateY(-4px); }
+  #held .slot { box-shadow: 0 0 14px rgba(255,206,58,.5); }
+
+  #status {
+    min-height: 22px; text-align: center; font-size: 15px;
+  }
+  #status b { color: var(--accent); }
+  /* Hauteur figée sur 3 lignes : le journal ne doit ni pousser la table
+     ni déborder sur la grille du joueur. */
+  #log {
+    font-size: 12.5px; line-height: 1.35; color: var(--dim); text-align: center;
+    max-width: 720px; height: calc(12.5px * 1.35 * 3);
+    overflow: hidden;
+  }
+
+  /* -------------------------------------------------------------- Overlays */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(6,10,15,.86);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 10;
+  }
+  .overlay[hidden] { display: none; }
+  .sheet {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 24px 26px;
+    max-width: 560px; width: 100%;
+    max-height: 90vh; overflow: auto;
+  }
+  .sheet h2 { font-size: 22px; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
+  .sheet p { margin: 8px 0; }
+  .sheet ul { margin: 8px 0 8px 20px; }
+  .sheet li { margin: 5px 0; }
+  .sheet .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .choice { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+  .choice button.sel { background: var(--accent); color: #17202a; border-color: var(--accent); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { text-align: right; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  tr.win td { color: var(--accent); font-weight: 700; }
+  .doubled { color: #ff8a7a; }
+
+  /* Les tailles de cartes s'ajustent déjà via clamp() : ici on ne resserre
+     que les espacements. */
+  @media (max-width: 720px) {
+    main { padding: 8px; gap: 6px; }
+    #opponents { gap: 10px; }
+    #table { gap: 12px; }
+    .player { padding: 7px 8px 9px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card .inner { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SKYJO</h1>
+  <span class="meta" id="roundInfo">Manche 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div class="pile" id="drawPile">
+      <div class="slot back" id="drawSlot"></div>
+      <div class="label">Pioche (<span id="drawCount">0</span>)</div>
+    </div>
+    <div class="pile" id="held" hidden>
+      <div class="slot" id="heldSlot"></div>
+      <div class="label">En main</div>
+    </div>
+    <div class="pile" id="discardPile">
+      <div class="slot empty" id="discardSlot">vide</div>
+      <div class="label">Défausse</div>
+    </div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="me" class="player"></div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>SKYJO</h2>
+    <p>Le but est d'avoir le total de points le plus bas. La partie s'arrête dès qu'un joueur
+       atteint <b>100 points</b> ou plus : le joueur avec le total le plus bas l'emporte.</p>
+    <p>Nombre de joueurs :</p>
+    <div class="choice" id="playerChoice"></div>
+    <p>Niveau des adversaires :</p>
+    <div class="choice" id="levelChoice"></div>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Chaque joueur reçoit <b>12 cartes face cachée</b> disposées en 3 rangées × 4 colonnes,
+       et en retourne 2 de son choix. Le joueur dont la somme des 2 cartes visibles est la plus
+       élevée commence.</p>
+    <p><b>À ton tour</b>, une seule de ces deux actions :</p>
+    <ul>
+      <li><b>Prendre la carte de la défausse</b> — tu dois l'échanger avec une de tes cartes
+          (visible ou cachée). La carte remplacée part à la défausse, face visible.</li>
+      <li><b>Piocher</b> — tu choisis ensuite : soit l'échanger avec une de tes cartes,
+          soit la défausser et <b>retourner</b> une de tes cartes cachées.</li>
+    </ul>
+    <p><b>Colonnes :</b> dès qu'une colonne de 3 cartes visibles affiche 3 fois la même valeur,
+       elle est retirée du jeu et ne compte plus aucun point.</p>
+    <p><b>Fin de manche :</b> quand un joueur a retourné ses 12 cartes, chaque autre joueur joue
+       encore <b>un tour</b>, puis tout le monde révèle son jeu et additionne ses cartes.</p>
+    <p><b>Pénalité :</b> le joueur qui a mis fin à la manche voit son total <b>doublé</b> s'il n'a
+       pas le total strictement le plus bas (égalité comprise). La pénalité ne s'applique pas si
+       son total est nul ou négatif.</p>
+    <p><b>Le paquet :</b> 150 cartes — cinq −2, dix −1, quinze 0, et dix exemplaires de chaque
+       valeur de 1 à 12.</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de manche / de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la manche</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Manche suivante</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   SKYJO — d'après le jeu de Magilano (2015)
+   Un humain contre 1 à 3 adversaires gérés par l'ordinateur.
+   ========================================================================= */
+
+const ROWS = 3, COLS = 4, CELLS = ROWS * COLS;
+const EV_HIDDEN = 5.07;          // espérance d'une carte inconnue (760 / 150)
+const AI_NAMES = ["Nora", "Elias", "Yuki"];
+const TARGET = 100;              // fin de partie dès qu'un joueur atteint ce total
+const REVEAL_MS = 950;           // temps de lecture d'une carte cachée remplacée
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function buildDeck() {
+  const deck = [];
+  for (let i = 0; i < 5; i++) deck.push(-2);
+  for (let i = 0; i < 10; i++) deck.push(-1);
+  for (let i = 0; i < 15; i++) deck.push(0);
+  for (let v = 1; v <= 12; v++) for (let i = 0; i < 10; i++) deck.push(v);
+  return deck;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function colorClass(v) {
+  if (v < 0) return "v-neg";
+  if (v === 0) return "v-zero";
+  if (v <= 4) return "v-low";
+  if (v <= 8) return "v-mid";
+  return "v-high";
+}
+
+/* ------------------------------------------------------------------ État */
+const S = {
+  players: [],        // { name, ai, grid: [{v, up, removed}], total, rounds: [] }
+  draw: [],
+  discard: [],
+  current: 0,
+  dealer: 0,          // qui a commencé la manche (pour alterner)
+  phase: "idle",      // idle | setup | source | drawn | swap | flip | ai | over
+  held: null,         // valeur de la carte en main
+  heldFrom: null,     // "draw" | "discard"
+  finisher: null,     // index du joueur ayant retourné ses 12 cartes
+  roundTurns: 0,      // tours joués dans la manche en cours (pression de fin)
+  round: 1,
+  logs: [],
+  busy: false,
+};
+
+const el = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------ Accès à la grille */
+const colOf = (i) => i % COLS;
+const cellsOfCol = (c) => [c, c + COLS, c + 2 * COLS];
+const hiddenCells = (p) => p.grid.map((c, i) => (!c.up && !c.removed ? i : -1)).filter((i) => i >= 0);
+const isFinished = (p) => p.grid.every((c) => c.up || c.removed);
+const visibleSum = (p) => p.grid.reduce((n, c) => n + (c.up && !c.removed ? c.v : 0), 0);
+const trueSum = (p) => p.grid.reduce((n, c) => n + (c.removed ? 0 : c.v), 0);
+
+function drawCard() {
+  if (S.draw.length === 0) {
+    // Pioche épuisée : on remélange la défausse en gardant sa carte du dessus.
+    const top = S.discard.pop();
+    S.draw = shuffle(S.discard.splice(0, S.discard.length));
+    S.discard.push(top);
+    log("La pioche est épuisée : la défausse est remélangée.");
+  }
+  return S.draw.pop();
+}
+
+// Retire les colonnes de 3 valeurs identiques visibles. Renvoie la valeur retirée.
+function clearColumns(p) {
+  let cleared = null;
+  for (let c = 0; c < COLS; c++) {
+    const cells = cellsOfCol(c).map((i) => p.grid[i]);
+    if (cells.some((x) => x.removed || !x.up)) continue;
+    if (cells[0].v === cells[1].v && cells[1].v === cells[2].v) {
+      cleared = cells[0].v;
+      for (const x of cells) { x.removed = true; S.discard.push(x.v); }
+    }
+  }
+  return cleared;
+}
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.players = [{ name: "Toi", ai: false, grid: [], total: 0, rounds: [] }];
+  for (let i = 0; i < nPlayers - 1; i++) {
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, grid: [], total: 0, rounds: [] });
+  }
+  S.round = 1;
+  S.dealer = 0;
+  buildBoard();
+  startRound();
+}
+
+function startRound() {
+  S.draw = shuffle(buildDeck());
+  S.discard = [];
+  S.held = null;
+  S.heldFrom = null;
+  S.finisher = null;
+  S.roundTurns = 0;
+  S.logs = [];
+
+  for (const p of S.players) {
+    p.grid = [];
+    for (let i = 0; i < CELLS; i++) p.grid.push({ v: S.draw.pop(), up: false, removed: false });
+  }
+  S.discard.push(drawCard());
+
+  // Les adversaires retournent 2 cartes au hasard ; l'humain choisit les siennes.
+  for (const p of S.players) {
+    if (!p.ai) continue;
+    const picks = shuffle([...Array(CELLS).keys()]).slice(0, 2);
+    for (const i of picks) p.grid[i].up = true;
+  }
+  S.phase = "setup";
+  S.current = 0;
+  setStatus("Retourne <b>2 cartes</b> de ton choix.");
+  render();
+}
+
+// Le joueur avec la plus forte somme de cartes visibles commence.
+function decideStarter() {
+  let best = -Infinity, who = 0;
+  S.players.forEach((p, i) => {
+    const up = p.grid.filter((c) => c.up).map((c) => c.v);
+    const sum = up[0] + up[1];
+    const high = Math.max(...up);
+    const key = sum * 100 + high;
+    if (key > best) { best = key; who = i; }
+  });
+  S.current = who;
+  S.dealer = who;
+  log(`${S.players[who].name} commence (cartes visibles les plus fortes).`);
+}
+
+/* --------------------------------------------------------------- Tours */
+function beginTurn() {
+  const p = S.players[S.current];
+  if (S.phase === "over") return;
+  if (p.ai) {
+    S.phase = "ai";
+    setStatus(`<b>${p.name}</b> réfléchit…`);
+    render();
+    aiTurn();
+  } else {
+    S.phase = "source";
+    setStatus("Pioche une carte ou prends celle de la défausse.");
+    render();
+  }
+}
+
+function endTurn() {
+  const p = S.players[S.current];
+  S.roundTurns++;
+  if (S.finisher === null && isFinished(p)) {
+    S.finisher = S.current;
+    log(`${p.name} a retourné toutes ses cartes : dernier tour pour les autres !`);
+  }
+  S.current = (S.current + 1) % S.players.length;
+  if (S.finisher !== null && S.current === S.finisher) {
+    endRound();
+    return;
+  }
+  beginTurn();
+}
+
+/* Place la carte `value` sur la case `idx` du joueur `p`.
+   La carte remplacée part à la défausse, face visible. */
+function placeCard(p, idx, value) {
+  const cell = p.grid[idx];
+  const old = cell.v;
+  cell.v = value;
+  cell.up = true;
+  S.discard.push(old);
+  const cleared = clearColumns(p);
+  return { old, cleared };
+}
+
+/* --------------------------------------------------------- Fin de manche */
+function endRound() {
+  S.phase = "over";
+  for (const p of S.players) for (const c of p.grid) if (!c.removed) c.up = true;
+
+  const totals = S.players.map(trueSum);
+  const finisher = S.finisher;
+  const others = totals.filter((_, i) => i !== finisher);
+  const lowestOther = Math.min(...others);
+  // Le total du finisseur est doublé s'il n'est pas seul en tête. Pas de
+  // pénalité si son total est nul ou négatif.
+  const doubled = totals[finisher] > 0 && totals[finisher] >= lowestOther;
+  if (doubled) totals[finisher] *= 2;
+
+  S.players.forEach((p, i) => { p.rounds.push(totals[i]); p.total += totals[i]; });
+
+  const over = S.players.some((p) => p.total >= TARGET);
+  render();
+  showScores(doubled, over);
+}
+
+function showScores(doubled, over) {
+  const rows = S.players.map((p, i) => ({ p, i, total: p.total }));
+  const bestTotal = Math.min(...rows.map((r) => r.total));
+
+  let html = "<table><thead><tr><th>Joueur</th><th>Manche</th><th>Total</th></tr></thead><tbody>";
+  for (const r of rows) {
+    const isFin = r.i === S.finisher;
+    const round = r.p.rounds[r.p.rounds.length - 1];
+    const mark = isFin && doubled ? ' <span class="doubled">(×2)</span>' : isFin ? " ✓" : "";
+    const win = over && r.total === bestTotal ? ' class="win"' : "";
+    html += `<tr${win}><td>${r.p.name}${mark}</td><td>${round}</td><td>${r.total}</td></tr>`;
+  }
+  html += "</tbody></table>";
+
+  if (doubled) {
+    const f = S.players[S.finisher];
+    html = `<p>${f.name} a mis fin à la manche sans avoir le total le plus bas :
+            son score est <b class="doubled">doublé</b>.</p>` + html;
+  }
+
+  el("scoreTitle").textContent = over ? "Fin de la partie" : `Fin de la manche ${S.round}`;
+  if (over) {
+    const winners = rows.filter((r) => r.total === bestTotal).map((r) => r.p.name);
+    html += `<p style="margin-top:14px">🏆 <b>${winners.join(" et ")}</b>
+             ${winners.length > 1 ? "l'emportent" : "l'emporte"} avec ${bestTotal} points.</p>`;
+  }
+  el("scoreBody").innerHTML = html;
+  el("btnNext").textContent = over ? "Rejouer" : "Manche suivante";
+  el("btnNext").dataset.over = over ? "1" : "";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose :
+     chooseDiscard(p, top) -> index où poser la carte de la défausse, ou null
+     afterDraw(p, v)       -> { kind: "place" | "flip", idx }
+   Aucune des deux ne consulte la valeur d'une carte face cachée, pas même
+   les siennes : elles ne disposent que de l'information publique. */
+
+/* ---------------------------------------------------------------------------
+   Politique « tranquille » : évaluation gloutonne d'un coup, à seuils fixes.
+   --------------------------------------------------------------------------- */
+
+/* Meilleur emplacement pour une carte de valeur v : on compare le coût actuel
+   de chaque case au coût après remplacement, avec un bonus si le placement
+   complète une colonne (celle-ci est alors retirée et ne compte plus). */
+function bestPlacement(p, v) {
+  let best = { idx: -1, gain: -Infinity, clears: false };
+  for (let i = 0; i < CELLS; i++) {
+    const cell = p.grid[i];
+    if (cell.removed) continue;
+    const costBefore = cell.up ? cell.v : EV_HIDDEN;
+    let gain = costBefore - v;
+    // Les deux autres cases de la colonne affichent-elles déjà v ?
+    const others = cellsOfCol(colOf(i)).filter((j) => j !== i).map((j) => p.grid[j]);
+    const clears = others.every((o) => !o.removed && o.up && o.v === v);
+    if (clears) gain += 3 * v;   // la colonne entière disparaît du décompte
+    if (gain > best.gain) best = { idx: i, gain, clears };
+  }
+  return best;
+}
+
+/* Case à retourner : on privilégie une colonne où deux cartes identiques sont
+   déjà visibles (chance de compléter), sinon au hasard. */
+function bestFlip(p) {
+  const hidden = hiddenCells(p);
+  for (const i of hidden) {
+    const others = cellsOfCol(colOf(i)).filter((j) => j !== i).map((j) => p.grid[j]);
+    if (others.every((o) => !o.removed && o.up) && others[0].v === others[1].v) return i;
+  }
+  return hidden[Math.floor(Math.random() * hidden.length)];
+}
+
+const greedyPolicy = {
+  chooseDiscard(p, top) {
+    // Prendre la défausse coûte le droit de piocher : il faut un gain net réel.
+    const b = bestPlacement(p, top);
+    return b.gain >= 2 ? b.idx : null;
+  },
+  afterDraw(p, v) {
+    // Défausser puis retourner est à peu près neutre : le moindre gain suffit.
+    const place = bestPlacement(p, v);
+    if (place.gain > 0.5 || hiddenCells(p).length === 0) return { kind: "place", idx: place.idx };
+    return { kind: "flip", idx: bestFlip(p) };
+  },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable ». Trois différences de fond :
+     1. elle compte les cartes — l'espérance d'une case cachée n'est plus figée
+        à 5,07 mais recalculée à partir de tout ce qui est visible ;
+     2. elle évalue la pioche par espérance sur les cartes encore invisibles,
+        au lieu de la comparer à un seuil arbitraire ;
+     3. elle raisonne sur la fin de manche : terminer prive les adversaires d'un
+        tour, mais expose au doublement du score.
+   --------------------------------------------------------------------------- */
+
+const AI = {
+  rivalLastTurn: 5,     // ce qu'un adversaire gagne en moyenne à son dernier tour
+  endBonus: 0,          // valeur de priver les adversaires d'un tour
+  turnValue: 8,         // valeur d'un tour de jeu supplémentaire pour soi
+  patience: 34,         // tours de manche avant de commencer à vouloir la clore
+  impatience: 1.5,      // pression ajoutée par tour au-delà
+};
+
+/* Prime à ne pas clore la manche. Elle décroît puis devient négative à mesure
+   que la manche s'étire : sans cela, temporiser paraît indéfiniment rentable
+   et une table entière d'adversaires identiques ne termine jamais. */
+const endPressure = () =>
+  AI.turnValue - AI.impatience * Math.max(0, S.roundTurns - AI.patience);
+
+let unseen = new Map();      // valeur -> nombre de cartes encore invisibles
+let unseenTotal = 0, unseenSum = 0, unseenEV = EV_HIDDEN;
+
+/* Distribution des cartes que personne ne peut voir : le paquet moins la
+   défausse, les cartes face visible de tous les joueurs et la carte en main. */
+function refreshUnseen() {
+  const c = new Map();
+  for (const v of buildDeck()) c.set(v, (c.get(v) || 0) + 1);
+  const seen = (v) => c.set(v, c.get(v) - 1);
+  for (const v of S.discard) seen(v);
+  for (const q of S.players) for (const cell of q.grid) if (cell.up && !cell.removed) seen(cell.v);
+  if (S.held !== null) seen(S.held);
+
+  unseen = c;
+  unseenTotal = 0; unseenSum = 0;
+  for (const [v, n] of c) { unseenTotal += n; unseenSum += v * n; }
+  unseenEV = unseenTotal > 0 ? unseenSum / unseenTotal : EV_HIDDEN;
+}
+
+const pValue = (v) => (unseenTotal > 0 ? (unseen.get(v) || 0) / unseenTotal : 0);
+
+/* Total espéré d'une grille. Une case cachée — ou tout juste retournée sans
+   être lue, marquée `unknown` — vaut l'espérance courante. */
+function gridEV(grid) {
+  let s = 0;
+  for (const c of grid) if (!c.removed) s += (c.up && !c.unknown) ? c.v : unseenEV;
+  return s;
+}
+
+/* Copie de la grille avec la carte v posée en idx, colonnes complètes retirées. */
+function simulate(grid, idx, v) {
+  const g2 = grid.map((c) => ({ ...c }));
+  g2[idx].v = v; g2[idx].up = true; g2[idx].unknown = false;
+  for (let col = 0; col < COLS; col++) {
+    const cells = cellsOfCol(col).map((i) => g2[i]);
+    if (cells.every((x) => !x.removed && x.up && !x.unknown)
+        && cells[0].v === cells[1].v && cells[1].v === cells[2].v) {
+      for (const x of cells) x.removed = true;
+    }
+  }
+  return g2;
+}
+
+const isDone = (grid) => grid.every((c) => c.up || c.removed);
+
+/* Économie espérée en retournant la case idx : nulle sauf si les deux autres
+   cases de la colonne montrent déjà la même valeur, auquel cas la colonne saute
+   avec la probabilité que la carte cachée soit justement cette valeur. */
+function flipGain(grid, idx) {
+  const others = cellsOfCol(colOf(idx)).filter((j) => j !== idx).map((j) => grid[j]);
+  if (!others.every((o) => !o.removed && o.up && !o.unknown)) return 0;
+  const w = others[0].v;
+  if (w !== others[1].v) return 0;
+  const nw = unseen.get(w) || 0;
+  const restN = unseenTotal - nw;
+  const restEV = restN > 0 ? (unseenSum - w * nw) / restN : unseenEV;
+  return (2 * w + unseenEV) - (1 - pValue(w)) * (2 * w + restEV);
+}
+
+const rivalEstimate = (me) => Math.min(...S.players.map(
+  (q) => (q === me ? Infinity : gridEV(q.grid) - AI.rivalLastTurn)));
+
+/* Note d'une position résultante : plus elle est basse, meilleure elle est. */
+function scorePosition(me, grid, ends) {
+  const mine = gridEV(grid);
+  if (S.finisher !== null) return mine;      // dernier tour : la fin ne dépend plus de moi
+  if (!ends) return mine - endPressure();
+  const rival = rivalEstimate(me);
+  if (mine > 0 && mine >= rival) return mine * 2;   // doublement probable
+  return mine - AI.endBonus;
+}
+
+/* Meilleur usage d'une carte connue v. `canFlip` : le joueur a le droit de la
+   défausser pour retourner une de ses cartes cachées. */
+function bestPlayWith(p, v, canFlip) {
+  let best = { score: Infinity, kind: "place", idx: -1 };
+  for (let i = 0; i < CELLS; i++) {
+    if (p.grid[i].removed) continue;
+    const g2 = simulate(p.grid, i, v);
+    const sc = scorePosition(p, g2, isDone(g2));
+    if (sc < best.score) best = { score: sc, kind: "place", idx: i };
+  }
+  if (canFlip) {
+    for (const i of hiddenCells(p)) {
+      const g2 = p.grid.map((c) => ({ ...c }));
+      g2[i].up = true; g2[i].unknown = true;   // retournée, mais pas encore lue
+      const sc = scorePosition(p, g2, isDone(g2)) - flipGain(p.grid, i);
+      if (sc < best.score) best = { score: sc, kind: "flip", idx: i };
+    }
+  }
+  return best;
+}
+
+/* Espérance de la pioche : moyenne, sur toutes les cartes encore invisibles,
+   de la note du meilleur coup qu'elles permettraient. */
+function drawScore(p) {
+  const canFlip = hiddenCells(p).length > 0;
+  let sum = 0;
+  for (const [v, n] of unseen) {
+    if (n <= 0) continue;
+    sum += n * bestPlayWith(p, v, canFlip).score;
+  }
+  return unseenTotal > 0 ? sum / unseenTotal : Infinity;
+}
+
+const countingPolicy = {
+  chooseDiscard(p, top) {
+    refreshUnseen();
+    // La carte de la défausse est connue : on la compare à l'espérance de la
+    // pioche. Plus aucun seuil arbitraire.
+    const take = bestPlayWith(p, top, false);
+    return take.score <= drawScore(p) ? take.idx : null;
+  },
+  afterDraw(p, v) {
+    refreshUnseen();
+    return bestPlayWith(p, v, hiddenCells(p).length > 0);
+  },
+};
+
+const POLICIES = { greedy: greedyPolicy, counting: countingPolicy };
+
+async function aiTurn() {
+  const p = S.players[S.current];
+  const policy = POLICIES[p.policy] || countingPolicy;
+  S.busy = true;
+  await sleep(650);
+
+  const top = S.discard[S.discard.length - 1];
+  const takeIdx = top === undefined ? null : policy.chooseDiscard(p, top);
+
+  if (takeIdx !== null) {
+    S.held = S.discard.pop();
+    S.heldFrom = "discard";
+    render();
+    await sleep(600);
+    const { old, cleared } = placeCard(p, takeIdx, S.held);
+    log(`${p.name} prend le ${S.held} de la défausse et jette un ${old}.`
+        + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
+    S.held = null;
+    finishAiTurn();
+    return;
+  }
+
+  S.held = drawCard();
+  S.heldFrom = "draw";
+  render();
+  await sleep(700);
+
+  const act = policy.afterDraw(p, S.held);
+  if (act.kind === "place") {
+    const { old, cleared } = placeCard(p, act.idx, S.held);
+    log(`${p.name} pioche un ${S.held} et jette un ${old}.`
+        + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
+  } else {
+    S.discard.push(S.held);
+    p.grid[act.idx].up = true;
+    const cleared = clearColumns(p);
+    log(`${p.name} défausse un ${S.held} et retourne un ${p.grid[act.idx].v}.`
+        + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
+  }
+  S.held = null;
+  finishAiTurn();
+}
+
+async function finishAiTurn() {
+  S.heldFrom = null;
+  render();
+  await sleep(550);
+  S.busy = false;
+  endTurn();
+}
+
+/* ================================================================= ENTRÉES */
+
+function onCardClick(idx) {
+  if (S.busy) return;
+  const me = S.players[0];
+  const cell = me.grid[idx];
+
+  if (S.phase === "setup") {
+    if (cell.up || cell.removed) return;
+    cell.up = true;
+    if (me.grid.filter((c) => c.up).length === 2) {
+      decideStarter();
+      beginTurn();
+    } else {
+      render();
+    }
+    return;
+  }
+
+  if (S.current !== 0) return;
+
+  if (S.phase === "swap" || S.phase === "drawn") {
+    if (cell.removed) return;
+    humanPlace(idx);
+    return;
+  }
+
+  if (S.phase === "flip") {
+    if (cell.up || cell.removed) return;
+    cell.up = true;
+    const cleared = clearColumns(me);
+    log(`Tu retournes un ${cell.v}.` + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
+    endTurn();
+  }
+}
+
+/* Pose la carte en main sur la case `idx`. Si la case était cachée, on la
+   révèle un instant : le joueur doit pouvoir lire la carte qu'il sacrifie
+   avant qu'elle ne parte à la défausse. */
+async function humanPlace(idx) {
+  const me = S.players[0];
+  const cell = me.grid[idx];
+
+  if (!cell.up) {
+    S.busy = true;
+    cell.up = true;
+    setStatus(`Tu remplaces un <b>${cell.v}</b>…`);
+    render();
+    await sleep(REVEAL_MS);
+    S.busy = false;
+  }
+
+  const { old, cleared } = placeCard(me, idx, S.held);
+  log(`Tu places le ${S.held} et jettes un ${old}.`
+      + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
+  S.held = null;
+  S.heldFrom = null;
+  endTurn();
+}
+
+function onDrawClick() {
+  if (S.busy || S.current !== 0 || S.phase !== "source") return;
+  S.held = drawCard();
+  S.heldFrom = "draw";
+  S.phase = "drawn";
+  setStatus(`Tu as pioché un <b>${S.held}</b> : échange-le avec une carte, ou défausse-le pour retourner une carte cachée.`);
+  render();
+}
+
+function onDiscardClick() {
+  if (S.busy || S.current !== 0) return;
+
+  if (S.phase === "source") {
+    if (S.discard.length === 0) return;
+    S.held = S.discard.pop();
+    S.heldFrom = "discard";
+    S.phase = "swap";
+    setStatus(`Tu prends le <b>${S.held}</b> : choisis la carte à remplacer.`);
+    render();
+    return;
+  }
+
+  if (S.phase === "drawn") {
+    // Défausser la carte piochée oblige à retourner une carte cachée.
+    if (hiddenCells(S.players[0]).length === 0) return;
+    S.discard.push(S.held);
+    log(`Tu défausses le ${S.held}.`);
+    S.held = null;
+    S.heldFrom = null;
+    S.phase = "flip";
+    setStatus("Retourne une de tes cartes cachées.");
+    render();
+  }
+}
+
+/* ================================================================== RENDU */
+
+function buildBoard() {
+  el("opponents").innerHTML = "";
+  el("me").innerHTML = "";
+
+  S.players.forEach((p, pi) => {
+    const host = pi === 0 ? el("me") : document.createElement("div");
+    if (pi > 0) { host.className = "player"; el("opponents").appendChild(host); }
+    host.innerHTML = `<div class="name"><span>${p.name}</span>
+        <span class="tag" data-role="tag"></span>
+        <span class="finisher" data-role="fin"></span></div>
+      <div class="grid" data-role="grid"></div>`;
+    const grid = host.querySelector('[data-role="grid"]');
+    for (let i = 0; i < CELLS; i++) {
+      const b = document.createElement("button");
+      b.className = "card";
+      b.innerHTML = `<span class="inner"><span class="face back"></span><span class="face front"></span></span>`;
+      if (pi === 0) b.addEventListener("click", () => onCardClick(i));
+      grid.appendChild(b);
+    }
+    p._host = host;
+  });
+}
+
+function render() {
+  const myTurn = S.current === 0 && !S.busy;
+
+  S.players.forEach((p, pi) => {
+    const host = p._host;
+    host.classList.toggle("active", S.current === pi && S.phase !== "over");
+    host.querySelector('[data-role="tag"]').textContent =
+      `${p.total} pt${p.total > 1 ? "s" : ""} · visible ${visibleSum(p)}`;
+    host.querySelector('[data-role="fin"]').textContent = S.finisher === pi ? "a terminé" : "";
+
+    const cards = host.querySelectorAll(".card");
+    p.grid.forEach((cell, i) => {
+      const b = cards[i];
+      b.classList.toggle("up", cell.up);
+      b.classList.toggle("removed", cell.removed);
+      const front = b.querySelector(".front");
+      front.textContent = cell.v;
+      front.className = "face front " + colorClass(cell.v);
+
+      let sel = false;
+      if (pi === 0 && myTurn) {
+        if (S.phase === "setup") sel = !cell.up && !cell.removed;
+        else if (S.phase === "swap" || S.phase === "drawn") sel = !cell.removed;
+        else if (S.phase === "flip") sel = !cell.up && !cell.removed;
+      }
+      b.classList.toggle("selectable", sel);
+      b.disabled = !sel;
+    });
+  });
+
+  // Pioche et défausse
+  el("drawCount").textContent = S.draw.length;
+  const canDraw = myTurn && S.phase === "source";
+  el("drawPile").classList.toggle("clickable", canDraw);
+
+  const top = S.discard[S.discard.length - 1];
+  const dSlot = el("discardSlot");
+  if (top === undefined) {
+    dSlot.className = "slot empty";
+    dSlot.textContent = "vide";
+  } else {
+    dSlot.className = "slot " + colorClass(top);
+    dSlot.textContent = top;
+  }
+  const canDiscard = myTurn &&
+    (S.phase === "source" ? S.discard.length > 0
+     : S.phase === "drawn" ? hiddenCells(S.players[0]).length > 0
+     : false);
+  el("discardPile").classList.toggle("clickable", canDiscard);
+
+  const heldBox = el("held");
+  if (S.held === null) {
+    heldBox.hidden = true;
+    el("heldSlot").className = "slot";   // pas de valeur résiduelle au réaffichage
+    el("heldSlot").textContent = "";
+  } else {
+    heldBox.hidden = false;
+    const hs = el("heldSlot");
+    hs.className = "slot " + colorClass(S.held);
+    hs.textContent = S.held;
+  }
+
+  el("roundInfo").textContent = `Manche ${S.round}` +
+    (S.finisher !== null && S.phase !== "over" ? " · dernier tour" : "");
+  el("log").innerHTML = S.logs.join("<br>");
+}
+
+function setStatus(html) { el("status").innerHTML = html; }
+
+/* ============================================================== Interface */
+let chosenPlayers = 3;
+let chosenLevel = "counting";
+
+function buildChoice(host, items, current, onPick) {
+  for (const it of items) {
+    const b = document.createElement("button");
+    b.textContent = it.label;
+    b.classList.toggle("sel", it.id === current);
+    b.addEventListener("click", () => {
+      onPick(it.id);
+      [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
+    });
+    host.appendChild(b);
+  }
+}
+
+buildChoice(el("playerChoice"),
+  [2, 3, 4].map((n) => ({ id: n, label: `${n} joueurs` })),
+  chosenPlayers, (id) => { chosenPlayers = id; });
+
+buildChoice(el("levelChoice"), [
+  { id: "greedy", label: "Tranquille" },
+  { id: "counting", label: "Redoutable" },
+], chosenLevel, (id) => { chosenLevel = id; });
+
+el("drawSlot").addEventListener("click", onDrawClick);
+el("discardSlot").addEventListener("click", onDiscardClick);
+
+el("btnStart").addEventListener("click", () => {
+  el("startOverlay").hidden = true;
+  newGame(chosenPlayers);
+});
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  if (el("btnNext").dataset.over) {
+    for (const p of S.players) { p.total = 0; p.rounds = []; }
+    S.round = 1;
+  } else {
+    S.round++;
+  }
+  startRound();
+});
+</script>
+</body>
+</html>
