@@ -219,13 +219,93 @@
   tr.win td { color: var(--accent); font-weight: 700; }
   .doubled { color: #ff8a7a; }
 
-  /* Les tailles de cartes s'ajustent déjà via clamp() : ici on ne resserre
-     que les espacements. */
+  /* Tablette et fenêtre étroite : on ne resserre que les espacements, les
+     tailles de cartes s'ajustant déjà via clamp(). */
   @media (max-width: 720px) {
     main { padding: 8px; gap: 6px; }
     #opponents { gap: 10px; }
     #table { gap: 12px; }
     .player { padding: 7px 8px 9px; }
+  }
+
+  /* ------------------------------------------------- Téléphone (portrait)
+     Refonte « pouce » : rail d'adversaires défilant en haut, puis piles,
+     statut et grille du joueur ancrés en bas — dans la zone atteignable au
+     pouce. Le layout desktop plus haut n'est pas modifié. */
+  @media (max-width: 560px) {
+    /* En-tête compact : les deux boutons doivent tenir sans être coupés, donc
+       ils ne rétrécissent pas ; c'est l'info de manche qui cède (ellipse). */
+    header { padding: 7px 9px; gap: 7px; }
+    header h1 { font-size: 16px; letter-spacing: 1.5px; flex: none; }
+    header .meta { font-size: 10.5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
+
+    /* Blocs pleine largeur ; le contenu utile est poussé vers le bas. */
+    main {
+      padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+      gap: 8px;
+      align-items: stretch;
+      overflow-y: auto;            /* repli en défilement sur les écrans très courts */
+    }
+
+    /* Rail d'adversaires : défile à l'horizontale, ne repasse jamais à la
+       ligne ; le débordement laisse volontairement voir un bout du suivant. */
+    #opponents {
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      justify-content: safe center;   /* centré quand ils tiennent, calé à gauche s'il faut défiler */
+      align-items: flex-start;
+      gap: 8px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 5px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+      scrollbar-color: var(--line) transparent;
+    }
+    #opponents::-webkit-scrollbar { height: 5px; }
+    #opponents::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+    #opponents .player {
+      flex: 0 0 auto;
+      --card-w: clamp(18px, min(4.6vh, 6.5vw), 28px);
+      --gap: 4px;
+      padding: 6px 7px 8px;
+    }
+    #opponents .player .name { font-size: 11.5px; margin-bottom: 5px; gap: 5px; }
+    #opponents .player .name .tag { font-size: 10px; }
+
+    /* Piles + statut + journal + ma grille, collés en bas de l'écran. */
+    #table {
+      margin-top: auto;
+      --my-card: clamp(38px, min(8vh, 14vw), 58px);
+      gap: 18px;
+      padding: 0;
+    }
+    .pile .label { font-size: 11px; }
+
+    #status { font-size: 14px; min-height: 20px; padding: 0 10px; overflow-wrap: anywhere; }
+    #log { font-size: 11px; height: calc(11px * 1.3 * 2); }
+
+    /* Ma grille : la vedette. Grandes cibles tactiles, centrée. */
+    #me {
+      --my-card: clamp(46px, min(10vh, 19vw), 72px);
+      --gap: 8px;
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+      padding: 8px 10px 10px;
+    }
+    #me .name { font-size: 15px; margin-bottom: 6px; }
+    #me .grid { justify-content: center; }
+  }
+
+  /* Écrans courts (ex. iPhone SE ~667) : on gagne de la hauteur en masquant le
+     journal et en réduisant encore les cartes, pour éviter tout défilement. */
+  @media (max-width: 560px) and (max-height: 720px) {
+    #log { display: none; }
+    #opponents .player { --card-w: clamp(17px, min(4vh, 6vw), 24px); }
+    #table { --my-card: clamp(36px, min(7.5vh, 13vw), 52px); }
+    #me { --my-card: clamp(42px, min(8.5vh, 18vw), 62px); }
   }
   @media (prefers-reduced-motion: reduce) {
     .card .inner { transition: none; }

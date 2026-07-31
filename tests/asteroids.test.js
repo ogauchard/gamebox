@@ -5,7 +5,7 @@
 
 const { loadAsteroids, checker } = require("./harness");
 
-const { game: g, store, keyDown, keyUp, step } = loadAsteroids();
+const { g: ctx, game: g, store, keyDown, keyUp, step } = loadAsteroids();
 const { ok, report } = checker();
 
 const rock = (x, y, size, r) =>
@@ -46,6 +46,7 @@ step(90);
 ok(playerBullets() === 0, "le tir s'arrête au relâchement");
 
 g.bullets.length = 0;
+g.asteroids.length = 0;                 // aucun astéroïde ne doit gober le tir mesuré
 keyDown("Space"); step(1); keyUp("Space"); step(1);
 ok(playerBullets() === 1, "appui bref = 1 projectile");
 step(80);
@@ -95,14 +96,29 @@ ok(g.ship !== null && g.ship.invuln > 0, "réapparition avec invulnérabilité")
 
 /* --- Soucoupe */
 g.ufoTimer = 0;
-g.asteroids.push(rock(100, 100, 0, 17));
+g.asteroids.push(rock(100, 100, 0, 17));   // une soucoupe n'apparaît que s'il reste des astéroïdes
 step(2);
 ok(g.ufo !== null, "la soucoupe apparaît quand le minuteur expire");
+// Vaisseau invulnérable le temps de la mesure : sinon, dès que l'invulnérabilité
+// de réapparition expire, une collision vaisseau/soucoupe (asteroids.html:759)
+// peut détruire la soucoupe avant notre tir et fausser le décompte.
+if (g.ship) g.ship.invuln = 9999;
+// Les tirs ennemis sont brefs (vie ~1,15 s) et de cadence irrégulière : lire
+// g.bullets à un instant donné est fragile (le projectile peut aussi être gobé
+// par un astéroïde la frame même). On instrumente donc ufoShoot pour détecter
+// qu'elle tire au moins une fois — une fonction de premier niveau vit sur le
+// global du contexte et se remplace, comme endTurn côté Skyjo (cf. harness.js).
+ctx(`
+  globalThis._ufoFired = false;
+  const _ufoShoot = ufoShoot;
+  ufoShoot = function (u) { globalThis._ufoFired = true; return _ufoShoot(u); };
+`);
 step(180);
-ok(g.bullets.some((b) => b.enemy), "la soucoupe tire");
+ok(ctx("globalThis._ufoFired"), "la soucoupe tire");
 if (g.ufo) {
   const kind = g.ufo.kind;
   before = g.score;
+  g.asteroids.length = 0;    // le tir joueur ne doit toucher que la soucoupe (1 frame : pas de nouvelle vague)
   g.bullets.push(playerShot(g.ufo.x, g.ufo.y));
   step(1);
   ok(g.ufo === null, "la soucoupe est détruite par un tir joueur");

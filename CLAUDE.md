@@ -16,15 +16,31 @@ inline. No build step, no dependencies, no package manager, no framework. Open e
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les deux suites (~745 assertions, quelques secondes)
+node tests/run-all.js          # les deux suites (~720 assertions, le total varie — Skyjo joue au hasard)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 ```
 
-No linter and no dependencies — the tests are plain Node, nothing to install. What they do **not** cover is
-rendering: headless Chrome and Edge are both blocked by system admin policy on this machine, so screenshots are
-unavailable and **anything visual has to be checked by a human in a real browser**. Say so explicitly rather than
-implying a CSS change was verified.
+No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
+before Node was installed on this machine), call it by absolute path: `"/c/Program Files/nodejs/node.exe"`.
+
+**Rendering.** Headless **Edge** works on this machine (it was blocked on the previous one, so older notes claimed
+screenshots were impossible). Capture a page with:
+
+```
+"/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+  --headless=old --disable-gpu --hide-scrollbars --virtual-time-budget=2500 \
+  --window-size=900,900 --screenshot=out.png "file:///c:/ogd/gamebox/skyjo.html"
+```
+
+Use `--headless=old` — the `new` mode ignores `--window-size` for the CSS viewport. `--virtual-time-budget` lets CSS
+transitions finish and iframes load before the capture. Edge also enforces a **minimum window width (~492 CSS px)**, so
+`--window-size` alone **cannot** emulate a phone: to test a real phone width, wrap the page in an iframe sized to the
+phone (`<iframe src="skyjo.html" width="390" height="844">`) and screenshot the wrapper — the iframe gets an
+independent 390-px layout viewport, so its `@media` queries render truthfully. To pose a game in a specific state,
+inject a second inline `<script>` before `</body>` that mutates state and calls `render()` (a later classic script can
+reach the page's top-level `const`/`function`). What screenshots still can't judge is **touch behaviour and real-device
+feel** — say so rather than implying a CSS change was fully verified.
 
 `tests/harness.js` extracts each page's inline `<script>` and runs it in a `node:vm` context against stubs. Two
 things to know before writing a new test:
@@ -39,6 +55,13 @@ things to know before writing a new test:
 Asteroids is driven by holding the `requestAnimationFrame` callback and replaying it with synthetic timestamps, and
 by firing `keydown`/`keyup` at the captured listeners. Skyjo is driven through `onCardClick`/`onDrawClick`/
 `onDiscardClick` for the human seat, opponents playing normally.
+
+`Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
+instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
+until hardened). Keep new Asteroids assertions robust to that: instrument the top-level function instead of sampling
+(the saucer-fires check now wraps `ufoShoot` via the context eval handle), make the ship invulnerable so a stray
+ship/saucer collision can't preempt what you're measuring, and note that an empty field respawns a wave only after a
+2 s `waveTimer` — clearing asteroids for a single frame is safe, across many is not.
 
 Invariants worth keeping in the Skyjo suite: the 150-card multiset is conserved across piles, grids **and**
 `S.held`; removals only ever happen three-at-a-time; exactly `n-1` turns follow the finisher's. Random play never
@@ -120,6 +143,16 @@ and in the click handlers.
 
 The DOM is built once per game by `buildBoard()` and then mutated by `render()`; it is never rebuilt from scratch,
 because the 3D flip is a CSS transition on `.card.up` that a re-render would restart.
+
+### Responsive layout
+
+Desktop stacks opponents (a centered wrapping row), the piles, the status line, and the player's grid top-to-bottom.
+Phones (`@media (max-width: 560px)`) switch to a **thumb-first** layout: opponents become a horizontally-scrolling rail
+pinned at the top, while piles + status + the player's grid are anchored to the bottom via `margin-top: auto`. Card
+sizes are `clamp()` over `min(vh, vw)` so the table fits without page scroll; a nested `(max-height: 720px)` query hides
+the log and shrinks cards further for short phones (iPhone SE). This is **pure CSS scoped to those media queries** — it
+touches neither the DOM structure nor `render()`, so the desktop layout is unchanged. Verify phone widths with the
+iframe screenshot trick from *Verifying changes*, and remember touch feel still needs a real device.
 
 ### Rules that are easy to break
 
