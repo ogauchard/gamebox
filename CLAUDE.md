@@ -4,20 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Two **independent** self-contained games that share no code. Each is one HTML file with its markup, CSS, and JS
-inline. No build step, no dependencies, no package manager, no framework. Open either file directly
+Three **independent** self-contained games that share no code. Each is one HTML file with its markup, CSS, and JS
+inline. No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
 - [asteroids.html](asteroids.html) — remake of the 1979 Atari arcade game, canvas + vector rendering.
 - [skyjo.html](skyjo.html) — the Magilano card game, DOM/CSS rendering, human vs. 1–3 computer opponents.
+- [uno.html](uno.html) — the Mattel card game, DOM/CSS rendering, human vs. 1–3 computer opponents, house
+  rules toggled on the start screen.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games themselves independent of each other.
 
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les deux suites (~720 assertions, le total varie — Skyjo joue au hasard)
+node tests/run-all.js          # les trois suites (~2600 assertions, le total varie — les cartes sont mélangées)
 node tests/skyjo.test.js       # règles de Skyjo seules
+node tests/uno.test.js         # règles d'Uno seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 ```
 
@@ -42,8 +45,15 @@ inject a second inline `<script>` before `</body>` that mutates state and calls 
 reach the page's top-level `const`/`function`). What screenshots still can't judge is **touch behaviour and real-device
 feel** — say so rather than implying a CSS change was fully verified.
 
-`tests/harness.js` extracts each page's inline `<script>` and runs it in a `node:vm` context against stubs. Two
+`tests/harness.js` extracts each page's inline `<script>` and runs it in a `node:vm` context against stubs. Three
 things to know before writing a new test:
+
+- **`node:vm` has no `Window`, so it silently accepts names a browser rejects.** A top-level `const top = …`
+  parses fine in the harness and makes the *entire* script fail to parse in a browser (`Identifier 'top' has
+  already been declared` — `window.top` is non-configurable), leaving a dead page that no test can see. This
+  really happened while writing Uno. `globalClashes(file)` in the harness checks a page's top-level names
+  against the Window properties that behave this way; `uno.test.js` asserts it is empty. Do the same for any
+  new game, and screenshot at least once — that is what caught it.
 
 - Read state with `g("S")` / `g("game")` — a top-level `const` lives in the context's *lexical* scope, not on the
   sandbox object. Top-level `function` declarations *do* land on the context global, so they can be replaced from a
@@ -54,7 +64,8 @@ things to know before writing a new test:
 
 Asteroids is driven by holding the `requestAnimationFrame` callback and replaying it with synthetic timestamps, and
 by firing `keydown`/`keyup` at the captured listeners. Skyjo is driven through `onCardClick`/`onDrawClick`/
-`onDiscardClick` for the human seat, opponents playing normally.
+`onDiscardClick` for the human seat, opponents playing normally. Uno the same way through `onHandClick(uid)` and
+friends — cards are addressed by `uid`, not by DOM node, because `render()` rebuilds the hand every time.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -216,3 +227,79 @@ Two failure modes to watch, both of which have already happened here:
 - **Tuning that overfits `greedy`.** Patience looks nearly free against an opponent that ends rounds early; a
   patient human will narrow the gap. `AI.patience` is the strength/pace dial — lowering it to 16 shortens rounds
   and costs about 20 points of win rate.
+
+## Architecture — uno.html
+
+### One entry point per turn
+
+`beginTurn()` ([uno.html:736](uno.html#L736)) is the only place a turn starts, and it branches on **pending
+penalties before anything else**: contest the +4, stack on it, or draw the accumulated total. Both variants and
+the plain rule flow through that same branch — without stacking, `canPlay()` returns false for everything while
+`S.pending > 0`, so `legalMoves()` is empty and the player just takes the cards. Adding a rule that interrupts a
+turn means adding a case there, not a new call site.
+
+`startRound()` must reset `S.phase` to `"idle"`. `beginTurn()` returns early on `phase === "over"` to stop the
+chain at scoring, so a round that inherits `"over"` deals the cards and then never starts — the game hangs on
+"Manche suivante". That bug shipped and was caught by the test suite; the reset is the fix.
+
+### Legality lives in one function
+
+`canPlay()` ([uno.html:623](uno.html#L623)) answers for every context, and **its meaning changes under a pending
+penalty**: it then permits only the surenchère (a +2 or a +4 on a +2 chain, a +4 only on a +4 chain) instead of
+colour/value/symbol matching. `render()` derives which hand cards are `.playable` from it, the click handlers
+re-check it, and the AI picks from `legalMoves()` — so a rule change lands in one place. The test asserts every
+card ever pushed to the discard was legal at the instant it was played.
+
+Note the discard's top card and the **active colour are different things** (`S.color` vs `topCard()`): after a
+joker only `S.color` matters. Never read the colour off the pile.
+
+### Variants and format
+
+`VAR` holds the rules for the current game, frozen from the start screen: `stack` (cumul des +2/+4), `challenge`
+(contre-attaque du +4), `sevenZero`, and `match` (500 points vs. a single round). Deliberate readings, all
+documented in the in-game rules panel: a +2 answers a +2 or a +4 answers it, a +4 answers only a +4; the
+challenge is offered **only on an isolated +4** (`S.pending === 4`), because on a stack nobody could say who
+bluffed or for how many cards; a 7 or a 0 played as the last card wins the round instead of triggering the
+swap/rotation.
+
+`S.wild4.bluff` is **private information** — it records whether the player who laid the +4 actually held the
+colour. Only `doChallenge()` may read it. A policy that peeks at it is cheating, exactly like reading a hand.
+
+### Opponent AI
+
+Two interchangeable policies behind one interface — `pick`, `color`, `playDrawn`, `challenge`, `swapTarget` —
+selected per player via `p.policy`. `simple` ("Tranquille") sheds its biggest card and hoards jokers; `sharp`
+("Redoutable") scores each move (`AI` holds the seven tunables) against the next player's hand size, keeps a
+playable colour in reserve, and prices the risk of a contestable +4.
+
+**Neither policy may look at another player's hand or the draw order.** They get `hand.length`, the discard, and
+`p.pub` — the last colour each player laid and the colours they had to draw on. The test enforces this: during
+every policy call it swaps the other players' `hand` arrays for a `Proxy` that counts indexed and iterated
+access (`length` stays free) and asserts the count is zero.
+
+### Termination
+
+Hands only grow by drawing, and drawing needs a pile, so rounds terminate on their own — except in the corner
+where the draw pile is empty and the discard is down to its top card. `passTurn()` counts consecutive
+non-plays and `endBlockedRound()` ends the round on the lowest hand. `drawOne()` returns `null` rather than
+throwing when there is nothing left; every caller handles it.
+
+### Rendering
+
+`render()` **rebuilds the hand and the opponents' fans from scratch** every call, because hand contents change
+constantly — unlike Skyjo, whose fixed grid is built once. `shownUids` remembers which cards were on screen last
+frame so only genuinely new ones get the `pop` animation. Cards are plain `<button>`s: colour background, white
+border via `::after`, rotated white oval, big pip, two rotated corner marks; jokers use a four-quadrant
+`conic-gradient` on the oval.
+
+Log lines go through `says(p, second, third)`, which tutoies the human and uses the third person for the
+opponents. Do not build player sentences with `il`/`elle` — the AI names carry no gender.
+
+### Responsive layout
+
+Same thumb-first approach as Skyjo, and the same `@media (max-width: 560px)` / nested `(max-height: 700px)`
+structure: opponents become a horizontally-scrolling rail at the top, and the table, status, action buttons and
+hand are pinned to the bottom by `margin-top: auto` on `#table`. The hand itself scrolls horizontally — cards
+stay full size rather than overlapping, so a 15-card hand is still tappable. Overlays (couleur, règles, scores)
+switch from centred to bottom-anchored sheets. Verify phone widths with the iframe screenshot trick from
+*Verifying changes*; touch feel still needs a real device.

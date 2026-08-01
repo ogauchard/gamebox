@@ -2,8 +2,8 @@
  *
  * Aucun navigateur n'est requis : le <script> inline de chaque page est extrait
  * puis exécuté dans un contexte `node:vm` face à des bouchons. Cela couvre toute
- * la logique de jeu, mais **rien du rendu** — pour ça, il faut un humain devant
- * un vrai navigateur (le mode headless est bloqué par la politique système).
+ * la logique de jeu, mais **rien du rendu** — pour ça, voir la capture headless
+ * décrite dans CLAUDE.md, et un vrai téléphone pour le tactile.
  *
  * À savoir pour lire l'état du jeu depuis un test :
  *   - un `const` de premier niveau (`S`, `game`, `CFG`…) vit dans la portée
@@ -38,6 +38,7 @@ class FakeEl {
     this._class = new Set();
     this.hidden = false;
     this.disabled = false;
+    this.style = { setProperty() {}, removeProperty() {} };
     this.classList = {
       add: (c) => this._class.add(c),
       remove: (c) => this._class.delete(c),
@@ -99,6 +100,34 @@ function loadSkyjo() {
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(readInlineScript("skyjo.html"), sandbox, { filename: "skyjo.js" });
+
+  const g = (expr) => vm.runInContext(expr, sandbox);
+  return { g, S: g("S"), byId, tick: () => new Promise((r) => schedule(r)) };
+}
+
+/* --------------------------------------------------------------------- Uno */
+/* Même principe que Skyjo : horloge immédiate, faux DOM. Le siège humain se
+   pilote par appels directs à onHandClick/onDrawClick/… Les cartes de la main
+   changeant à chaque tour, le rendu reconstruit #hand — inutile de chercher les
+   boutons, on passe l'uid de la carte. */
+function loadUno() {
+  const byId = new Map();
+  const schedule = (fn) => setImmediate(fn);
+  const sandbox = {
+    console,
+    document: {
+      getElementById: (id) => {
+        if (!byId.has(id)) byId.set(id, new FakeEl());
+        return byId.get(id);
+      },
+      createElement: (tag) => new FakeEl(tag),
+    },
+    setTimeout: schedule,
+    clearTimeout: () => {},
+  };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(readInlineScript("uno.html"), sandbox, { filename: "uno.js" });
 
   const g = (expr) => vm.runInContext(expr, sandbox);
   return { g, S: g("S"), byId, tick: () => new Promise((r) => schedule(r)) };
@@ -168,6 +197,33 @@ function loadAsteroids() {
   };
 }
 
+/* -------------------------------------------- Collisions avec window.* */
+/* `node:vm` n'a pas d'objet Window : un `const top = …` de premier niveau y
+   passe sans broncher alors qu'il fait échouer *tout* le script au parsing dans
+   un navigateur (« Identifier 'top' has already been declared »), page morte et
+   aucune suite de tests pour s'en apercevoir. Cette liste couvre les propriétés
+   non redéfinissables de Window ; renommer coûte moins cher que douter. */
+const WINDOW_GLOBALS = [
+  "window", "self", "document", "name", "location", "history", "customElements",
+  "locationbar", "menubar", "personalbar", "scrollbars", "statusbar", "toolbar",
+  "status", "closed", "frames", "length", "top", "opener", "parent", "frameElement",
+  "navigator", "origin", "external", "screen", "innerWidth", "innerHeight",
+  "scrollX", "pageXOffset", "scrollY", "pageYOffset", "screenX", "screenY",
+  "outerWidth", "outerHeight", "devicePixelRatio",
+];
+
+/* Noms déclarés en tête de ligne — la colonne 0 est, dans ces pages, la marque
+   du premier niveau. */
+function globalClashes(file) {
+  const src = readInlineScript(file);
+  const names = new Set();
+  for (const re of [/^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm,
+                    /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm]) {
+    for (const m of src.matchAll(re)) names.add(m[1]);
+  }
+  return WINDOW_GLOBALS.filter((g) => names.has(g));
+}
+
 /* ----------------------------------------------------------- Assertions */
 function checker() {
   const state = { checks: 0, failures: 0 };
@@ -191,4 +247,4 @@ function checker() {
   return { ok, okOnce, report, state };
 }
 
-module.exports = { ROOT, FakeEl, loadSkyjo, loadAsteroids, checker };
+module.exports = { ROOT, FakeEl, loadSkyjo, loadUno, loadAsteroids, checker, globalClashes };
