@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gamebox</title>
-<meta name="description" content="Asteroids, Skyjo, Uno et Les Cinq Rois, jouables directement dans le navigateur.">
+<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois et Trou du cul, jouables directement dans le navigateur.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
 <style>
   :root {
@@ -34,15 +34,22 @@
   header p { color: var(--dim); margin-top: 4px; }
 
   /* ------------------------------------------------------------ Vignettes */
-  /* Deux colonnes, quatre sur grand écran : jamais de vignette orpheline. */
+  /* Deux colonnes, trois sur grand écran. Chaque vignette couvre deux pistes
+     d'une grille deux fois plus fine : une dernière rangée incomplète peut
+     ainsi se centrer au lieu de rester calée à gauche. */
   .games {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 18px;
   }
+  .game { grid-column: span 2; }
+  .game:nth-child(2n+1):last-child { grid-column: 2 / span 2; }
   @media (min-width: 1100px) {
     main { max-width: 1160px; }
-    .games { grid-template-columns: repeat(4, 1fr); }
+    .games { grid-template-columns: repeat(6, 1fr); }
+    .game:nth-child(2n+1):last-child { grid-column: span 2; }
+    .game:nth-child(3n+1):last-child { grid-column: 3 / span 2; }
+    .game:nth-child(3n+1):nth-last-child(2) { grid-column: 2 / span 2; }
   }
   .game {
     display: flex; flex-direction: column;
@@ -175,6 +182,38 @@
   .r:nth-child(4) { transform: rotate(24deg); background: linear-gradient(160deg, #3a2f5c, #17132a); color: #ffce3a; }
   .r:nth-child(4) b { padding: 18% 0 0 10%; }
 
+  /* Trou du cul : une paire de 2 vient battre une paire de Rois. */
+  .p-tdc { background: radial-gradient(ellipse at 50% 20%, #1d2d28 0%, #0f1614 75%); }
+  .tdc-fan { position: relative; width: 60px; height: 110px; }
+  .t {
+    --cw: 52px;
+    position: absolute; left: 50%; top: 12px;
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    margin-left: calc(var(--cw) * -.5);
+    border-radius: calc(var(--cw) * .11);
+    background: #fbf7ee; color: #1f2328;
+    box-shadow: 0 3px 10px rgba(0,0,0,.55);
+    overflow: hidden;
+  }
+  .t.red { color: #c8322b; }
+  .t s {
+    position: absolute; top: 5%; left: 8%;
+    display: flex; flex-direction: column; align-items: center;
+    text-decoration: none; font-weight: 900; line-height: .95;
+    font-size: calc(var(--cw) * .3);
+  }
+  .t s i { font-style: normal; font-size: calc(var(--cw) * .24); }
+  .t b {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: 22% 0 0 18%;
+    font-size: calc(var(--cw) * .6); font-weight: 400; line-height: 1;
+  }
+  .t:nth-child(1) { transform: translate(-46px, 4px) rotate(-10deg); filter: brightness(.6); }
+  .t:nth-child(2) { transform: translate(-24px, 8px) rotate(-4deg); filter: brightness(.6); }
+  .t:nth-child(3) { transform: translate(18px, -2px) rotate(6deg); }
+  .t:nth-child(4) { transform: translate(42px, 2px) rotate(12deg); }
+
   footer { text-align: center; color: var(--dim); font-size: 13px; margin-top: 30px; }
   footer a { color: inherit; }
 
@@ -184,7 +223,7 @@
     body { padding-top: calc(24px + env(safe-area-inset-top)); }
     header { margin-bottom: 20px; }
     h1 { font-size: 28px; }
-    .games { grid-template-columns: 1fr; gap: 12px; }
+    .games { display: flex; flex-direction: column; gap: 12px; }
     .game { flex-direction: row; }
     .preview { width: 38%; flex: none; aspect-ratio: auto; min-height: 128px; border-bottom: 0; border-right: 1px solid var(--line); }
     .art { --s: .6; }
@@ -203,7 +242,7 @@
 <main>
   <header>
     <h1>GAMEBOX</h1>
-    <p>Quatre jeux, directement dans le navigateur.</p>
+    <p>Cinq jeux, directement dans le navigateur.</p>
   </header>
 
   <nav class="games">
@@ -273,6 +312,22 @@
       <div class="info">
         <h2>Les Cinq Rois</h2>
         <p>Brelans et suites en onze manches, avec un joker qui change à chaque manche. Contre 1 à 3 adversaires.</p>
+        <span class="play">Jouer →</span>
+      </div>
+    </a>
+
+    <a class="game" href="trou-du-cul.html">
+      <div class="preview p-tdc" aria-hidden="true">
+        <div class="art tdc-fan">
+          <div class="t"><s>R<i>♣</i></s><b>♣</b></div>
+          <div class="t red"><s>R<i>♦</i></s><b>♦</b></div>
+          <div class="t"><s>2<i>♠</i></s><b>♠</b></div>
+          <div class="t red"><s>2<i>♥</i></s><b>♥</b></div>
+        </div>
+      </div>
+      <div class="info">
+        <h2>Trou du cul</h2>
+        <p>Débarrasse-toi de tes cartes pour finir Président ; le dernier donne ses meilleures cartes. De 4 à 6 joueurs.</p>
         <span class="play">Jouer →</span>
       </div>
     </a>

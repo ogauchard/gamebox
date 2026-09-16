@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trou du cul</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0f1614;
+    --panel: #18221f;
+    --line: #2d3c37;
+    --text: #edf3f0;
+    --dim: #93a8a0;
+    --accent: #ffce3a;
+    --good: #4fbf6a;
+    --red: #c8322b;
+    --black: #1f2328;
+    /* Ratio hauteur/largeur d'une carte : 1.4 */
+    --hand-card: clamp(46px, min(11vh, 7vw), 80px);
+    --trick-card: clamp(52px, min(12vh, 15vw), 88px);
+    --mini-card: clamp(14px, min(3vh, 4vw), 22px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 0%, #1d2d28 0%, var(--bg) 62%);
+    color: var(--text);
+    font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ------------------------------------------------------------- Structure */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0,0,0,.28);
+    flex: none;
+  }
+  header h1 { font-size: 19px; letter-spacing: 2px; font-weight: 900; color: var(--accent); white-space: nowrap; }
+  header .spacer { flex: 1; }
+  header .meta { color: var(--dim); font-size: 13px; }
+
+  button {
+    font: inherit; color: inherit;
+    background: #22302b; border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 13px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #2c3e38; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: #17201c; border-color: var(--accent); font-weight: 700; }
+  button.primary:hover:not(:disabled) { background: #ffd960; }
+
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    overflow: auto;
+    align-items: center;
+  }
+  main > * { flex: none; }
+  /* Centrage vertical sans rogner le haut quand la table déborde. */
+  main > :first-child { margin-top: auto; }
+  main > :last-child { margin-bottom: auto; }
+
+  #opponents { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+
+  /* -------------------------------------------------------------- Cartes */
+  .card {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    border: 0; padding: 0;
+    border-radius: calc(var(--cw) * .11);
+    background: #fbf7ee;
+    color: var(--sc, var(--black));
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 3px 8px rgba(0,0,0,.45);
+    overflow: hidden;
+    cursor: default;
+    font: inherit;
+    transition: transform .15s, box-shadow .15s, opacity .15s;
+  }
+  .card:disabled { opacity: 1; }
+  .card.red { --sc: var(--red); }
+  .card .corner {
+    position: absolute; top: 5%; left: 7%;
+    display: flex; flex-direction: column; align-items: center;
+    line-height: .95;
+  }
+  .card .corner b { font-size: calc(var(--cw) * .3); font-weight: 900; letter-spacing: -.04em; }
+  .card .corner i { font-style: normal; font-size: calc(var(--cw) * .24); }
+  .card .pip {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 22% 0 0 18%;
+    font-size: calc(var(--cw) * .62); line-height: 1;
+  }
+  .card.back {
+    background: repeating-linear-gradient(45deg, #7d2530 0 5px, #8e2c38 5px 10px);
+    box-shadow: inset 0 0 0 calc(var(--cw) * .07) #f1e6d2, 0 3px 8px rgba(0,0,0,.45);
+  }
+
+  /* ------------------------------------------------------------ Adversaires */
+  .player {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 7px 11px 9px;
+    min-width: 0;
+    position: relative;
+  }
+  .player.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .player.out { opacity: .6; }
+  .player .name {
+    display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+    font-weight: 700; margin-bottom: 5px; font-size: 14px;
+  }
+  .player .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); white-space: nowrap; }
+  .role {
+    font-size: 10.5px; font-weight: 800; letter-spacing: .2px; white-space: nowrap;
+    border-radius: 5px; padding: 1px 5px;
+    background: #33443e; color: var(--text);
+  }
+  .role.r-P { background: var(--accent); color: #17201c; }
+  .role.r-VP { background: #d8c38a; color: #17201c; }
+  .role.r-VT { background: #6b4a3d; }
+  .role.r-T { background: #8e2c38; }
+  .fan { display: flex; align-items: center; --cw: var(--mini-card); padding-left: calc(var(--mini-card) * .55); min-height: calc(var(--mini-card) * 1.4); }
+  .fan .card { margin-left: calc(var(--mini-card) * -.55); }
+  .fan .more { margin-left: 6px; font-size: 12px; color: var(--dim); }
+  /* Bulle d'état : « passe », place finale. */
+  .bubble {
+    position: absolute; top: -8px; right: 8px;
+    font-size: 11px; font-weight: 700;
+    padding: 1px 7px; border-radius: 999px;
+    background: #33443e; color: var(--dim);
+    border: 1px solid var(--line);
+  }
+  .bubble.done { background: var(--good); color: #0e2412; border-color: var(--good); }
+
+  /* ----------------------------------------------------------------- Table */
+  #table {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    min-height: calc(var(--trick-card) * 1.4 + 56px);
+    --cw: var(--trick-card);
+  }
+  #trickCards { display: flex; min-height: calc(var(--cw) * 1.4); padding-left: calc(var(--cw) * .4); }
+  #trickCards .card { margin-left: calc(var(--cw) * -.4); }
+  #trickCards.old { opacity: .38; }
+  #trickCaption { font-size: 13.5px; color: var(--dim); text-align: center; min-height: 20px; }
+  #trickCaption b { color: var(--text); }
+  #tableInfo { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; font-size: 12px; color: var(--dim); }
+  #orderBadge {
+    font-weight: 800; padding: 2px 10px; border-radius: 999px;
+    background: #22302b; border: 1px solid var(--line); color: var(--text);
+  }
+  #orderBadge.rev { background: #8e2c38; border-color: #c24a57; color: #fff; }
+
+  #status { min-height: 22px; text-align: center; font-size: 15px; }
+  #status b { color: var(--accent); }
+  #log {
+    font-size: 12.5px; line-height: 1.35; color: var(--dim); text-align: center;
+    max-width: 720px; height: calc(12.5px * 1.35 * 3); overflow: hidden;
+  }
+  #actions { display: flex; gap: 10px; justify-content: center; min-height: 36px; }
+  #actions button { min-width: 96px; }
+
+  /* ------------------------------------------------------------------ Main */
+  #me { width: 100%; max-width: 1000px; }
+  #me .name {
+    display: flex; align-items: baseline; gap: 8px;
+    justify-content: center; font-size: 14px; font-weight: 700;
+  }
+  #me .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
+  /* Une valeur = un groupe de cartes chevauchées : paires et brelans se lisent
+     d'un coup d'œil. */
+  #hand {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 14px 10px;
+    padding: 16px 10px 8px;
+    --cw: var(--hand-card);
+  }
+  .group { display: flex; padding-left: calc(var(--cw) * .45); }
+  .group .card { margin-left: calc(var(--cw) * -.45); }
+  #hand .card.pickable { cursor: pointer; }
+  /* Assombrie plutôt que transparente : dans un groupe chevauché, la
+     transparence laisserait voir la carte du dessous. */
+  #hand .card.dead { filter: brightness(.55) saturate(.5); }
+  #hand .card.sel { transform: translateY(-12px); box-shadow: 0 0 0 3px var(--accent), 0 10px 18px rgba(0,0,0,.55); }
+  #hand .card.gift { box-shadow: 0 0 0 3px var(--good), 0 4px 10px rgba(0,0,0,.5); }
+  #hand .card.gift.sel { box-shadow: 0 0 0 3px var(--accent), 0 10px 18px rgba(0,0,0,.55); }
+  @keyframes pop { from { transform: translateY(24px) scale(.85); opacity: 0; } }
+  #hand .card.pop { animation: pop .26s ease-out; }
+
+  /* -------------------------------------------------------------- Overlays */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(6,10,9,.86);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 10;
+  }
+  .overlay[hidden] { display: none; }
+  .sheet {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 22px 24px;
+    max-width: 580px; width: 100%;
+    max-height: 90vh; overflow: auto;
+  }
+  .sheet h2 { font-size: 22px; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
+  .sheet h3 { font-size: 15px; margin: 14px 0 4px; color: var(--accent); }
+  .sheet p { margin: 8px 0; }
+  .sheet ul { margin: 8px 0 8px 20px; }
+  .sheet li { margin: 5px 0; }
+  .sheet .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .sheet .hint { font-size: 12.5px; color: var(--dim); margin-top: 2px; }
+  .choice { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
+  .choice button.sel { background: var(--accent); color: #17201c; border-color: var(--accent); font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { text-align: left; }
+  th:first-child, td:first-child { text-align: left; color: var(--dim); }
+  tr.win td { color: var(--accent); font-weight: 700; }
+  .next-round { color: var(--dim); font-size: 13.5px; margin-top: 12px; }
+  .next-round b { color: var(--text); }
+
+  @media (max-width: 720px) {
+    main { padding: 8px; gap: 6px; }
+    #opponents { gap: 9px; }
+    .player { padding: 6px 8px 8px; }
+  }
+
+  /* ------------------------------------------------- Téléphone (portrait)
+     Même approche qu'Uno et les Cinq Rois : adversaires en grille en haut,
+     main complète en bas, la table prend la hauteur qui reste. */
+  @media (max-width: 560px) {
+    header { padding: 7px 9px; gap: 7px; }
+    header h1 { font-size: 15px; letter-spacing: 1px; flex: none; }
+    header .meta { font-size: 10.5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
+
+    main {
+      padding: 12px 0 calc(6px + env(safe-area-inset-bottom));
+      gap: 6px;
+      align-items: stretch;
+      overflow-y: auto;
+    }
+
+    /* Jusqu'à cinq adversaires : --cols (posé par le rendu) fixe la grille,
+       3 au plus par rangée. */
+    #opponents {
+      display: grid;
+      grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+      gap: 12px 6px;
+      padding: 0 8px;
+    }
+    #opponents .player { --mini-card: clamp(12px, 3.6vw, 17px); padding: 5px 7px 6px; }
+    #opponents .player .name { gap: 0 5px; font-size: 12.5px; margin-bottom: 3px; }
+    #opponents .player .name .tag { order: 2; flex-basis: 100%; font-size: 10.5px; }
+    #opponents .role { font-size: 9px; padding: 0 4px; }
+    #opponents .fan { padding-left: calc(var(--mini-card) * .7); }
+    #opponents .fan .card { margin-left: calc(var(--mini-card) * -.7); }
+    .bubble { font-size: 9.5px; top: -9px; right: 4px; padding: 0 5px; }
+
+    #table {
+      flex: 1 1 0;
+      min-height: 110px;
+      container-type: size;
+      gap: 5px;
+      --trick-card: clamp(44px, min(11vh, 20vw), 76px);
+    }
+    @supports (width: 1cqh) {
+      #table { --trick-card: clamp(38px, min((100cqh - 52px) / 1.4, 22cqw), 100px); }
+    }
+    #trickCaption { font-size: 12.5px; min-height: 18px; }
+    #tableInfo { font-size: 11px; }
+
+    #status { font-size: 13.5px; min-height: 19px; padding: 0 10px; overflow-wrap: anywhere; }
+    #log { font-size: 11px; height: calc(11px * 1.3 * 2); padding: 0 8px; }
+    #actions { min-height: 0; gap: 8px; padding: 0 8px; }
+    #actions button { padding: 10px 14px; flex: 1; max-width: 170px; }
+
+    #me .name { font-size: 13px; }
+    #hand {
+      --k: clamp(5, calc(var(--n, 13) * .42 + 1.6), 7.2);
+      --hand-card: min((100vw - 20px) / var(--k), 80px);
+      gap: 12px 6px;
+      padding: 14px 6px 2px;
+    }
+
+    .sheet { padding: 18px 16px; }
+    .overlay { align-items: flex-end; padding: 0; }
+    .sheet { border-radius: 16px 16px 0 0; max-height: 88vh; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+    th, td { padding: 6px 5px; font-size: 13.5px; }
+  }
+  @media (max-width: 560px) and (max-height: 700px) {
+    #log { display: none; }
+    #me .name { font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #hand .card.pop { animation: none; }
+    .card { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TROU DU CUL</h1>
+  <span class="meta" id="roundInfo">Manche 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div id="trickCards"></div>
+    <div id="trickCaption"></div>
+    <div id="tableInfo"><span id="orderBadge">3 → 2</span><span id="asideInfo"></span></div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions"></div>
+  <div id="me">
+    <div class="name"><span>Toi</span><span id="myRole"></span><span class="tag" id="myTag"></span></div>
+    <div id="hand"></div>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>Trou du cul</h2>
+    <p>Débarrasse-toi de tes cartes le premier pour devenir <b>Président</b>. Le dernier est
+       le <b>Trou du cul</b> : à la manche suivante, il donne ses meilleures cartes au Président.</p>
+    <h3>Nombre de joueurs</h3>
+    <div class="choice" id="playerChoice"></div>
+    <h3>Niveau des adversaires</h3>
+    <div class="choice" id="levelChoice"></div>
+    <h3>Durée</h3>
+    <div class="choice" id="formatChoice"></div>
+    <h3>Variantes</h3>
+    <div class="choice" id="variantChoice"></div>
+    <p class="hint">Le détail de chacune est dans les règles.</p>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Un jeu de <b>52 cartes</b> est distribué également entre 4 à 6 joueurs ; les cartes en trop
+       sont montrées à tous et mises de côté.</p>
+    <h3>L'ordre des cartes</h3>
+    <p>Du plus faible au plus fort : <b>3, 4, 5, 6, 7, 8, 9, 10, Valet, Dame, Roi, As, 2</b>.
+       Les couleurs ne comptent pas.</p>
+    <h3>Un pli</h3>
+    <p>Le premier joueur pose <b>une à quatre cartes de même valeur</b>. Chacun à son tour
+       <b>passe</b> ou <b>monte</b> : il pose autant de cartes, d'une valeur plus forte.
+       Passer n'empêche pas de rejouer quand son tour revient. Quand tous les autres ont passé,
+       le dernier à avoir posé ouvre le pli suivant — s'il n'a plus de cartes, c'est son voisin.</p>
+    <h3>Fin de manche et rôles</h3>
+    <p>Le premier à se débarrasser de ses cartes devient <b>Président</b>, le deuxième
+       <b>Vice-président</b> ; l'avant-dernier est <b>Vice-trou du cul</b> et le dernier,
+       <b>Trou du cul</b>. À 5 ou 6 joueurs, ceux du milieu sont <b>Neutres</b>.</p>
+    <h3>Les échanges</h3>
+    <ul>
+      <li>Le Trou du cul donne ses <b>2 meilleures cartes</b> au Président, qui lui en rend
+          <b>2 de son choix</b>.</li>
+      <li>Le Vice-trou du cul donne sa <b>meilleure carte</b> au Vice-président, qui lui en rend
+          <b>une de son choix</b>.</li>
+      <li>Les Neutres n'échangent rien.</li>
+    </ul>
+    <p>La première manche est ouverte par le joueur qui a la <b>Dame de cœur</b> (« Dame de cœur,
+       à toi l'honneur ! ») ; les suivantes, par le <b>Trou du cul</b>.</p>
+    <h3>Les points</h3>
+    <p>À chaque manche, le Président marque autant de points qu'il y a d'adversaires, le suivant un de
+       moins, et ainsi de suite jusqu'au Trou du cul, qui marque 0. La partie s'arrête à la fin de la
+       manche où quelqu'un atteint l'objectif ; le plus haut total gagne.</p>
+    <h3 id="rulesVarTitle">Variantes</h3>
+    <ul>
+      <li><b>Révolution</b> — poser un <b>carré</b> inverse l'ordre des cartes : le 3 devient la plus
+          forte, le 2 la plus faible. L'inversion vaut aussitôt et jusqu'à la fin de la manche, ou
+          jusqu'à ce qu'un autre carré fasse la contre-révolution.</li>
+      <li><b>Même valeur</b> — on peut aussi poser la <b>même valeur</b> que la carte à battre. Le joueur
+          suivant doit alors poser à son tour cette valeur, ou passer.</li>
+      <li><b>Le 2 en atout</b> — un <b>2 seul</b> bat n'importe quelle combinaison : paire, brelan ou
+          carré (sauf pendant une révolution, où le 2 est la plus faible).</li>
+      <li><b>Pas de fin sur un 2</b> — qui pose un 2 comme dernière carte devient Trou du cul d'office.</li>
+    </ul>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de manche / de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la manche</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Manche suivante</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   TROU DU CUL — jeu de défausse traditionnel (aussi appelé Président).
+   Un humain contre 3 à 5 adversaires gérés par l'ordinateur.
+
+   Règles et variantes d'après l'article de Wikipédia « Trou du cul (jeu) ».
+   VAR fige les variantes retenues sur l'écran de démarrage.
+   ========================================================================= */
+
+const SUITS = ["P", "C", "K", "T"];                  // pique, cœur, carreau, trèfle
+const SUIT_SYM = { P: "♠", C: "♥", K: "♦", T: "♣" };
+/* Valeurs 3 à 14 (As), et 15 pour le 2 : la plus forte, rangée en haut. */
+const RANK_SHORT = { 11: "V", 12: "D", 13: "R", 14: "A", 15: "2" };
+const RANK_NAME = { 11: "Valet", 12: "Dame", 13: "Roi", 14: "As", 15: "2" };
+const ROLE_NAME = { P: "Président", VP: "Vice-président", N: "Neutre", VT: "Vice-trou du cul", T: "Trou du cul" };
+const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
+const THINK_MS = 700;            // réflexion d'un adversaire
+const FAST_MS = 280;             // quand l'humain a fini : on n'attend pas les autres
+const TRICK_MS = 900;            // temps de lecture de la dernière carte avant de ramasser le pli
+
+const VAR = { revolution: false, equal: false, trump: false, noTwoFinish: false, long: false };
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ------------------------------------------------------------------ Paquet */
+let uidSeq = 0;
+const mkCard = (suit, rank) => ({ uid: ++uidSeq, suit, rank });
+
+function buildDeck() {
+  const d = [];
+  for (const s of SUITS) for (let r = 3; r <= 15; r++) d.push(mkCard(s, r));
+  return d;                                            // 4 × 13 = 52
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const rankLabel = (r) => RANK_SHORT[r] || String(r);
+const cardLabel = (c) => rankLabel(c.rank) + SUIT_SYM[c.suit];
+
+/* « un 9 », « une Dame », « une paire d'As », « un brelan de Rois »… */
+function playName(rank, count) {
+  const name = RANK_NAME[rank] || String(rank);
+  if (count === 1) return `${rank === 12 ? "une" : "un"} ${name}`;
+  const plural = rank >= 11 && rank <= 13 ? name + "s" : name;
+  return `${["", "", "une paire", "un brelan", "un carré"][count]} ${rank === 14 ? "d'" : "de "}${plural}`;
+}
+
+const ordinal = (n) => (n === 1 ? "1re" : `${n}e`);
+
+/* ------------------------------------------------------------------- État */
+const emptyTrick = () => ({ rank: null, count: 0, by: null, cards: [], forcedSeat: null });
+
+const S = {
+  players: [],        // { name, ai, policy, hand, score, rounds, role, gain }
+  round: 1,
+  target: 12,
+  current: 0,
+  leader: 0,
+  phase: "idle",      // idle | give | play | ai | over
+  trick: emptyTrick(),
+  lastTrick: null,    // { by, cards } : le pli qu'on vient de ramasser, affiché en grisé
+  passed: new Set(),  // sièges qui ont passé depuis la dernière pose
+  finished: [],       // sièges sortis, dans l'ordre
+  offenders: [],      // sièges sortis sur un 2 (variante) : relégués en fin de classement
+  order: [],          // classement de la manche terminée
+  revolution: false,
+  played: [],         // toutes les cartes posées dans la manche : information publique
+  aside: [],          // cartes écartées à la distribution, montrées à tous
+  gives: [],          // échanges encore à faire : { from, to, k }
+  give: null,         // échange en cours
+  sel: new Set(),     // uids sélectionnés par l'humain
+  gifts: new Set(),   // cartes reçues par l'humain, surlignées jusqu'à sa première pose
+  logs: [],
+  busy: false,
+  epoch: 0,           // change à chaque manche : un tour d'IA en vol d'une manche passée s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+const nplayers = () => S.players.length;
+const activeSeats = () => S.players.map((_, i) => i).filter((i) => S.players[i].hand.length > 0);
+
+/* Siège suivant qui a encore des cartes. */
+function nextActive(i) {
+  for (let k = 1; k <= nplayers(); k++) {
+    const j = (i + k) % nplayers();
+    if (S.players[j].hand.length > 0) return j;
+  }
+  return i;
+}
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* Tutoie l'humain, troisième personne pour les adversaires — jamais il/elle. */
+const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+
+/* --------------------------------------------------------------- Légalité */
+/* Force d'une valeur, de 0 (le 3) à 12 (le 2) ; renversée pendant une révolution. */
+const strength = (rank) => (S.revolution ? 15 - rank : rank - 3);
+
+/* Toute la légalité tient ici : le rendu, les clics et les IA passent par elle. */
+function canPlayCards(cards, seat) {
+  if (cards.length < 1 || cards.length > 4) return false;
+  const rank = cards[0].rank;
+  if (!cards.every((c) => c.rank === rank)) return false;
+  const t = S.trick;
+  if (t.rank === null) return true;                               // ouverture : tout est permis
+  // Variante « même valeur » : le joueur visé ne peut que reposer la même chose.
+  if (t.forcedSeat === seat) return rank === t.rank && cards.length === t.count;
+  // Variante « 2 en atout » : un 2 seul bat toute combinaison.
+  if (VAR.trump && !S.revolution && cards.length === 1 && rank === 15 && t.rank !== 15) return true;
+  if (cards.length !== t.count) return false;
+  if (strength(rank) > strength(t.rank)) return true;
+  return VAR.equal && rank === t.rank;
+}
+
+/* Tous les coups possibles d'un siège, une combinaison par valeur et par taille. */
+function legalPlays(seat) {
+  const by = new Map();
+  for (const c of S.players[seat].hand) {
+    if (!by.has(c.rank)) by.set(c.rank, []);
+    by.get(c.rank).push(c);
+  }
+  const out = [];
+  for (const cards of by.values()) {
+    for (let k = 1; k <= cards.length; k++) {
+      const pick = cards.slice(0, k);
+      if (canPlayCards(pick, seat)) out.push(pick);
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.players = [{ name: "Toi", ai: false, hand: [], score: 0, rounds: [], role: null }];
+  for (let i = 0; i < nPlayers - 1; i++) {
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, hand: [], score: 0, rounds: [], role: null });
+  }
+  S.round = 1;
+  S.target = (nPlayers - 1) * (VAR.long ? 6 : 3);
+  buildBoard();
+  startRound();
+}
+
+function startRound() {
+  S.epoch++;
+  const n = nplayers();
+  const deck = shuffle(buildDeck());
+  const per = Math.floor(52 / n);
+  S.aside = deck.splice(0, 52 - per * n);
+  for (const p of S.players) { p.hand = deck.splice(0, per); p.gain = 0; }
+  S.played = [];
+  S.trick = emptyTrick();
+  S.lastTrick = null;
+  S.passed = new Set();
+  S.finished = [];
+  S.offenders = [];
+  S.order = [];
+  S.revolution = false;
+  S.sel = new Set();
+  S.gifts = new Set();
+  S.logs = [];
+  S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
+  S.busy = false;
+  if (S.aside.length) log(`Cartes écartées : ${S.aside.map(cardLabel).join(" ")}.`);
+
+  if (S.round === 1 || !S.players.some((p) => p.role)) {
+    const qh = S.players.findIndex((p) => p.hand.some((c) => c.suit === "C" && c.rank === 12));
+    S.leader = qh >= 0 ? qh : 0;
+    log(qh >= 0 ? `Dame de cœur, à ${qh === 0 ? "toi" : S.players[qh].name} l'honneur !`
+                : "La Dame de cœur est écartée : tu ouvres.");
+    S.gives = [];
+  } else {
+    const seat = (role) => S.players.findIndex((p) => p.role === role);
+    const [pres, vp, vt, tdc] = ["P", "VP", "VT", "T"].map(seat);
+    // Les perdants donnent d'office leurs meilleures cartes ; les gagnants
+    // rendent ensuite celles de leur choix.
+    giveCards(tdc, pres, bestCards(tdc, 2));
+    giveCards(vt, vp, bestCards(vt, 1));
+    S.gives = [{ from: pres, to: tdc, k: 2 }, { from: vp, to: vt, k: 1 }];
+    S.leader = tdc;
+  }
+  nextGive();
+}
+
+/* Les k cartes les plus fortes (ordre normal : aucune révolution en début de manche). */
+function bestCards(seat, k) {
+  return S.players[seat].hand.slice().sort((a, b) => b.rank - a.rank).slice(0, k);
+}
+
+function giveCards(from, to, cards) {
+  const a = S.players[from], b = S.players[to];
+  for (const c of cards) { a.hand.splice(a.hand.indexOf(c), 1); b.hand.push(c); }
+  const what = cards.map(cardLabel).join(" et ");
+  const n = cards.length === 1 ? "une carte" : `${cards.length} cartes`;
+  if (!a.ai) log(`Tu donnes ${what} à ${b.name}.`);
+  else if (!b.ai) { log(`${a.name} te donne ${what}.`); for (const c of cards) S.gifts.add(c.uid); }
+  else log(`${a.name} donne ${n} à ${b.name}.`);
+}
+
+function nextGive() {
+  const g = S.gives.shift();
+  if (!g) {
+    S.give = null;
+    S.current = S.leader;
+    beginTurn();
+    return;
+  }
+  S.give = g;
+  const p = S.players[g.from];
+  if (p.ai) {
+    giveCards(g.from, g.to, policyOf(p).give(p, g.k));
+    nextGive();
+    return;
+  }
+  S.phase = "give";
+  S.sel = new Set();
+  render();
+}
+
+/* --------------------------------------------------------------- Tours */
+function beginTurn() {
+  if (S.phase === "over") return;
+  const p = S.players[S.current];
+  if (p.ai) { S.phase = "ai"; render(); aiTurn(); return; }
+  S.phase = "play";
+  S.sel = new Set();
+  render();
+}
+
+function doPlay(seat, cards) {
+  const p = S.players[seat];
+  const t = S.trick;
+  const equal = t.rank !== null && cards[0].rank === t.rank;
+  for (const c of cards) p.hand.splice(p.hand.indexOf(c), 1);
+  S.played.push(...cards);
+  S.passed.clear();
+  S.lastTrick = null;
+  S.trick = { rank: cards[0].rank, count: cards.length, by: seat, cards, forcedSeat: null };
+  const what = playName(cards[0].rank, cards.length);
+  log(says(p, `poses ${what}.`, `pose ${what}.`));
+
+  if (VAR.revolution && cards.length === 4) {
+    S.revolution = !S.revolution;
+    log(S.revolution ? "Révolution ! Le 3 devient la plus forte, le 2 la plus faible."
+                     : "Contre-révolution : retour à l'ordre normal.");
+  }
+  if (p.hand.length === 0) finish(seat, cards);
+  if (activeSeats().length <= 1) { endRound(); return; }
+
+  if (VAR.equal && equal) S.trick.forcedSeat = nextActive(seat);
+  S.current = nextActive(seat);
+  beginTurn();
+}
+
+function doPass(seat) {
+  S.passed.add(seat);
+  if (S.trick.forcedSeat === seat) S.trick.forcedSeat = null;
+  const others = activeSeats().filter((q) => q !== S.trick.by);
+  if (others.every((q) => S.passed.has(q))) { endTrick(); return; }
+  S.current = nextActive(seat);
+  beginTurn();
+}
+
+/* Tous les autres ont passé : le dernier à avoir posé ramasse et rouvre —
+   ou, s'il est sorti, son voisin. */
+function endTrick() {
+  const by = S.trick.by;
+  S.lastTrick = { by, cards: S.trick.cards };
+  S.trick = emptyTrick();
+  S.passed.clear();
+  const leader = S.players[by].hand.length ? by : nextActive(by);
+  log(`Pli pour ${by === 0 ? "toi" : S.players[by].name}.`);
+  S.current = leader;
+  beginTurn();
+}
+
+function finish(seat, cards) {
+  const p = S.players[seat];
+  if (VAR.noTwoFinish && cards[0].rank === 15) {
+    S.offenders.push(seat);
+    log(says(p, "finis sur un 2 : Trou du cul d'office !", "finit sur un 2 : Trou du cul d'office !"));
+    return;
+  }
+  S.finished.push(seat);
+  const place = ordinal(S.finished.length);
+  log(says(p, `n'as plus de cartes : ${place} place !`, `n'a plus de cartes : ${place} place.`));
+}
+
+/* --------------------------------------------------------- Fin de manche */
+const roleFor = (pos, n) => (pos === 0 ? "P" : pos === 1 ? "VP" : pos === n - 1 ? "T" : pos === n - 2 ? "VT" : "N");
+
+function endRound() {
+  const n = nplayers();
+  // Classement : les sortis dans l'ordre, le dernier à tenir des cartes, puis
+  // ceux qui ont fini sur un 2 — le premier fautif tout en bas.
+  S.order = [...S.finished, ...activeSeats(), ...S.offenders.slice().reverse()];
+  S.order.forEach((seat, pos) => {
+    const p = S.players[seat];
+    p.role = roleFor(pos, n);
+    p.gain = n - 1 - pos;
+    p.score += p.gain;
+    p.rounds.push(p.gain);
+  });
+  S.phase = "over";
+  S.busy = false;
+  S.trick = emptyTrick();
+  render();
+  showScores(S.players.some((p) => p.score >= S.target));
+}
+
+function showScores(over) {
+  const best = Math.max(...S.players.map((p) => p.score));
+  let html = "<table><thead><tr><th></th><th>Joueur</th><th>Rôle</th><th>Manche</th><th>Total</th></tr></thead><tbody>";
+  S.order.forEach((seat, pos) => {
+    const p = S.players[seat];
+    const win = over && p.score === best ? ' class="win"' : "";
+    const two = S.offenders.includes(seat) ? " (fini sur un 2)" : "";
+    html += `<tr${win}><td>${ordinal(pos + 1)}</td><td>${p.name}${over && p.score === best ? " 🏆" : ""}</td>`
+          + `<td><span class="role r-${p.role}">${ROLE_NAME[p.role]}</span>${two}</td>`
+          + `<td>+${p.gain}</td><td>${p.score}</td></tr>`;
+  });
+  html += "</tbody></table>";
+
+  if (over) {
+    const winners = S.players.filter((p) => p.score === best);
+    html += winners.length === 1 && !winners[0].ai
+      ? `<p class="next-round">🏆 <b>Tu l'emportes avec ${best} points !</b></p>`
+      : `<p class="next-round">🏆 <b>${winners.map((p) => p.name).join(" et ")}</b> ${winners.length > 1 ? "l'emportent" : "l'emporte"} avec ${best} points.</p>`;
+  } else {
+    // « Nora donne ses 2 meilleures cartes à Elias », « tu donnes tes… », « Nora te donne ses… »
+    const gift = (from, to, what) => {
+      const a = S.players.find((p) => p.role === from), b = S.players.find((p) => p.role === to);
+      if (!a.ai) return `tu donnes ${what("tes")} à <b>${b.name}</b>`;
+      if (!b.ai) return `<b>${a.name}</b> te donne ${what("ses")}`;
+      return `<b>${a.name}</b> donne ${what("ses")} à <b>${b.name}</b>`;
+    };
+    html += `<p class="next-round">Manche suivante : ${gift("T", "P", (d) => `${d} 2 meilleures cartes`)},
+             ${gift("VT", "VP", (d) => `${d === "tes" ? "ta" : "sa"} meilleure`)}. Objectif : ${S.target} points.</p>`;
+  }
+  el("scoreBody").innerHTML = html;
+  el("scoreTitle").textContent = over ? "Fin de la partie" : `Fin de la manche ${S.round}`;
+  el("btnNext").textContent = over ? "Rejouer" : "Manche suivante";
+  el("btnNext").dataset.over = over ? "1" : "";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose :
+     play(p, seat) -> cartes à poser, ou null pour passer (interdit en ouverture)
+     give(p, k)    -> k cartes rendues au perdant lors des échanges
+
+   Aucune ne consulte la main d'un autre joueur : elles ne disposent que de la
+   leur, des cartes déjà posées (S.played), des cartes écartées et du nombre de
+   cartes de chacun. */
+
+/* Déclarée en `function` : les tests la remplacent pour vérifier qu'aucune
+   politique ne triche. */
+function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
+
+/* Groupes d'une main par valeur, du plus faible au plus fort dans l'ordre courant. */
+function groupsOf(hand) {
+  const by = new Map();
+  for (const c of hand) {
+    if (!by.has(c.rank)) by.set(c.rank, []);
+    by.get(c.rank).push(c);
+  }
+  return [...by.values()].sort((a, b) => strength(a[0].rank) - strength(b[0].rank));
+}
+
+const lowestCards = (hand, k) => hand.slice().sort((a, b) => strength(a.rank) - strength(b.rank)).slice(0, k);
+
+/* ---------------------------------------------------------------------------
+   Politique « tranquille » : ouvre avec sa plus petite valeur (toutes ses
+   cartes de cette valeur), monte au plus juste sans casser de paire si elle
+   peut, et rend ses plus petites cartes.
+   --------------------------------------------------------------------------- */
+const simplePolicy = {
+  play(p, seat) {
+    if (S.trick.rank === null) return groupsOf(p.hand)[0];
+    const legal = legalPlays(seat);
+    if (!legal.length) return null;
+    const copies = (cards) => p.hand.filter((c) => c.rank === cards[0].rank).length;
+    legal.sort((a, b) => (copies(a) > a.length) - (copies(b) > b.length) || strength(a[0].rank) - strength(b[0].rank));
+    return legal[0];
+  },
+  give(p, k) { return lowestCards(p.hand, k); },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable ». Elle compte les cartes posées pour savoir quelles
+   combinaisons sont *maîtresses* (plus personne ne peut les battre), et :
+     - finit proprement : quand il ne lui reste qu'une combinaison non
+       maîtresse, elle joue d'abord les maîtresses, qui lui rendent la main ;
+     - passe plutôt que brûler une carte forte (As, 2) tant que personne
+       n'est près de finir ;
+     - évite de casser une paire pour monter ;
+     - déclenche la révolution quand sa main est surtout faite de petites cartes ;
+     - ne finit jamais sur un 2 quand la variante l'interdit, si elle peut l'éviter.
+   --------------------------------------------------------------------------- */
+/* Coût d'un coup = force de la valeur posée (0 pour le 3, 12 pour le 2), plus
+   les pénalités ci-dessous. Au-delà de `passAbove`, on passe : c'est ce seuil
+   qui garde les As et les 2 pour reprendre la main plus tard. */
+const AI = {
+  breakCost: 8,    // coût de casser un groupe pour monter
+  passAbove: 8,    // au-delà de ce coût, passer plutôt que jouer
+  danger: 5,       // un adversaire à ce nombre de cartes ou moins : on ne passe plus
+};
+
+/* Nombre d'exemplaires d'une valeur que les autres peuvent encore tenir. */
+function unseen(p, rank) {
+  let n = 4;
+  for (const c of S.played) if (c.rank === rank) n--;
+  for (const c of S.aside) if (c.rank === rank) n--;
+  for (const c of p.hand) if (c.rank === rank) n--;
+  return n;
+}
+
+/* Une combinaison est maîtresse si aucun adversaire ne peut la battre. */
+function isMaster(p, rank, count) {
+  for (let r = 3; r <= 15; r++) {
+    if (strength(r) > strength(rank) && unseen(p, r) >= count) return false;
+  }
+  if (VAR.trump && !S.revolution && count > 1 && rank !== 15 && unseen(p, 15) >= 1) return false;
+  return true;
+}
+
+const sharpPolicy = {
+  play(p, seat) {
+    const groups = groupsOf(p.hand);
+    const danger = activeSeats().some((i) => i !== seat && S.players[i].hand.length <= AI.danger);
+
+    /* ---- Ouverture ---- */
+    if (S.trick.rank === null) {
+      if (groups.length === 1) return groups[0];
+      const masters = groups.filter((g) => isMaster(p, g[0].rank, g.length));
+      const others = groups.filter((g) => !masters.includes(g));
+      if (others.length <= 1) {
+        // Les maîtresses d'abord : elles rendent la main. Les 2 en premier si
+        // finir dessus est interdit, pour garder une autre carte en dernier.
+        if (masters.length) {
+          const twos = masters.find((g) => g[0].rank === 15);
+          return (VAR.noTwoFinish && twos) || masters[0];
+        }
+        return others[0];
+      }
+      // Révolution : un carré qui renverse l'ordre, si la main y gagne.
+      const quad = groups.find((g) => g.length === 4);
+      if (VAR.revolution && quad) {
+        const now = p.hand.reduce((s, c) => s + strength(c.rank), 0);
+        const flipped = p.hand.reduce((s, c) => s + (12 - strength(c.rank)), 0);
+        if (flipped > now) return quad;
+      }
+      // Sinon la plus faible combinaison non maîtresse, en évitant de finir sur un 2.
+      return others[0];
+    }
+
+    /* ---- Suivre ---- */
+    const legal = legalPlays(seat);
+    if (!legal.length) return null;
+    let best = null, bestCost = Infinity;
+    for (const cards of legal) {
+      const rank = cards[0].rank;
+      const left = p.hand.length - cards.length;
+      const copies = p.hand.filter((c) => c.rank === rank).length;
+      let cost = strength(rank);
+      if (left === 0) cost = VAR.noTwoFinish && rank === 15 ? 99 : -100;      // sortir
+      else {
+        if (copies > cards.length) cost += AI.breakCost;
+        // Plus qu'une combinaison derrière celle-ci : la poser vaut de l'or.
+        if (groupsOf(p.hand.filter((c) => !cards.includes(c))).length === 1) cost -= 6;
+        if (VAR.noTwoFinish && left > 0 && p.hand.every((c) => cards.includes(c) || c.rank === 15)) cost += 30;
+      }
+      if (cost < bestCost) { bestCost = cost; best = cards; }
+    }
+    if (!danger && bestCost > AI.passAbove) return null;
+    return best;
+  },
+
+  // Rendre des cartes : les plus faibles, en gardant ses paires si possible.
+  give(p, k) {
+    const groups = groupsOf(p.hand);
+    const singles = groups.filter((g) => g.length === 1).flat();
+    const pool = singles.length >= k ? singles : p.hand;
+    return lowestCards(pool, k);
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+
+/* ------------------------------------------------------------ Tour d'une IA */
+async function aiTurn() {
+  const seat = S.current;
+  const p = S.players[seat];
+  const epoch = S.epoch;
+  S.busy = true;
+  await sleep(S.players[0].hand.length ? THINK_MS : FAST_MS);
+  if (epoch !== S.epoch) return;       // partie relancée pendant la réflexion
+
+  let move = policyOf(p).play(p, seat);
+  if (!move && S.trick.rank === null) move = groupsOf(p.hand)[0];   // on ne passe pas en ouverture
+  if (move && !canPlayCards(move, seat)) move = null;
+  S.busy = false;
+  if (move) { doPlay(seat, move); return; }
+  // Le pli va se ramasser : on laisse lire la dernière carte posée.
+  const others = activeSeats().filter((q) => q !== S.trick.by && q !== seat);
+  if (others.every((q) => S.passed.has(q))) {
+    S.busy = true;
+    S.passed.add(seat);
+    render();
+    await sleep(S.players[0].hand.length ? TRICK_MS : FAST_MS);
+    if (epoch !== S.epoch) return;
+    S.busy = false;
+  }
+  doPass(seat);
+}
+
+/* ================================================================= ENTRÉES */
+
+function onCardClick(uid) {
+  const me = S.players[0];
+  const card = me.hand.find((c) => c.uid === uid);
+  if (!card) return;
+
+  if (S.phase === "give") {
+    if (S.sel.has(uid)) S.sel.delete(uid);
+    else if (S.sel.size < S.give.k) S.sel.add(uid);
+    render();
+    return;
+  }
+  if (S.busy || S.current !== 0 || S.phase !== "play") return;
+
+  const t = S.trick;
+  if (t.rank === null) {
+    // Ouverture : sélection libre, dans une seule valeur.
+    const other = me.hand.some((c) => S.sel.has(c.uid) && c.rank !== card.rank);
+    if (other) S.sel.clear();
+    if (S.sel.has(uid)) S.sel.delete(uid); else S.sel.add(uid);
+  } else if (S.sel.has(uid)) {
+    S.sel.clear();
+  } else {
+    // Pour suivre, un clic prend d'un coup le bon nombre de cartes de cette valeur.
+    const same = me.hand.filter((c) => c.rank === card.rank);
+    const k = VAR.trump && !S.revolution && card.rank === 15 && t.forcedSeat !== 0 && t.count > 1 ? 1 : t.count;
+    if (same.length >= k) S.sel = new Set([card, ...same.filter((c) => c !== card)].slice(0, k).map((c) => c.uid));
+  }
+  render();
+}
+
+function onPlayClick() {
+  if (S.busy || S.current !== 0 || S.phase !== "play") return;
+  const cards = S.players[0].hand.filter((c) => S.sel.has(c.uid));
+  if (!canPlayCards(cards, 0)) return;
+  S.sel = new Set();
+  S.gifts = new Set();
+  doPlay(0, cards);
+}
+
+function onPassClick() {
+  if (S.busy || S.current !== 0 || S.phase !== "play" || S.trick.rank === null) return;
+  S.sel = new Set();
+  doPass(0);
+}
+
+function onGiveClick() {
+  if (S.phase !== "give") return;
+  const cards = S.players[0].hand.filter((c) => S.sel.has(c.uid));
+  if (cards.length !== S.give.k) return;
+  S.sel = new Set();
+  giveCards(0, S.give.to, cards);
+  nextGive();
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function cardEl(c, extra) {
+  const cls = "card" + (!c ? " back" : c.suit === "C" || c.suit === "K" ? " red" : "");
+  const b = mk("button", cls + (extra ? " " + extra : ""));
+  if (c) {
+    const corner = mk("span", "corner");
+    corner.appendChild(mk("b", null, rankLabel(c.rank)));
+    corner.appendChild(mk("i", null, SUIT_SYM[c.suit]));
+    b.appendChild(corner);
+    b.appendChild(mk("span", "pip", SUIT_SYM[c.suit]));
+  }
+  b.disabled = true;
+  return b;
+}
+
+const roleBadge = (role) => mk("span", "role r-" + role, ROLE_NAME[role]);
+
+function buildBoard() {
+  const host = el("opponents");
+  host.innerHTML = "";
+  const opp = nplayers() - 1;
+  host.style.setProperty("--cols", opp <= 3 ? opp : opp === 4 ? 2 : 3);
+  S.players.forEach((p, pi) => {
+    if (pi === 0) return;
+    const box = mk("div", "player");
+    const name = mk("div", "name");
+    name.appendChild(mk("span", null, p.name));
+    const role = mk("span", "role");
+    const tag = mk("span", "tag", "");
+    name.appendChild(role);
+    name.appendChild(tag);
+    box.appendChild(name);
+    const fan = mk("div", "fan");
+    box.appendChild(fan);
+    const bubble = mk("span", "bubble");
+    box.appendChild(bubble);
+    host.appendChild(box);
+    Object.assign(p, { _box: box, _role: role, _tag: tag, _fan: fan, _bubble: bubble });
+  });
+}
+
+let shownUids = new Set();
+
+function statusHtml() {
+  const p = S.players[S.current];
+  const t = S.trick;
+  const me = S.players[0];
+  switch (S.phase) {
+    case "give": {
+      const to = S.players[S.give.to];
+      return `Tu es <b>${ROLE_NAME[me.role]}</b> : choisis ${S.give.k === 1 ? "une carte" : `${S.give.k} cartes`} à donner à <b>${to.name}</b>.`;
+    }
+    case "ai":
+      if (!me.hand.length) return `Tu as fini : la manche se joue sans toi. <b>${p.name}</b> réfléchit…`;
+      return `<b>${p.name}</b> réfléchit…`;
+    case "play": {
+      if (t.rank === null) return "À toi d'ouvrir : choisis une ou plusieurs cartes de même valeur.";
+      const what = playName(t.rank, t.count);
+      if (t.forcedSeat === 0) return `<b>Même valeur</b> : pose toi aussi ${what}, ou passe.`;
+      if (!legalPlays(0).length) return `À battre : <b>${what}</b>. Rien pour monter : passe.`;
+      return `À battre : <b>${what}</b>. Monte ou passe.`;
+    }
+    default: return "";
+  }
+}
+
+function renderActions() {
+  const host = el("actions");
+  host.innerHTML = "";
+  const add = (label, cls, fn, enabled) => {
+    const b = mk("button", cls, label);
+    b.disabled = !enabled;
+    b.addEventListener("click", fn);
+    host.appendChild(b);
+  };
+  const me = S.players[0];
+  const cards = me.hand.filter((c) => S.sel.has(c.uid));
+  if (S.phase === "give") {
+    add(`Donner (${cards.length}/${S.give.k})`, "primary", onGiveClick, cards.length === S.give.k);
+  } else if (S.phase === "play" && S.current === 0 && !S.busy) {
+    const ok = canPlayCards(cards, 0);
+    const label = ok ? ["", "Poser la carte", "Poser la paire", "Poser le brelan", "Poser le carré"][cards.length] : "Poser";
+    add(label, "primary", onPlayClick, ok);
+    if (S.trick.rank !== null) add("Passer", null, onPassClick, true);
+  }
+}
+
+function renderHand() {
+  const host = el("hand");
+  const me = S.players[0];
+  host.innerHTML = "";
+  host.style.setProperty("--n", me.hand.length);
+  const playing = S.phase === "play" && S.current === 0 && !S.busy;
+  const giving = S.phase === "give";
+  const legalRanks = new Set(playing ? legalPlays(0).map((m) => m[0].rank) : []);
+  const next = new Set();
+
+  for (const group of groupsOf(me.hand)) {
+    const g = mk("div", "group");
+    for (const c of group.sort((a, b) => SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit))) {
+      next.add(c.uid);
+      let cls = "";
+      if (giving || (playing && legalRanks.has(c.rank))) cls += " pickable";
+      else if (playing) cls += " dead";
+      if (S.sel.has(c.uid)) cls += " sel";
+      if (S.gifts.has(c.uid)) cls += " gift";
+      if (!shownUids.has(c.uid)) cls += " pop";
+      const b = cardEl(c, cls.trim());
+      if (cls.includes("pickable")) {
+        b.disabled = false;
+        b.addEventListener("click", () => onCardClick(c.uid));
+      }
+      g.appendChild(b);
+    }
+    host.appendChild(g);
+  }
+  shownUids = next;
+
+  const myRole = el("myRole");
+  myRole.innerHTML = "";
+  if (me.role) myRole.appendChild(roleBadge(me.role));
+  el("myTag").textContent = me.hand.length
+    ? `${me.hand.length} carte${me.hand.length > 1 ? "s" : ""} · ${me.score} pt${me.score > 1 ? "s" : ""}`
+    : `fini · ${me.score} pt${me.score > 1 ? "s" : ""}`;
+}
+
+function render() {
+  if (!S.players.length) return;
+  // Adversaires
+  S.players.forEach((p, pi) => {
+    if (pi === 0 || !p._box) return;
+    const out = p.hand.length === 0 && S.phase !== "over";
+    p._box.classList.toggle("active", S.current === pi && (S.phase === "ai" || S.phase === "play"));
+    p._box.classList.toggle("out", out);
+    p._role.className = p.role ? "role r-" + p.role : "role";
+    p._role.textContent = p.role ? ROLE_NAME[p.role] : "";
+    p._role.hidden = !p.role;
+    p._tag.textContent = `${p.hand.length} carte${p.hand.length > 1 ? "s" : ""} · ${p.score} pt${p.score > 1 ? "s" : ""}`;
+    p._fan.innerHTML = "";
+    const shown = Math.min(p.hand.length, 7);
+    for (let i = 0; i < shown; i++) p._fan.appendChild(cardEl(null));
+    if (p.hand.length > shown) p._fan.appendChild(mk("span", "more", `+${p.hand.length - shown}`));
+
+    const finishedAt = S.finished.indexOf(pi);
+    let bubble = "";
+    if (S.offenders.includes(pi)) bubble = "fini sur un 2";
+    else if (finishedAt >= 0) bubble = `${ordinal(finishedAt + 1)} place`;
+    else if (S.passed.has(pi) && S.trick.rank !== null) bubble = "passe";
+    p._bubble.textContent = bubble;
+    p._bubble.hidden = !bubble;
+    p._bubble.className = "bubble" + (finishedAt >= 0 ? " done" : "");
+  });
+
+  // Table : le pli en cours, ou le dernier ramassé en grisé.
+  const tc = el("trickCards");
+  tc.innerHTML = "";
+  const shown = S.trick.rank !== null ? S.trick : S.lastTrick;
+  tc.classList.toggle("old", S.trick.rank === null);
+  if (shown) for (const c of shown.cards) tc.appendChild(cardEl(c));
+  const cap = el("trickCaption");
+  if (S.trick.rank !== null) {
+    const who = S.trick.by === 0 ? "Toi" : S.players[S.trick.by].name;
+    cap.innerHTML = `<b>${who}</b> : ${playName(S.trick.rank, S.trick.count)}`;
+  } else if (S.lastTrick && S.phase !== "over") {
+    cap.innerHTML = `Pli pour <b>${S.lastTrick.by === 0 ? "toi" : S.players[S.lastTrick.by].name}</b>`;
+  } else {
+    cap.textContent = "";
+  }
+  const order = el("orderBadge");
+  order.textContent = S.revolution ? "Révolution : 2 → 3" : "3 → 2";
+  order.classList.toggle("rev", S.revolution);
+  el("asideInfo").textContent = S.aside.length ? `écartées : ${S.aside.map(cardLabel).join(" ")}` : "";
+
+  renderHand();
+  renderActions();
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.join("<br>");
+  el("roundInfo").textContent = `Manche ${S.round} · objectif ${S.target} pts`;
+}
+
+/* ============================================================== Interface */
+let chosenPlayers = 4;
+let chosenLevel = "sharp";
+let chosenFormat = "short";
+const chosenVariants = { revolution: true, equal: false, trump: false, noTwoFinish: false };
+
+function buildChoice(host, items, current, onPick) {
+  for (const it of items) {
+    const b = mk("button", it.id === current ? "sel" : null, it.label);
+    b.addEventListener("click", () => {
+      onPick(it.id);
+      [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
+    });
+    host.appendChild(b);
+  }
+}
+
+function buildToggles(host, items, state) {
+  for (const it of items) {
+    const b = mk("button", state[it.id] ? "sel" : null, it.label);
+    b.addEventListener("click", () => {
+      state[it.id] = !state[it.id];
+      b.classList.toggle("sel", state[it.id]);
+    });
+    host.appendChild(b);
+  }
+}
+
+buildChoice(el("playerChoice"),
+  [4, 5, 6].map((n) => ({ id: n, label: `${n} joueurs` })),
+  chosenPlayers, (id) => { chosenPlayers = id; });
+
+buildChoice(el("levelChoice"), [
+  { id: "simple", label: "Tranquille" },
+  { id: "sharp", label: "Redoutable" },
+], chosenLevel, (id) => { chosenLevel = id; });
+
+buildChoice(el("formatChoice"), [
+  { id: "short", label: "Partie courte" },
+  { id: "long", label: "Partie longue" },
+], chosenFormat, (id) => { chosenFormat = id; });
+
+buildToggles(el("variantChoice"), [
+  { id: "revolution", label: "Révolution" },
+  { id: "equal", label: "Même valeur" },
+  { id: "trump", label: "Le 2 en atout" },
+  { id: "noTwoFinish", label: "Pas de fin sur un 2" },
+], chosenVariants);
+
+el("btnStart").addEventListener("click", () => {
+  el("startOverlay").hidden = true;
+  Object.assign(VAR, chosenVariants, { long: chosenFormat === "long" });
+  newGame(chosenPlayers);
+});
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  if (el("btnNext").dataset.over) {
+    for (const p of S.players) { p.score = 0; p.rounds = []; p.role = null; }
+    S.round = 1;
+  } else {
+    S.round++;
+  }
+  startRound();
+});
+</script>
+</body>
+</html>

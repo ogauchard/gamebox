@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Four **independent** self-contained games that share no code. Each is one HTML file with its markup, CSS, and JS
+Five **independent** self-contained games that share no code. Each is one HTML file with its markup, CSS, and JS
 inline. No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
@@ -14,6 +14,8 @@ inline. No build step, no dependencies, no package manager, no framework. Open a
   rules toggled on the start screen.
 - [cinq-rois.html](cinq-rois.html) — *Les Cinq Rois*, the French edition of Five Crowns (Set Enterprises), DOM/CSS
   rendering, human vs. 1–3 computer opponents: 11 rounds of rummy with a wild rank that changes every round.
+- [trou-du-cul.html](trou-du-cul.html) — the traditional climbing game (a.k.a. Président), rules from the French
+  Wikipedia article, DOM/CSS rendering, human vs. 3–5 computer opponents, variants toggled on the start screen.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games themselves independent of each other.
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
@@ -30,10 +32,11 @@ production. The empty [.nojekyll](.nojekyll) must stay: without it Pages runs Je
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les quatre suites (~3500 assertions, le total varie — les cartes sont mélangées)
+node tests/run-all.js          # les cinq suites (~5200 assertions, le total varie — les cartes sont mélangées)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
+node tests/trou-du-cul.test.js # règles du Trou du cul seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 ```
 
@@ -81,7 +84,8 @@ by firing `keydown`/`keyup` at the captured listeners. Skyjo is driven through `
 friends — cards are addressed by `uid`, not by DOM node, because `render()` rebuilds the hand every time. Cinq Rois
 likewise through `onDrawClick`/`onDiscardPileClick`/`onHandClick(uid)`; those handlers only act for seat 0, so a
 targeted test that plays another seat calls `drawOne`/`takeDiscard` → `discardCard` → `afterDiscard` directly.
-`loadDomGame(file)` in the harness loads any of the three card games.
+Trou du cul through `onCardClick(uid)` + `onPlayClick`/`onPassClick`/`onGiveClick`, same seat-0 restriction (other
+seats: `doPlay`/`doPass`). `loadDomGame(file)` in the harness loads any of the four card games.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -429,3 +433,78 @@ Desktop centres the column with `margin-top/bottom: auto` on the first and last 
 `justify-content: center`, which would clip the top when the table overflows). The phone layout copies Uno's:
 opponents grid, `#table` as a `cqh`-sized flex filler, wrapping hand. Hand card width comes from `--n`, the hand
 size set inline by `renderHand()`, because CSS can't count cards spread across several meld groups.
+
+## Architecture — trou-du-cul.html
+
+### Rules as implemented
+
+52 cards dealt equally to 4–6 players; leftovers are shown to everyone and set aside (`S.aside`). Ranks are stored
+3..14 plus **15 for the 2**, so the natural order is just the number; `strength(rank)` is `rank - 3`, or `15 - rank`
+during a revolution. The Wikipedia article leaves several points open; these readings are deliberate and stated in
+the in-game rules panel:
+
+- **A player who passes may play again** when their turn comes back within the same trick. A trick ends when every
+  *other* player still holding cards has passed since the last play (`S.passed`, cleared on each play). The last
+  player to play leads next; if they are out, their next active neighbour does.
+- Round 1 is opened by the holder of the queen of hearts (seat 0 if it was set aside); later rounds by the previous
+  **Trou du cul**.
+- The round stops when one player still holds cards. Ranking = finishers in order, that player, then the players
+  who finished on a 2 (variant), the **first** offender at the very bottom. Points are `n - 1 - position`; the game
+  stops at the end of the round where someone reaches `S.target = (n - 1) × 3` (or × 6 for a long game).
+- Exchanges at the start of every later round: the Trou du cul's 2 best and the Vice-trou du cul's best card go
+  automatically; then the Président gives back 2 and the Vice-président 1 **of their choice**, after seeing what they
+  received. `S.gives` is the queue; `nextGive()` pauses in `phase = "give"` when the giver is the human.
+- **Révolution** lasts until the end of the round or a counter-revolution by another carré. Wikipedia says it "ne
+  dure qu'un tour"; read as one trick it would do almost nothing (only carrés can follow a carré), so the common
+  whole-round reading was chosen. It's one line in `doPlay()` plus the reset in `startRound()` if that ever changes.
+- **Même valeur**: playing the same rank is allowed and targets the next active player (`S.trick.forcedSeat`), who
+  may only repeat that rank or pass. **2 en atout**: a single 2 beats any combination, except a combination of 2s,
+  and not during a revolution. Not implemented: the putsch and the 54-card deck with jokers.
+
+### Legality and flow
+
+`canPlayCards(cards, seat)` is the only legality check: the renderer, the click handlers and the AIs go through it
+(`legalPlays(seat)` enumerates one candidate per rank and size). The suite asserts every `doPlay` was legal and made
+by `S.current`, and every `endTrick` happened with all the others passed.
+
+`doPlay` → optional revolution → `finish` if the hand is empty → `endRound` if one holder is left → next active
+seat. `doPass` → `endTrick` or next active seat. `aiTurn()` checks `S.epoch` like the other games, and when its pass
+is the one that closes the trick it pauses `TRICK_MS` with its "passe" bubble shown, so the winning cards can be read
+before they are cleared. The cleared trick stays on the table, dimmed, as `S.lastTrick`.
+
+### Opponent AI
+
+`play(p, seat) -> cards | null` and `give(p, k) -> cards`. `simple` leads its weakest rank (all copies), follows with
+the cheapest play that doesn't break a group, and gives back its weakest cards. `sharp` counts cards: `unseen(p,
+rank)` is 4 minus played, set aside and own copies, and a group is **master** when no rank above it has enough
+unseen copies (or a single 2 remains, with the trump variant). It plays its masters before its last group, prices
+each follow by `strength + breakCost`, **passes above `passAbove`** unless an opponent is down to `danger` cards,
+triggers a revolution when the flipped hand is stronger, and plays its 2s early when finishing on one is forbidden.
+Neither policy may read another hand; the test enforces it with counting `Proxy`s as in Uno.
+
+```
+node tests/trou-du-cul-bench.js 300        # 1 redoutable contre 3, 4 et 5 tranquilles, sans puis avec variantes
+node tests/trou-du-cul-bench.js sweep 400  # compare des réglages de l'objet AI (4 joueurs, toutes variantes)
+```
+
+Reference points at the shipped settings, 300 games per table, one `sharp` against `simple` players — win rate
+(baseline 1/n) and average points per round (baseline (n − 1)/2):
+
+| Players | No variant        | All variants      |
+|---------|-------------------|-------------------|
+| 4       | 51 % · 1.97       | 72 % · 2.11       |
+| 5       | 41 % · 2.47       | 53 % · 2.63       |
+| 6       | 33 % · 2.94       | 39 % · 3.04       |
+
+The pass threshold is what makes `sharp` strong: in the 4-player sweep, `passAbove 99` (never pass voluntarily)
+drops its win rate from ~71 % to ~44 %, and `danger 1` (keep passing even when someone is about to go out) to ~33 %.
+A separate "save the aces" penalty was removed once `passAbove` made it redundant. Terminations can't stall: every trick starts with a mandatory play.
+
+### Rendering and layout
+
+`render()` rebuilds the hand every call, grouped by rank (overlapped cards, weakest first in the *current* order,
+so a revolution flips the hand). Following a trick, one click on a card selects the required number of copies of
+its rank; leading, clicks toggle cards within one rank. Unplayable cards are darkened with `filter`, not `opacity`:
+inside an overlapped group, transparency shows the card underneath. Phone layout as in Uno and Cinq Rois; the
+opponents grid gets `--cols` from `buildBoard()` (up to 3 per row, 2×2 for four opponents) because five opponents
+don't fit in one row.
