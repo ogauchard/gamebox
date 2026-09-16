@@ -295,9 +295,9 @@
   }
 
   /* ------------------------------------------------- Téléphone (portrait)
-     Refonte « pouce » : rail d'adversaires défilant en haut, puis table,
-     statut, boutons et main ancrés en bas — dans la zone atteignable au
-     pouce. Le layout desktop plus haut n'est pas modifié. */
+     Rien ne défile et rien ne reste vide : adversaires en grille en haut, main
+     complète en bas (elle passe à la ligne), et la table occupe exactement la
+     hauteur qui reste entre les deux. Le layout desktop n'est pas modifié. */
   @media (max-width: 560px) {
     /* En-tête compact : les deux boutons doivent tenir sans être coupés, donc
        ils ne rétrécissent pas ; c'est l'info de manche qui cède (ellipse). */
@@ -307,41 +307,55 @@
     header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
 
     main {
-      padding: 7px 0 calc(4px + env(safe-area-inset-bottom));
+      padding: 7px 0 calc(6px + env(safe-area-inset-bottom));
       gap: 6px;
       align-items: stretch;
-      overflow-y: auto;              /* repli en défilement sur les écrans très courts */
+      overflow-y: auto;              /* repli pour une main démesurée sur un écran court */
     }
 
-    /* Rail d'adversaires : défile à l'horizontale, ne repasse jamais à la
-       ligne ; le débordement laisse volontairement voir un bout du suivant. */
+    /* Une colonne égale par adversaire : tous visibles d'un coup d'œil, sans
+       rail à faire défiler. Le décompte passe sous le nom pour tenir en largeur. */
     #opponents {
-      flex-wrap: nowrap;
-      justify-content: safe center;  /* centré quand ils tiennent, calé à gauche s'il faut défiler */
-      align-items: flex-start;
-      gap: 7px;
-      padding: 0 8px 4px;
-      overflow-x: auto; overflow-y: hidden;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: thin;
-      scrollbar-color: var(--line) transparent;
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: 6px;
+      padding: 0 8px;
     }
-    #opponents::-webkit-scrollbar { height: 5px; }
-    #opponents::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
     #opponents .player {
-      flex: 0 0 auto;
-      --mini-card: clamp(14px, min(2.9vh, 4vw), 21px);
-      padding: 5px 7px 7px;
+      --mini-card: clamp(13px, 4.4vw, 20px);
+      padding: 5px 8px 7px;
     }
-    #opponents .player .name { font-size: 11.5px; margin-bottom: 4px; gap: 5px; }
-    #opponents .player .name .tag { font-size: 10px; }
+    #opponents .player .name { flex-wrap: wrap; gap: 0 5px; font-size: 12.5px; margin-bottom: 4px; }
+    #opponents .player .name .tag { order: 1; flex-basis: 100%; font-size: 10.5px; }
     #opponents .player .name .uno { font-size: 9.5px; padding: 1px 4px; }
+    /* Éventail plus serré : huit dos doivent tenir dans un tiers d'écran. */
+    #opponents .fan { padding-left: calc(var(--mini-card) * .62); }
+    #opponents .fan .card { margin-left: calc(var(--mini-card) * -.62); }
+    #opponents .fan .more { margin-left: 5px; font-size: 11px; }
+    /* Seul adversaire : toute la largeur est à lui, nom et éventail sur une
+       seule ligne. */
+    #opponents .player:only-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #opponents .player:only-child .name { flex-wrap: nowrap; margin-bottom: 0; }
+    #opponents .player:only-child .name .tag { flex-basis: auto; }
 
-    /* Table + statut + boutons + main, collés en bas de l'écran. */
-    #table { margin-top: auto; --pile-card: clamp(48px, min(11vh, 20vw), 74px); gap: 12px; padding: 0; }
+    /* La table prend toute la hauteur libre, et les piles se dimensionnent sur
+       cette hauteur réelle (unités cqh) plutôt que sur la fenêtre : elles
+       grandissent quand la main est courte et cèdent la place quand elle
+       s'allonge. 24px = libellé + écart sous la carte. */
+    #table {
+      flex: 1 1 0;
+      min-height: 96px;
+      container-type: size;
+      gap: 14px; padding: 0;
+      --pile-card: clamp(44px, min(11vh, 20vw), 80px);   /* navigateurs sans cqh */
+    }
+    @supports (width: 1cqh) {
+      #table { --pile-card: clamp(40px, min((100cqh - 24px) / 1.5, 32cqw), 120px); }
+    }
     #center { min-width: 52px; }
-    #dir { font-size: 24px; }
-    #colorName { font-size: 11px; padding: 2px 7px; }
+    #dir { font-size: 26px; }
+    #colorName { font-size: 11.5px; padding: 2px 8px; }
     .pile .label { font-size: 11px; }
 
     #status { font-size: 13.5px; min-height: 19px; padding: 0 10px; overflow-wrap: anywhere; }
@@ -349,15 +363,26 @@
     #actions { min-height: 0; gap: 8px; padding: 0 8px; }
     #actions button { padding: 9px 14px; }   /* cible tactile confortable */
 
-    /* Ma main : la vedette. Grandes cartes, défilement horizontal au pouce. */
+    /* Ma main : la vedette. Toutes les cartes restent visibles et pleine
+       taille, sur plusieurs rangées ; --k cartes par rangée, davantage à mesure
+       que la main grossit pour qu'elle ne mange pas la table. */
     #me .name { font-size: 13px; }
     #hand {
-      --hand-card: clamp(52px, min(11.5vh, 21vw), 78px);
-      /* L'anneau de sélection déborde de 3 px : sans marge, la première et la
-         dernière carte se font rogner par le défilement. */
-      padding: 11px 14px 6px;
-      gap: 5px;
+      --k: 4;
+      /* 100vw : la main occupe toute la largeur, main n'ayant pas de marge ici. */
+      --hand-card: min((100vw - 20px - (var(--k) - 1) * 6px) / var(--k), 96px);
+      flex-wrap: wrap;
+      justify-content: center;
+      /* 12px entre rangées : la carte jouable se soulève de 7px et porte un
+         anneau de 3px, qui ne doit pas mordre sur la rangée du dessus. */
+      gap: 12px 6px;
+      padding: 11px 10px 2px;
+      overflow: visible;
     }
+    #hand:has(> .card:nth-child(5):last-child) { --k: 5; }   /* 5 cartes : une rangée plutôt que 4 + 1 */
+    #hand:has(> .card:nth-child(9))  { --k: 5; }
+    #hand:has(> .card:nth-child(16)) { --k: 6; }
+    #hand:has(> .card:nth-child(25)) { --k: 7; }
     /* Le soulèvement au survol n'a aucun sens au doigt et fait sautiller la
        carte après le tap sur iOS. */
     #hand .card.playable:hover { transform: translateY(-7px); }
@@ -369,13 +394,11 @@
     #colorGrid button { height: 62px; }
   }
 
-  /* Écrans courts (ex. iPhone SE ~667) : on gagne de la hauteur en masquant le
-     journal et en réduisant encore les cartes, pour éviter tout défilement. */
+  /* Écrans courts (ex. iPhone SE ~667) : le journal cède sa place à la table.
+     Les cartes n'ont pas besoin d'être réduites ici, elles suivent déjà la
+     place disponible. */
   @media (max-width: 560px) and (max-height: 700px) {
     #log { display: none; }
-    #opponents .player { --mini-card: clamp(13px, min(2.6vh, 3.6vw), 18px); }
-    #table { --pile-card: clamp(44px, min(10vh, 18vw), 64px); }
-    #hand { --hand-card: clamp(46px, min(10vh, 19vw), 68px); padding: 9px 8px 4px; }
     #me .name { font-size: 12px; }
   }
   @media (prefers-reduced-motion: reduce) {

@@ -14,6 +14,16 @@ inline. No build step, no dependencies, no package manager, no framework. Open a
   rules toggled on the start screen.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games themselves independent of each other.
+- [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
+  A new game also needs its card here. The games don't link back to it.
+
+## Hosting
+
+Published with **GitHub Pages** straight from `main`, repository root, no build and no Actions workflow:
+`https://ogauchard.github.io/gamebox/`. Every push to `main` goes live within a minute or so, so `main` is
+production. The empty [.nojekyll](.nojekyll) must stay: without it Pages runs Jekyll, which would render
+`CLAUDE.md` into a page. Keep every link relative (`uno.html`, not `/uno.html`) — the site lives under
+`/gamebox/`, not at the domain root.
 
 ## Verifying changes
 
@@ -297,9 +307,22 @@ opponents. Do not build player sentences with `il`/`elle` — the AI names carry
 
 ### Responsive layout
 
-Same thumb-first approach as Skyjo, and the same `@media (max-width: 560px)` / nested `(max-height: 700px)`
-structure: opponents become a horizontally-scrolling rail at the top, and the table, status, action buttons and
-hand are pinned to the bottom by `margin-top: auto` on `#table`. The hand itself scrolls horizontally — cards
-stay full size rather than overlapping, so a 15-card hand is still tappable. Overlays (couleur, règles, scores)
-switch from centred to bottom-anchored sheets. Verify phone widths with the iframe screenshot trick from
-*Verifying changes*; touch feel still needs a real device.
+Pure CSS under `@media (max-width: 560px)`, plus a nested `(max-height: 700px)` that only hides the log. Unlike
+Skyjo, nothing scrolls and nothing is left empty (an earlier rail + `margin-top: auto` version left ~40 % of the
+screen blank and hid half the hand):
+
+- **Opponents** are a grid with one equal column each, so all three stay visible; the card count wraps under the
+  name. A lone opponent (`:only-child`) goes on a single row instead.
+- **The hand wraps** onto several rows instead of scrolling — every card visible, full size, never overlapping.
+  Card width is computed from `--k` cards per row (`100vw`-based); `:has(> .card:nth-child(9|16|25))` raises `--k`
+  as the hand grows so it doesn't swallow the table. Row gap is 12 px because a playable card lifts 7 px and
+  carries a 3 px ring.
+- **`#table` is `flex: 1 1 0` with `container-type: size`**, and `--pile-card` uses `cqh`/`cqw`: the piles size
+  themselves to whatever height the hand leaves over (big with 5 cards, small with 20). An `@supports (width: 1cqh)`
+  guard keeps a `vh` fallback — a custom property can't fail validation, so an unsupported unit would otherwise
+  silently give the card no width. `main` still falls back to vertical scroll once `#table` hits `min-height`.
+
+Overlays (couleur, règles, scores) switch from centred to bottom-anchored sheets. Verify phone widths with the
+iframe screenshot trick from *Verifying changes* — pose hands of ~5, 13 and 20 cards, since layout depends on hand
+size; touch feel still needs a real device. Landscape phones fall outside the 560 px query and get the desktop
+layout.
