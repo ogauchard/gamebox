@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Three **independent** self-contained games that share no code. Each is one HTML file with its markup, CSS, and JS
+Four **independent** self-contained games that share no code. Each is one HTML file with its markup, CSS, and JS
 inline. No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
@@ -12,6 +12,8 @@ inline. No build step, no dependencies, no package manager, no framework. Open a
 - [skyjo.html](skyjo.html) — the Magilano card game, DOM/CSS rendering, human vs. 1–3 computer opponents.
 - [uno.html](uno.html) — the Mattel card game, DOM/CSS rendering, human vs. 1–3 computer opponents, house
   rules toggled on the start screen.
+- [cinq-rois.html](cinq-rois.html) — *Les Cinq Rois*, the French edition of Five Crowns (Set Enterprises), DOM/CSS
+  rendering, human vs. 1–3 computer opponents: 11 rounds of rummy with a wild rank that changes every round.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games themselves independent of each other.
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
@@ -28,9 +30,10 @@ production. The empty [.nojekyll](.nojekyll) must stay: without it Pages runs Je
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les trois suites (~2600 assertions, le total varie — les cartes sont mélangées)
+node tests/run-all.js          # les quatre suites (~3500 assertions, le total varie — les cartes sont mélangées)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
+node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
 node tests/asteroids.test.js   # logique d'Asteroids seule
 ```
 
@@ -75,7 +78,10 @@ things to know before writing a new test:
 Asteroids is driven by holding the `requestAnimationFrame` callback and replaying it with synthetic timestamps, and
 by firing `keydown`/`keyup` at the captured listeners. Skyjo is driven through `onCardClick`/`onDrawClick`/
 `onDiscardClick` for the human seat, opponents playing normally. Uno the same way through `onHandClick(uid)` and
-friends — cards are addressed by `uid`, not by DOM node, because `render()` rebuilds the hand every time.
+friends — cards are addressed by `uid`, not by DOM node, because `render()` rebuilds the hand every time. Cinq Rois
+likewise through `onDrawClick`/`onDiscardPileClick`/`onHandClick(uid)`; those handlers only act for seat 0, so a
+targeted test that plays another seat calls `drawOne`/`takeDiscard` → `discardCard` → `afterDiscard` directly.
+`loadDomGame(file)` in the harness loads any of the three card games.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -326,3 +332,100 @@ Overlays (couleur, règles, scores) switch from centred to bottom-anchored sheet
 iframe screenshot trick from *Verifying changes* — pose hands of ~5, 13 and 20 cards, since layout depends on hand
 size; touch feel still needs a real device. Landscape phones fall outside the 560 px query and get the desktop
 layout.
+
+## Architecture — cinq-rois.html
+
+### Rules as implemented
+
+Official Five Crowns: 116 cards (5 suits × 3..K × 2, plus 6 jokers), 11 rounds dealing 3 to 13 cards, and the rank
+equal to the deal size is wild that round (`S.wildRank = S.round + 2`). A turn is take one (deck or discard) then
+discard one. Deliberate readings, all stated in the in-game rules panel:
+
+- **Going out is automatic**: after any discard, if the remaining hand arranges with zero leftover points,
+  `afterDiscard()` sets `S.finisher`. Going out is never worse than not, so there is no button.
+- **The discard is mandatory**, even when all n + 1 cards already form melds — so a hand of exactly two 3-card
+  melds after drawing *cannot* go out. The engine models this (see below); don't "simplify" it away.
+- Every other player gets exactly one final turn; `endTurn()` ends the round when play returns to the finisher.
+- No laying off onto other players' melds. A meld of only wilds is legal. A natural card of the wild rank is a
+  wild, never a natural — so it can't hold its own place as a natural in a run (a wild fills it instead, same result).
+- Hands are **auto-arranged** for the human too: `render()` shows the optimal arrangement (green trays = melds)
+  and rings in green every card whose discard would go out. Scoring uses the same optimum for everyone.
+- `TURN_CAP` (400) ends a round in place, scoring hands as they stand. It exists only as a guarantee; see the AI
+  pitfall below for why it was needed once.
+
+### The arrangement engine
+
+`arrange(hand, discard, wr)` returns `{ cost, melds, dead, discard }`: the minimum points left outside melds, and
+with `discard` the card to throw (mandatory). Everything — scoring, the human's display, both AIs — goes through it,
+so it must be exact and fast. `solve()` is a memoised exhaustive search:
+
+- Naturals are counted per type (`suit * 11 + rank - 3`, 55 types, max 2 each); wilds are just a count `w`.
+- It always processes the **first remaining type** `from`: leave it dead, discard it (`skip`), open a book of its
+  rank (any subset of the same-rank naturals, padded with the minimum wilds), or be the **lowest natural** of a run
+  in its suit. Lower types are exhausted, so no meld is missed.
+- A surplus wild costs nothing once any meld exists (books have no size cap), so wilds are only ever placed where
+  needed; leftover-wild value `wv` matters only when `used` is 0. Wilds *below* the opening card of a run are only
+  needed when the run would run past the King.
+- **Mandatory discard**: a leaf with `skip` still pending returns `INF`; discarding a wild is a separate top-level
+  option (always the most expensive one — a joker before a wild-rank card).
+- The memo (`ARR`) is shared across calls and keyed by the counts string + `w` + `wv` + flags; it resets when
+  `wr` changes or past 400 000 entries. Choices are stored with the cost, and `arrange()` replays them to rebuild
+  the melds. A 14-card hand with discard takes ~0.25 ms cold.
+
+The pruning is where it broke: a wild extending a run was only allowed "if a natural lies ahead", written as
+`run.length < 2` instead of `< 3` — so a 2-card run could never be completed by a wild. The random brute-force check
+caught it (237 wrong hands out of 4 000). `cinq-rois.test.js` keeps that check: ~700 random biased hands of 3–8
+cards, compared against the minimum over **all set partitions**, with an independent meld validator. Any change to
+`solve()` must keep it at zero discrepancies.
+
+### Turn flow
+
+`S.phase`: `draw → discard` for the human (clicks on the piles, then on a hand card), `ai` while an opponent plays,
+`over` at scoring. `aiTurn()` is async like Uno's; it captures `S.epoch` (bumped by `startRound()`) and bails out
+after each `sleep()` if a new round or game started meanwhile. Log lines are one per turn ("prend X et défausse Y"),
+through `says()` — no il/elle, same as Uno.
+
+### Opponent AI
+
+Interface `takeDiscard(p, top) -> bool` and `discard(p) -> card`, selected by `p.policy`:
+
+- `simple` ("Tranquille") is greedy on the engine: take the discard iff it strictly lowers the arranged cost,
+  discard what `arrange(hand, true)` throws.
+- `sharp` ("Redoutable") counts cards. `unseenClasses(p)` is the deck minus its own hand, the whole discard pile,
+  and the cards other players took from the discard and still hold (`p.pub.took`, public information). Taking
+  the discard must beat the **expected cost of a blind draw** by `AI.margin`. Discarding weighs the immediate cost
+  against the expected cost after the next draw (`AI.hope`), over the dead cards only, and penalises cards close
+  to what the next player picked up (`AI.deny`). On a final turn it just minimises the immediate cost.
+
+**The pitfall that bit here:** an early `sharp` always took a wild from the discard. With three unrelated cards in
+round 1 there is nowhere to put it, so it discarded the wild straight back — and three `sharp` players passed the
+same joker around until `TURN_CAP`. The rule now is that a take must strictly beat the draw expectation; since
+a blind draw can always be discarded, its expectation never exceeds the current cost, so a no-op take is impossible.
+Neither policy may read another hand or `S.draw`: the test swaps them for counting `Proxy`s during every policy call.
+
+### Benchmarking the AI
+
+```
+node tests/cinq-rois-bench.js 300        # duel + table à 3 contre la politique simple
+node tests/cinq-rois-bench.js sweep 150  # compare des réglages de l'objet AI
+node tests/cinq-rois-bench.js stall 40   # 3 « redoutables » entre elles : garde-fou jamais atteint
+```
+
+Reference points at the shipped settings, 300 games each: **76 % wins in a 2-player duel** (50 % baseline) and
+**53 % at a 3-player table** (33 % baseline), average round score 8.1 vs 11.2; three `sharp` players average about
+9 turns per round, worst seen 34, far from `TURN_CAP`. The sweep is noisy at 150 games — compare the average
+score per round, which moves far less than the win rate. `hope` 0.55 beat 0, 0.3 and 0.8 on that measure; `deny`
+is neutral against `simple` (which never exploits the discard pile) and kept for humans. Run `stall` before shipping
+any change to `takeDiscard`.
+
+### Rendering and layout
+
+`render()` rebuilds the hand from `arrange()` on every call (like Uno, unlike Skyjo), so the hand re-sorts itself
+after each draw; `shownUids` limits the `pop` animation to new cards. Melds are `.group.meld` trays with cards
+overlapped by 42 % (the corner index stays readable), dead cards sit apart and unoverlapped because they are what
+you click. The wild rank gets a gold inner border and a crown, the table shows it in `#wildBadge`.
+
+Desktop centres the column with `margin-top/bottom: auto` on the first and last children of `main` (not
+`justify-content: center`, which would clip the top when the table overflows). The phone layout copies Uno's:
+opponents grid, `#table` as a `cqh`-sized flex filler, wrapping hand. Hand card width comes from `--n`, the hand
+size set inline by `renderHand()`, because CSS can't count cards spread across several meld groups.

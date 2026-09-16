@@ -1,4 +1,4 @@
-/* Harnais de test commun aux deux jeux.
+/* Harnais de test commun aux jeux.
  *
  * Aucun navigateur n'est requis : le <script> inline de chaque page est extrait
  * puis exécuté dans un contexte `node:vm` face à des bouchons. Cela couvre toute
@@ -77,12 +77,16 @@ class FakeEl {
   click() { for (const fn of this._listeners.click || []) fn(); }
 }
 
-/* ------------------------------------------------------------------ Skyjo */
-/* L'horloge du bac à sable déclenche immédiatement : les temporisations
+/* ------------------------------------------------ Jeux de cartes (DOM) */
+/* Skyjo, Uno et Les Cinq Rois se chargent de la même façon.
+   L'horloge du bac à sable déclenche immédiatement : les temporisations
    d'animation de l'IA s'effondrent et une partie entière tient en quelques
    millisecondes. setImmediate plutôt que setTimeout(fn, 0) — Node bride ce
-   dernier à ~1 ms, ce qui domine tout le reste sur des milliers de tours. */
-function loadSkyjo() {
+   dernier à ~1 ms, ce qui domine tout le reste sur des milliers de tours.
+   Le siège humain se pilote par appels directs aux gestionnaires de clic
+   (onHandClick…). Quand le rendu reconstruit une main à chaque tour, inutile
+   de chercher les boutons : on passe l'uid de la carte. */
+function loadDomGame(file) {
   const byId = new Map();
   const schedule = (fn) => setImmediate(fn);
   const sandbox = {
@@ -99,39 +103,15 @@ function loadSkyjo() {
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(readInlineScript("skyjo.html"), sandbox, { filename: "skyjo.js" });
+  vm.runInContext(readInlineScript(file), sandbox, { filename: file.replace(".html", ".js") });
 
   const g = (expr) => vm.runInContext(expr, sandbox);
   return { g, S: g("S"), byId, tick: () => new Promise((r) => schedule(r)) };
 }
 
-/* --------------------------------------------------------------------- Uno */
-/* Même principe que Skyjo : horloge immédiate, faux DOM. Le siège humain se
-   pilote par appels directs à onHandClick/onDrawClick/… Les cartes de la main
-   changeant à chaque tour, le rendu reconstruit #hand — inutile de chercher les
-   boutons, on passe l'uid de la carte. */
-function loadUno() {
-  const byId = new Map();
-  const schedule = (fn) => setImmediate(fn);
-  const sandbox = {
-    console,
-    document: {
-      getElementById: (id) => {
-        if (!byId.has(id)) byId.set(id, new FakeEl());
-        return byId.get(id);
-      },
-      createElement: (tag) => new FakeEl(tag),
-    },
-    setTimeout: schedule,
-    clearTimeout: () => {},
-  };
-  sandbox.window = sandbox;
-  vm.createContext(sandbox);
-  vm.runInContext(readInlineScript("uno.html"), sandbox, { filename: "uno.js" });
-
-  const g = (expr) => vm.runInContext(expr, sandbox);
-  return { g, S: g("S"), byId, tick: () => new Promise((r) => schedule(r)) };
-}
+const loadSkyjo = () => loadDomGame("skyjo.html");
+const loadUno = () => loadDomGame("uno.html");
+const loadCinqRois = () => loadDomGame("cinq-rois.html");
 
 /* -------------------------------------------------------------- Asteroids */
 /* On retient le rappel de requestAnimationFrame pour le rejouer avec des
@@ -247,4 +227,4 @@ function checker() {
   return { ok, okOnce, report, state };
 }
 
-module.exports = { ROOT, FakeEl, loadSkyjo, loadUno, loadAsteroids, checker, globalClashes };
+module.exports = { ROOT, FakeEl, loadSkyjo, loadUno, loadCinqRois, loadAsteroids, checker, globalClashes };

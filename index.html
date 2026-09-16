@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gamebox</title>
-<meta name="description" content="Asteroids, Skyjo et Uno, jouables directement dans le navigateur.">
+<meta name="description" content="Asteroids, Skyjo, Uno et Les Cinq Rois, jouables directement dans le navigateur.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
 <style>
   :root {
@@ -24,7 +24,7 @@
     font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
     padding: calc(40px + env(safe-area-inset-top)) 20px calc(28px + env(safe-area-inset-bottom));
   }
-  main { max-width: 980px; margin: 0 auto; }
+  main { max-width: 900px; margin: 0 auto; }
 
   header { text-align: center; margin-bottom: 32px; }
   h1 {
@@ -34,10 +34,15 @@
   header p { color: var(--dim); margin-top: 4px; }
 
   /* ------------------------------------------------------------ Vignettes */
+  /* Deux colonnes, quatre sur grand écran : jamais de vignette orpheline. */
   .games {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 18px;
+  }
+  @media (min-width: 1100px) {
+    main { max-width: 1160px; }
+    .games { grid-template-columns: repeat(4, 1fr); }
   }
   .game {
     display: flex; flex-direction: column;
@@ -137,6 +142,39 @@
   }
   .u:nth-child(3) b { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.85); }
 
+  /* Les Cinq Rois : une suite d'étoiles complétée par un joker. */
+  .p-rois { background: radial-gradient(ellipse at 50% 20%, #252338 0%, #12111a 75%); }
+  .rois-fan { position: relative; width: 60px; height: 110px; }
+  .r {
+    --cw: 54px;
+    position: absolute; left: 50%; top: 14px;
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    margin-left: calc(var(--cw) * -.5);
+    border-radius: calc(var(--cw) * .11);
+    background: #fbf6ea; color: #c98a00;
+    box-shadow: 0 3px 10px rgba(0,0,0,.55);
+    transform-origin: 50% 170%;
+    overflow: hidden;
+  }
+  .r s {
+    position: absolute; top: 5%; left: 8%;
+    display: flex; flex-direction: column; align-items: center;
+    text-decoration: none; font-weight: 900; line-height: .95;
+    font-size: calc(var(--cw) * .3);
+  }
+  .r s i { font-style: normal; font-size: calc(var(--cw) * .22); }
+  .r b {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: 22% 0 0 18%;
+    font-size: calc(var(--cw) * .6); font-weight: 400; line-height: 1;
+  }
+  .r:nth-child(1) { transform: rotate(-24deg); }
+  .r:nth-child(2) { transform: rotate(-8deg); }
+  .r:nth-child(3) { transform: rotate(8deg); }
+  .r:nth-child(4) { transform: rotate(24deg); background: linear-gradient(160deg, #3a2f5c, #17132a); color: #ffce3a; }
+  .r:nth-child(4) b { padding: 18% 0 0 10%; }
+
   footer { text-align: center; color: var(--dim); font-size: 13px; margin-top: 30px; }
   footer a { color: inherit; }
 
@@ -165,7 +203,7 @@
 <main>
   <header>
     <h1>GAMEBOX</h1>
-    <p>Trois jeux, directement dans le navigateur.</p>
+    <p>Quatre jeux, directement dans le navigateur.</p>
   </header>
 
   <nav class="games">
@@ -219,6 +257,22 @@
       <div class="info">
         <h2>Uno</h2>
         <p>Le jeu de cartes de Mattel, contre 1 à 3 adversaires, avec variantes au choix.</p>
+        <span class="play">Jouer →</span>
+      </div>
+    </a>
+
+    <a class="game" href="cinq-rois.html">
+      <div class="preview p-rois" aria-hidden="true">
+        <div class="art rois-fan">
+          <div class="r"><s>5<i>★</i></s><b>★</b></div>
+          <div class="r"><s>6<i>★</i></s><b>★</b></div>
+          <div class="r"><s>7<i>★</i></s><b>★</b></div>
+          <div class="r"><s>JK</s><b>♛</b></div>
+        </div>
+      </div>
+      <div class="info">
+        <h2>Les Cinq Rois</h2>
+        <p>Brelans et suites en onze manches, avec un joker qui change à chaque manche. Contre 1 à 3 adversaires.</p>
         <span class="play">Jouer →</span>
       </div>
     </a>

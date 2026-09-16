@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Les Cinq Rois</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #12111a;
+    --panel: #1d1c29;
+    --line: #353349;
+    --text: #efedf6;
+    --dim: #9d9ab3;
+    --accent: #ffce3a;
+    --meld: #4fbf6a;
+    /* Les cinq couleurs du paquet, sur fond crème. */
+    --s-E: #c98a00;
+    --s-C: #d0342c;
+    --s-T: #2b8a45;
+    --s-P: #23262d;
+    --s-K: #2466b8;
+    /* Ratio hauteur/largeur d'une carte : 1.4 */
+    --hand-card: clamp(48px, min(11vh, 7.5vw), 84px);
+    --pile-card: clamp(52px, min(12vh, 16vw), 90px);
+    --mini-card: clamp(16px, min(3.2vh, 4.4vw), 25px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% 0%, #252338 0%, var(--bg) 62%);
+    color: var(--text);
+    font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ------------------------------------------------------------- Structure */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0,0,0,.28);
+    flex: none;
+  }
+  header h1 {
+    font-size: 20px; letter-spacing: 3px; font-weight: 900;
+    color: var(--accent); white-space: nowrap;
+  }
+  header h1 span { font-size: .9em; margin-right: 4px; }
+  header .spacer { flex: 1; }
+  header .meta { color: var(--dim); font-size: 13px; }
+
+  button {
+    font: inherit; color: inherit;
+    background: #2a283b; border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 13px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #36334c; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); color: #1c1a24; border-color: var(--accent); font-weight: 700; }
+  button.primary:hover { background: #ffd960; }
+
+  main {
+    flex: 1;
+    min-height: 0;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    overflow: auto;
+    align-items: center;
+  }
+  main > * { flex: none; }
+  /* Marges automatiques plutôt que justify-content: center, qui rognerait le
+     haut de la table si elle dépasse la fenêtre. */
+  main > :first-child { margin-top: auto; }
+  main > :last-child { margin-bottom: auto; }
+
+  #opponents { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+
+  /* -------------------------------------------------------------- Cartes */
+  /* Fond crème, valeur et couleur dans le coin (c'est lui qu'on lit quand les
+     cartes se chevauchent), grand symbole au centre. */
+  .card {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    border: 0; padding: 0;
+    border-radius: calc(var(--cw) * .11);
+    background: #fbf6ea;
+    color: var(--sc, #222);
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 3px 8px rgba(0,0,0,.45);
+    overflow: hidden;
+    cursor: default;
+    font: inherit;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .card:disabled { opacity: 1; }        /* neutralise le grisage global des boutons */
+  .card .corner {
+    position: absolute; top: 5%; left: 7%;
+    display: flex; flex-direction: column; align-items: center;
+    line-height: .95;
+  }
+  .card .corner b { font-size: calc(var(--cw) * .3); font-weight: 900; letter-spacing: -.04em; }
+  .card .corner i { font-style: normal; font-size: calc(var(--cw) * .22); }
+  .card .pip {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 22% 0 0 18%;
+    font-size: calc(var(--cw) * .6); line-height: 1;
+  }
+  .s-E { --sc: var(--s-E); }
+  .s-C { --sc: var(--s-C); }
+  .s-T { --sc: var(--s-T); }
+  .s-P { --sc: var(--s-P); }
+  .s-K { --sc: var(--s-K); }
+
+  /* Carte qui sert de joker pendant la manche : liseré doré et couronne. */
+  .card.wild::after {
+    content: ""; position: absolute; inset: 0;
+    border: calc(var(--cw) * .055) solid #e0b020;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .card .crown {
+    position: absolute; top: 4%; right: 8%;
+    font-size: calc(var(--cw) * .24); line-height: 1; color: #d49a00;
+  }
+  .card.joker { background: linear-gradient(160deg, #3a2f5c, #17132a); color: var(--accent); }
+  .card.joker .pip { padding: 18% 0 0 12%; font-size: calc(var(--cw) * .62); }
+  .card.joker .corner b { font-size: calc(var(--cw) * .24); }
+
+  .card.back {
+    background:
+      radial-gradient(circle at 50% 50%, transparent 38%, rgba(0,0,0,.18) 39%),
+      repeating-linear-gradient(45deg, #202c55 0 5px, #283665 5px 10px);
+    box-shadow: inset 0 0 0 calc(var(--cw) * .06) #b8952a, 0 3px 8px rgba(0,0,0,.45);
+    color: #e2b93b;
+  }
+  .card.back .pip { padding: 0; font-size: calc(var(--cw) * .5); }
+
+  /* ------------------------------------------------------------ Adversaires */
+  .player {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 11px 10px;
+    min-width: 0;
+  }
+  .player.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .player .name {
+    display: flex; align-items: baseline; gap: 8px;
+    font-weight: 700; margin-bottom: 6px; font-size: 14px;
+    white-space: nowrap;
+  }
+  .player .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
+  .badge {
+    font-size: 11px; font-weight: 800; letter-spacing: .3px;
+    color: #10220f; background: var(--meld);
+    border-radius: 5px; padding: 1px 5px;
+  }
+  .fan { display: flex; --cw: var(--mini-card); padding-left: calc(var(--mini-card) * .5); }
+  .fan .card { margin-left: calc(var(--mini-card) * -.5); }
+  .fan .more { align-self: center; margin-left: 7px; font-size: 12px; color: var(--dim); }
+
+  /* ----------------------------------------------------------------- Table */
+  #table {
+    display: flex; align-items: center; justify-content: center; gap: 22px;
+    padding: 4px 0;
+    --cw: var(--pile-card);
+  }
+  .pile { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .pile .label { font-size: 12px; color: var(--dim); letter-spacing: .3px; }
+  .pile.clickable .card { cursor: pointer; box-shadow: 0 0 0 3px var(--accent), 0 4px 12px rgba(0,0,0,.5); }
+  .pile.clickable .card:hover { transform: translateY(-4px); }
+  #discardSlot { display: flex; }
+  .slot-empty {
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    border: 2px dashed var(--line); border-radius: calc(var(--cw) * .11);
+  }
+  /* Joker de la manche : l'information à ne jamais perdre de vue. */
+  #center { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 76px; }
+  #wildBadge {
+    display: flex; align-items: baseline; gap: 4px;
+    padding: 3px 13px 4px; border-radius: 999px;
+    background: linear-gradient(180deg, #3d3212, #251d09);
+    border: 1px solid #8a6d1f;
+    color: var(--accent); font-weight: 900; font-size: 24px; line-height: 1.1;
+  }
+  #wildBadge span { font-size: 17px; }
+  #center .label { font-size: 11.5px; color: var(--dim); text-align: center; line-height: 1.2; }
+
+  #status { min-height: 22px; text-align: center; font-size: 15px; }
+  #status b { color: var(--accent); }
+  #log {
+    font-size: 12.5px; line-height: 1.35; color: var(--dim); text-align: center;
+    max-width: 720px; height: calc(12.5px * 1.35 * 3); overflow: hidden;
+  }
+
+  /* ------------------------------------------------------------------ Main */
+  #me { width: 100%; max-width: 1000px; }
+  #me .name {
+    display: flex; align-items: baseline; gap: 8px;
+    justify-content: center; font-size: 14px; font-weight: 700;
+  }
+  #me .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
+  /* La main est rangée par le jeu : chaque combinaison dans un plateau, cartes
+     chevauchées ; les cartes isolées à part, côte à côte, car ce sont elles
+     qu'on défausse. */
+  #hand {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 14px 12px;
+    padding: 14px 10px 8px;
+    --cw: var(--hand-card);
+  }
+  .group { display: flex; align-items: flex-end; }
+  .group.meld {
+    padding: 5px 6px 5px calc(var(--cw) * .42 + 6px);
+    border-radius: calc(var(--cw) * .16);
+    background: rgba(79, 191, 106, .13);
+    box-shadow: inset 0 0 0 1px rgba(79, 191, 106, .35);
+  }
+  .group.meld .card { margin-left: calc(var(--cw) * -.42); }
+  .group.dead { gap: 6px; padding: 5px 0; }
+  #hand .card.pickable { cursor: pointer; }
+  #hand .card.pickable:hover { transform: translateY(-8px); }
+  #hand .card.drawn { box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgba(0,0,0,.5); }
+  /* Défausser cette carte fait sortir : anneau vert, carte soulevée. */
+  #hand .card.out { transform: translateY(-6px); box-shadow: 0 0 0 3px var(--meld), 0 8px 16px rgba(0,0,0,.55); }
+  @keyframes pop { from { transform: translateY(24px) scale(.85); opacity: 0; } }
+  #hand .card.pop { animation: pop .26s ease-out; }
+
+  /* -------------------------------------------------------------- Overlays */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(8,7,13,.86);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px; z-index: 10;
+  }
+  .overlay[hidden] { display: none; }
+  .sheet {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 22px 24px;
+    max-width: 600px; width: 100%;
+    max-height: 90vh; overflow: auto;
+  }
+  .sheet h2 { font-size: 22px; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
+  .sheet h3 { font-size: 15px; margin: 14px 0 4px; color: var(--accent); }
+  .sheet p { margin: 8px 0; }
+  .sheet ul { margin: 8px 0 8px 20px; }
+  .sheet li { margin: 5px 0; }
+  .sheet .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .sheet .hint { font-size: 12.5px; color: var(--dim); margin-top: 2px; }
+  .choice { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
+  .choice button.sel { background: var(--accent); color: #1c1a24; border-color: var(--accent); font-weight: 700; }
+  .suits { letter-spacing: 2px; }
+  .suits .s-E, .suits .s-C, .suits .s-T, .suits .s-P, .suits .s-K {
+    color: var(--sc); background: #fbf6ea; border-radius: 4px; padding: 0 3px;
+  }
+
+  /* Décompte : la main de chacun, rangée comme elle a été comptée. */
+  .score-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .score-row:last-child { border-bottom: 0; }
+  .score-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .score-head .who { font-weight: 700; }
+  .score-head .pts { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .score-head .pts b { font-size: 17px; }
+  .score-head .pts span { color: var(--dim); font-size: 13px; }
+  .score-row.win .who, .score-row.win .pts b { color: var(--accent); }
+  .mini-hand { --cw: 30px; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; align-items: flex-end; }
+  .mini-hand .group.meld { padding: 3px 4px 3px calc(var(--cw) * .42 + 4px); }
+  .mini-hand .group.dead { gap: 3px; padding: 3px 0; }
+  .mini-hand .group.dead .card { box-shadow: 0 0 0 2px #e0584f; }
+  .next-round { color: var(--dim); font-size: 13.5px; margin-top: 12px; }
+  .next-round b { color: var(--accent); }
+
+  @media (max-width: 720px) {
+    main { padding: 8px; gap: 6px; }
+    #opponents { gap: 9px; }
+    #table { gap: 14px; }
+    .player { padding: 6px 8px 8px; }
+  }
+
+  /* ------------------------------------------------- Téléphone (portrait)
+     Même approche qu'Uno : adversaires en grille en haut, main complète en
+     bas, et la table occupe exactement la hauteur qui reste. */
+  @media (max-width: 560px) {
+    header { padding: 7px 9px; gap: 7px; }
+    header h1 { font-size: 16px; letter-spacing: 1.5px; flex: none; }
+    header .meta { font-size: 10.5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    header .meta span { display: none; }          /* le nombre de cartes se lit sur le badge du joker */
+    header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
+
+    main {
+      padding: 7px 0 calc(6px + env(safe-area-inset-bottom));
+      gap: 6px;
+      align-items: stretch;
+      overflow-y: auto;
+    }
+
+    #opponents {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      gap: 6px;
+      padding: 0 8px;
+    }
+    #opponents .player { --mini-card: clamp(13px, 4.4vw, 20px); padding: 5px 8px 7px; }
+    #opponents .player .name { flex-wrap: wrap; gap: 0 5px; font-size: 12.5px; margin-bottom: 4px; }
+    #opponents .player .name .tag { order: 1; flex-basis: 100%; font-size: 10.5px; }
+    #opponents .player .name .badge { font-size: 9.5px; padding: 1px 4px; }
+    #opponents .fan { padding-left: calc(var(--mini-card) * .62); }
+    #opponents .fan .card { margin-left: calc(var(--mini-card) * -.62); }
+    #opponents .fan .more { margin-left: 5px; font-size: 11px; }
+    #opponents .player:only-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #opponents .player:only-child .name { flex-wrap: nowrap; margin-bottom: 0; }
+    #opponents .player:only-child .name .tag { flex-basis: auto; }
+
+    /* Piles dimensionnées sur la hauteur réellement libre (voir uno.html). */
+    #table {
+      flex: 1 1 0;
+      min-height: 96px;
+      container-type: size;
+      gap: 16px; padding: 0;
+      --pile-card: clamp(44px, min(11vh, 20vw), 80px);
+    }
+    @supports (width: 1cqh) {
+      #table { --pile-card: clamp(40px, min((100cqh - 24px) / 1.4, 28cqw), 110px); }
+    }
+    #center { min-width: 60px; }
+    #wildBadge { font-size: 20px; padding: 2px 10px 3px; }
+    #wildBadge span { font-size: 14px; }
+    #center .label { font-size: 10.5px; }
+    .pile .label { font-size: 11px; }
+
+    #status { font-size: 13.5px; min-height: 19px; padding: 0 10px; overflow-wrap: anywhere; }
+    #log { font-size: 11px; height: calc(11px * 1.3 * 2); padding: 0 8px; }
+
+    /* Taille des cartes selon le nombre en main (--n, posé par le rendu) :
+       les combinaisons se chevauchent, donc une main de 14 tient en deux ou
+       trois rangées. */
+    #me .name { font-size: 13px; }
+    #hand {
+      --k: clamp(4.5, calc(var(--n, 7) * .4 + 1.8), 7);
+      --hand-card: min((100vw - 24px) / var(--k), 84px);
+      gap: 12px 8px;
+      padding: 12px 8px 2px;
+    }
+    #hand .card.pickable:hover { transform: none; }
+    #hand .card.out:hover { transform: translateY(-6px); }
+
+    .sheet { padding: 18px 16px; }
+    .overlay { align-items: flex-end; padding: 0; }
+    .sheet { border-radius: 16px 16px 0 0; max-height: 88vh; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
+    .mini-hand { --cw: 26px; gap: 6px; }
+  }
+  @media (max-width: 560px) and (max-height: 700px) {
+    #log { display: none; }
+    #me .name { font-size: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #hand .card.pop { animation: none; }
+    .card { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>♛</span>CINQ ROIS</h1>
+  <span class="meta" id="roundInfo">Manche 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div class="pile" id="drawPile">
+      <div id="drawSlot"></div>
+      <div class="label">Pioche (<span id="drawCount">0</span>)</div>
+    </div>
+    <div id="center">
+      <div id="wildBadge"><span>♛</span><b id="wildRank">3</b></div>
+      <div class="label">joker de<br>la manche</div>
+    </div>
+    <div class="pile" id="discardPile">
+      <div id="discardSlot"></div>
+      <div class="label">Défausse</div>
+    </div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="me">
+    <div class="name"><span>Toi</span><span class="tag" id="myTag"></span></div>
+    <div id="hand"></div>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>♛ Les Cinq Rois</h2>
+    <p>Onze manches, de 3 à 13 cartes. Range ta main en brelans et en suites,
+       sors avant les autres, et termine la partie avec <b>le moins de points</b>.</p>
+    <h3>Nombre de joueurs</h3>
+    <div class="choice" id="playerChoice"></div>
+    <h3>Niveau des adversaires</h3>
+    <div class="choice" id="levelChoice"></div>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Le but est de finir les <b>onze manches</b> avec le moins de points possible.</p>
+    <h3>Le paquet</h3>
+    <p>116 cartes : cinq couleurs —
+       <span class="suits"><span class="s-E">★</span> étoiles, <span class="s-C">♥</span> cœurs,
+       <span class="s-T">♣</span> trèfles, <span class="s-P">♠</span> piques,
+       <span class="s-K">♦</span> carreaux</span> —, du 3 au Roi (V = Valet, D = Dame, R = Roi),
+       chaque carte en deux exemplaires, plus <b>6 jokers</b>.</p>
+    <h3>Les manches</h3>
+    <p>À la première manche, chacun reçoit <b>3 cartes</b> ; une de plus à chaque manche,
+       jusqu'à 13 à la onzième. La valeur égale au nombre de cartes distribuées sert
+       aussi de <b>joker pendant la manche</b> : les 3 à la première, les 4 à la deuxième…
+       les Rois à la dernière. Les 6 jokers le sont toujours.</p>
+    <h3>Ton tour</h3>
+    <p><b>Prends une carte</b> — sur la pioche ou sur la défausse —, puis <b>défausse-en une</b>.</p>
+    <h3>Les combinaisons</h3>
+    <ul>
+      <li><b>Brelan</b> — au moins 3 cartes de même valeur, couleurs quelconques.</li>
+      <li><b>Suite</b> — au moins 3 cartes qui se suivent dans une même couleur. Le 3 est
+          la plus petite carte, le Roi la plus grande : une suite ne boucle pas.</li>
+      <li>Un joker remplace n'importe quelle carte, dans l'une comme dans l'autre.</li>
+    </ul>
+    <h3>Sortir</h3>
+    <p>Si, après ta défausse, <b>toutes tes cartes</b> forment des combinaisons, tu sors.
+       Chacun des autres joue alors <b>un dernier tour</b>, puis la manche est comptée.</p>
+    <h3>Le décompte</h3>
+    <p>Les cartes qui ne sont dans aucune combinaison comptent contre toi : les chiffres
+       à leur valeur, Valet <b>11</b>, Dame <b>12</b>, Roi <b>13</b>, joker de la manche
+       <b>20</b>, joker <b>50</b>. Qui est sorti marque 0.</p>
+    <h3>Ici</h3>
+    <p>Ta main est <b>rangée automatiquement</b> : le jeu cherche toujours la meilleure
+       disposition de tes cartes, en plateaux verts pour les combinaisons. Quand une défausse
+       te fait sortir, la carte est entourée de vert.</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de manche / de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la manche</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Manche suivante</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   LES CINQ ROIS — d'après « Five Crowns », publié par Set Enterprises.
+   Un humain contre 1 à 3 adversaires gérés par l'ordinateur.
+   ========================================================================= */
+
+const SUITS = ["E", "C", "T", "P", "K"];            // étoiles, cœurs, trèfles, piques, carreaux
+const SUIT_IDX = { E: 0, C: 1, T: 2, P: 3, K: 4 };
+const SUIT_SYM = { E: "★", C: "♥", T: "♣", P: "♠", K: "♦" };
+const SUIT_NAME = { E: "étoile", C: "cœur", T: "trèfle", P: "pique", K: "carreau" };
+const RANK_SHORT = { 11: "V", 12: "D", 13: "R" };
+const RANK_NAME = { 11: "Valet", 12: "Dame", 13: "Roi" };
+const AI_NAMES = ["Nora", "Elias", "Yuki"];
+const ROUNDS = 11;
+const JOKERS = 6;
+const TURN_CAP = 400;            // garde-fou : une manche ne dépasse jamais ce nombre de tours
+const THINK_MS = 650;            // temps de « réflexion » d'un adversaire
+const PLAY_MS = 550;             // pause entre sa prise et sa défausse
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ------------------------------------------------------------------ Paquet */
+/* Une carte : { uid, suit, rank }, rank de 3 à 13 ; un joker a rank 0. */
+let uidSeq = 0;
+const mkCard = (suit, rank) => ({ uid: ++uidSeq, suit, rank });
+
+function buildDeck() {
+  const d = [];
+  for (let copy = 0; copy < 2; copy++) {
+    for (const s of SUITS) for (let r = 3; r <= 13; r++) d.push(mkCard(s, r));
+  }
+  for (let i = 0; i < JOKERS; i++) d.push(mkCard(null, 0));
+  return d;                                            // 2 × 5 × 11 + 6 = 116
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const rankLabel = (r) => RANK_SHORT[r] || String(r);
+
+function cardName(c) {
+  if (c.rank === 0) return "un joker";
+  const art = c.rank === 12 ? "la" : "le";
+  const suit = SUIT_NAME[c.suit];
+  return `${art} ${RANK_NAME[c.rank] || c.rank} ${suit[0] === "é" ? "d'" : "de "}${suit}`;
+}
+
+/* ------------------------------------------------------------------- État */
+const S = {
+  players: [],        // { name, ai, policy, hand: [], score, rounds: [], pub, result }
+  draw: [],
+  discard: [],
+  round: 1,
+  wildRank: 3,        // valeur qui sert de joker pendant la manche (= cartes distribuées)
+  current: 0,
+  phase: "idle",      // idle | draw | discard | ai | over
+  finisher: null,     // indice du joueur sorti : chacun des autres joue un dernier tour
+  roundTurns: 0,
+  taken: null,        // carte prise sur la défausse ce tour-ci (pour le journal)
+  drawnUid: null,     // carte que l'humain vient de prendre, surlignée
+  logs: [],
+  busy: false,
+  epoch: 0,           // change à chaque manche : un tour d'IA en vol d'une manche passée s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+/* Surtout pas `top` : window.top n'est pas redéfinissable (voir CLAUDE.md). */
+const topCard = () => S.discard[S.discard.length - 1];
+const nplayers = () => S.players.length;
+const isWild = (c) => c.rank === 0 || c.rank === S.wildRank;
+const cardPoints = (c, wr = S.wildRank) => (c.rank === 0 ? 50 : c.rank === wr ? 20 : c.rank);
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* Tutoie l'humain, troisième personne pour les adversaires — jamais il/elle :
+   les noms des IA ne portent pas de genre. */
+const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+
+/* ================================================== MEILLEURE DISPOSITION */
+/* Le cœur du jeu : ranger une main en brelans et suites en minimisant les
+   points des cartes isolées. Recherche exhaustive mémoïsée, vérifiée contre
+   une énumération brute de toutes les partitions dans la suite de tests.
+
+   Représentation : les cartes naturelles (ni joker ni valeur de la manche)
+   sont comptées par type, indice = couleur * 11 + valeur - 3 ; les jokers ne
+   sont qu'un nombre `w`. On traite toujours la première carte restante
+   (`from`) : soit elle reste isolée, soit elle est défaussée, soit elle ouvre
+   un brelan de sa valeur, soit elle est la plus petite carte naturelle d'une
+   suite de sa couleur. Les cartes d'indice inférieur étant épuisées, rien ne
+   manque à cette énumération.
+
+   Deux observations la gardent petite :
+     - un joker en trop ne coûte rien dès qu'une combinaison existe (un brelan
+       n'a pas de taille maximale) : on n'en place jamais plus que nécessaire ;
+     - des jokers sous la carte ouvrant une suite ne servent qu'à atteindre
+       trois cartes quand la suite bute sur le Roi.
+   La valeur des jokers (`wv`) n'intervient que si aucune combinaison n'existe. */
+
+const INF = 1e9;
+const ARR = { wr: 0, memo: new Map() };
+
+function solveKey(cnt, w, wv, used, skip) {
+  return String.fromCharCode.apply(null, cnt) + w + "|" + (used ? 0 : wv) + "|" + used + skip;
+}
+
+function solve(cnt, from, w, wv, used, skip, wr) {
+  while (from < 55 && cnt[from] === 0) from++;
+  if (from === 55) {
+    if (skip) return INF;                    // la défausse est obligatoire
+    return used || w >= 3 ? 0 : wv;
+  }
+  const key = solveKey(cnt, w, wv, used, skip);
+  const hit = ARR.memo.get(key);
+  if (hit) return hit.cost;
+
+  const suit = (from / 11) | 0, rank = from % 11 + 3;
+  let best = INF, choice = null;
+  const offer = (c, kind, cells) => { if (c < best) { best = c; choice = { kind, cells: cells.slice() }; } };
+
+  cnt[from]--;
+  offer(rank + solve(cnt, from, w, wv, used, skip, wr), "dead", [from]);
+  if (skip) offer(solve(cnt, from, w, wv, used, 0, wr), "skip", [from]);
+
+  // Brelans : toute sélection des autres cartes de la même valeur.
+  const same = [];
+  for (let s = suit; s < 5; s++) { const j = s * 11 + rank - 3; if (cnt[j] > 0) same.push(j); }
+  const cells = [from];
+  const book = (k) => {
+    if (k === same.length) {
+      const need = Math.max(0, 3 - cells.length);
+      if (need > w) return;
+      for (let i = 0; i < need; i++) cells.push(-1);
+      offer(solve(cnt, from, w - need, wv, 1, skip, wr), "book", cells);
+      cells.length -= need;
+      return;
+    }
+    const j = same[k], max = cnt[j];
+    book(k + 1);
+    for (let n = 1; n <= max; n++) { cnt[j]--; cells.push(j); book(k + 1); }
+    for (let n = 1; n <= max; n++) { cnt[j]++; cells.pop(); }
+  };
+  book(0);
+
+  // Suites montantes depuis `from`. Une case de la valeur de la manche ne peut
+  // être tenue que par un joker, ses cartes naturelles n'existant pas.
+  const below = Math.max(0, rank + 2 - 13);
+  if (below <= w) {
+    const run = [];
+    for (let i = 0; i < below; i++) run.push(-1);
+    run.push(from);
+    const ahead = (pos, k) => {
+      for (let q = pos; q <= 13 && q < pos + k; q++) if (q !== wr && cnt[suit * 11 + q - 3] > 0) return true;
+      return false;
+    };
+    const extend = (pos, wl, lastNatural) => {
+      if (run.length >= 3 && (lastNatural || run.length === 3)) {
+        offer(solve(cnt, from, wl, wv, 1, skip, wr), "run", run);
+      }
+      if (pos > 13) return;
+      const t = suit * 11 + pos - 3;
+      if (pos !== wr && cnt[t] > 0) { cnt[t]--; run.push(t); extend(pos + 1, wl, true); run.pop(); cnt[t]++; }
+      // Un joker ne sert qu'à atteindre trois cartes ou à rejoindre une carte plus haut.
+      if (wl > 0 && (run.length < 3 || ahead(pos + 1, wl))) { run.push(-1); extend(pos + 1, wl - 1, false); run.pop(); }
+    };
+    extend(rank + 1, w - below, true);
+  }
+  cnt[from]++;
+
+  ARR.memo.set(key, { cost: best, choice });
+  return best;
+}
+
+/* Renvoie { cost, melds: [{ kind, start, cards }], dead, discard }.
+   Avec `discard`, une carte doit être défaussée (main de n + 1 cartes). */
+function arrange(hand, discard, wr = S.wildRank) {
+  if (ARR.wr !== wr || ARR.memo.size > 400000) { ARR.wr = wr; ARR.memo = new Map(); }
+  const cnt = new Array(55).fill(0);
+  const pool = Array.from({ length: 55 }, () => []);
+  const wilds = [];
+  for (const c of hand) {
+    if (c.rank === 0 || c.rank === wr) { wilds.push(c); continue; }
+    const t = SUIT_IDX[c.suit] * 11 + c.rank - 3;
+    cnt[t]++;
+    pool[t].push(c);
+  }
+  wilds.sort((x, y) => cardPoints(y, wr) - cardPoints(x, wr));     // jokers d'abord
+  const wv = wilds.reduce((n, c) => n + cardPoints(c, wr), 0);
+
+  let skip = discard ? 1 : 0;
+  let w = wilds.length, wvv = wv;
+  let cost = solve(cnt, 0, w, wv, 0, skip, wr);
+  let out = null;
+  // Défausser un joker n'a de sens que sans combinaison : on jette le plus cher.
+  if (discard && wilds.length) {
+    const c2 = solve(cnt, 0, w - 1, wv - cardPoints(wilds[0], wr), 0, 0, wr);
+    if (c2 < cost) { cost = c2; out = wilds.shift(); w--; wvv -= cardPoints(out, wr); skip = 0; }
+  }
+
+  // Reconstruction en rejouant les choix mémorisés.
+  const melds = [], dead = [];
+  let used = 0;
+  for (let from = 0; ;) {
+    while (from < 55 && cnt[from] === 0) from++;
+    if (from === 55) break;
+    const { choice } = ARR.memo.get(solveKey(cnt, w, wvv, used, skip));
+    const take = (t) => (t < 0 ? (w--, wilds.pop()) : (cnt[t]--, pool[t].pop()));
+    if (choice.kind === "dead") dead.push(take(from));
+    else if (choice.kind === "skip") { out = take(from); skip = 0; }
+    else {
+      const start = choice.kind === "run" ? from % 11 + 3 - choice.cells.indexOf(from) : 0;
+      melds.push({ kind: choice.kind, start, cards: choice.cells.map(take) });
+      used = 1;
+    }
+  }
+  // Jokers non placés : absorbés par une combinaison s'il en existe une.
+  if (wilds.length) {
+    if (!melds.length && wilds.length >= 3) melds.push({ kind: "book", start: 0, cards: wilds.splice(0) });
+    else if (!melds.length) dead.push(...wilds.splice(0));
+    while (wilds.length) {
+      const m = melds.find((x) => x.kind === "book")
+        || melds.find((x) => x.start + x.cards.length - 1 < 13 || x.start > 3) || melds[0];
+      if (m.kind === "run" && m.start + m.cards.length - 1 >= 13 && m.start > 3) { m.start--; m.cards.unshift(wilds.pop()); }
+      else m.cards.push(wilds.pop());
+    }
+  }
+  dead.sort((a, b) => (isWildIn(a, wr) - isWildIn(b, wr)) || (SUIT_IDX[a.suit] - SUIT_IDX[b.suit]) || a.rank - b.rank);
+  return { cost, melds, dead, discard: out };
+}
+const isWildIn = (c, wr) => (c.rank === 0 || c.rank === wr ? 1 : 0);
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.players = [{ name: "Toi", ai: false, hand: [], score: 0, rounds: [] }];
+  for (let i = 0; i < nPlayers - 1; i++) {
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, hand: [], score: 0, rounds: [] });
+  }
+  S.round = 1;
+  buildBoard();
+  startRound();
+}
+
+function startRound() {
+  S.epoch++;
+  S.wildRank = S.round + 2;
+  S.draw = shuffle(buildDeck());
+  S.discard = [];
+  S.finisher = null;
+  S.roundTurns = 0;
+  S.taken = null;
+  S.drawnUid = null;
+  S.logs = [];
+  S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
+  S.busy = false;
+
+  for (const p of S.players) {
+    p.hand = S.draw.splice(0, S.wildRank);
+    p.result = null;
+    // Information publique : les cartes que chacun a prises sur la défausse et
+    // qu'il n'a pas rejetées depuis. Les IA n'ont que ça sur les autres mains.
+    p.pub = { took: new Map() };
+  }
+  S.discard.push(S.draw.pop());
+  // La main tourne d'une manche à l'autre.
+  S.current = (S.round - 1) % nplayers();
+  log(`Manche ${S.round} : ${S.wildRank} cartes, les ${rankLabel(S.wildRank)} sont jokers.`);
+  beginTurn();
+}
+
+/* --------------------------------------------------------------- Tours */
+function beginTurn() {
+  if (S.phase === "over") return;
+  const p = S.players[S.current];
+  S.taken = null;
+  if (p.ai) { S.phase = "ai"; render(); aiTurn(); return; }
+  S.phase = "draw";
+  render();
+}
+
+function drawOne(p) {
+  if (S.draw.length === 0) {
+    if (S.discard.length <= 1) return null;    // plus rien à remélanger
+    const t = S.discard.pop();
+    S.draw = shuffle(S.discard.splice(0, S.discard.length));
+    S.discard.push(t);
+    log("La pioche est épuisée : la défausse est remélangée.");
+  }
+  const c = S.draw.pop();
+  p.hand.push(c);
+  return c;
+}
+
+function takeDiscard(p) {
+  const c = S.discard.pop();
+  p.hand.push(c);
+  p.pub.took.set(c.uid, c);
+  S.taken = c;
+  return c;
+}
+
+function discardCard(p, card) {
+  p.hand.splice(p.hand.indexOf(card), 1);
+  S.discard.push(card);
+  p.pub.took.delete(card.uid);
+  const src = S.taken
+    ? says(p, `prends ${cardName(S.taken)}`, `prend ${cardName(S.taken)}`)
+    : says(p, "pioches", "pioche");
+  log(`${src} et ${p.ai ? "défausse" : "défausses"} ${cardName(card)}.`);
+}
+
+/* Après chaque défausse : sortie éventuelle, puis tour suivant. */
+function afterDiscard() {
+  const p = S.players[S.current];
+  S.drawnUid = null;
+  if (S.finisher === null && arrange(p.hand, false).cost === 0) {
+    S.finisher = S.current;
+    log(says(p, "sors ! Chacun joue un dernier tour.", "sort ! Chacun joue un dernier tour."));
+  }
+  endTurn();
+}
+
+function endTurn() {
+  S.roundTurns++;
+  const next = (S.current + 1) % nplayers();
+  // Le tour revient à qui est sorti : tous les autres ont joué leur dernier tour.
+  if (S.finisher !== null && next === S.finisher) { endRound(); return; }
+  if (S.roundTurns >= TURN_CAP) {
+    log("La manche s'éternise : on compte les mains en l'état.");
+    endRound();
+    return;
+  }
+  S.current = next;
+  beginTurn();
+}
+
+/* --------------------------------------------------------- Fin de manche */
+function endRound() {
+  S.phase = "over";
+  S.busy = false;
+  for (const p of S.players) {
+    p.result = arrange(p.hand, false);
+    p.rounds.push(p.result.cost);
+    p.score += p.result.cost;
+  }
+  render();
+  showScores(S.round >= ROUNDS);
+}
+
+function showScores(over) {
+  const host = el("scoreBody");
+  host.innerHTML = "";
+  const best = Math.min(...S.players.map((p) => p.score));
+
+  S.players.forEach((p, i) => {
+    const row = mk("div", "score-row" + (over && p.score === best ? " win" : ""));
+    const head = mk("div", "score-head");
+    head.appendChild(mk("span", "who", p.name + (over && p.score === best ? " 🏆" : "")));
+    if (i === S.finisher) head.appendChild(mk("span", "badge", "a tout posé"));
+    const pts = mk("span", "pts");
+    pts.appendChild(mk("b", null, `+${p.result.cost}`));
+    pts.appendChild(mk("span", null, ` · total ${p.score}`));
+    head.appendChild(pts);
+    row.appendChild(head);
+    const cards = mk("div", "mini-hand");
+    handView(p.result, cards);
+    row.appendChild(cards);
+    host.appendChild(row);
+  });
+
+  if (over) {
+    const winners = S.players.filter((p) => p.score === best);
+    const text = winners.length === 1 && !winners[0].ai
+      ? `🏆 Tu l'emportes avec ${best} points !`
+      : `🏆 ${winners.map((p) => p.name).join(" et ")} ${winners.length > 1 ? "l'emportent" : "l'emporte"} avec ${best} points.`;
+    host.appendChild(mk("p", "next-round", text));
+  } else {
+    const next = S.round + 3;
+    const p = mk("p", "next-round");
+    p.innerHTML = `Manche suivante : <b>${next} cartes</b>, les <b>${rankLabel(next)}</b> deviennent jokers.`;
+    host.appendChild(p);
+  }
+
+  el("scoreTitle").textContent = over ? "Fin de la partie" : `Fin de la manche ${S.round} / ${ROUNDS}`;
+  el("btnNext").textContent = over ? "Rejouer" : "Manche suivante";
+  el("btnNext").dataset.over = over ? "1" : "";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose :
+     takeDiscard(p, top) -> prendre la carte du dessus de la défausse ?
+     discard(p)          -> carte à défausser (main de n + 1 cartes)
+
+   Aucune ne consulte la main d'un autre joueur ni l'ordre de la pioche : elles
+   ne disposent que de la défausse et des cartes que chacun y a prises (p.pub). */
+
+/* Déclarée en `function` et non en `const` : les tests la remplacent pour
+   vérifier qu'aucune politique ne triche. */
+function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
+
+/* ---------------------------------------------------------------------------
+   Politique « tranquille » : gloutonne. Elle prend la défausse si cela fait
+   baisser ses points tout de suite, et jette la carte qui coûte le plus.
+   --------------------------------------------------------------------------- */
+const simplePolicy = {
+  takeDiscard(p, top) {
+    return arrange([...p.hand, top], true).cost < arrange(p.hand, false).cost;
+  },
+  discard(p) {
+    return arrange(p.hand, true).discard;
+  },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable » : elle compte les cartes.
+     - Les cartes invisibles (paquet − sa main − défausse − cartes prises par
+       les autres) donnent la distribution de la prochaine pioche.
+     - Prendre la défausse n'a d'intérêt que si c'est mieux que l'espérance
+       d'une pioche à l'aveugle.
+     - Pour défausser, elle pèse les points gardés tout de suite contre les
+       points espérés après la pioche suivante : garder 8-9 de pique coûte 17
+       maintenant, mais beaucoup de cartes les compléteraient.
+     - Elle évite de nourrir le joueur suivant : une carte proche de ce qu'il a
+       ramassé sur la défausse est pénalisée.
+   --------------------------------------------------------------------------- */
+const AI = {
+  margin: 1,       // gain minimal pour préférer la défausse à la pioche
+  hope: 0.55,      // poids de l'espérance après la prochaine pioche, face au coût immédiat
+  prune: 14,       // défausses ignorées quand elles coûtent tant de points de plus que la meilleure
+  deny: 4,         // pénalité à donner au suivant une carte qui l'intéresse
+};
+
+const typeKey = (c) => (isWild(c) ? "W" + c.rank : c.suit + c.rank);
+
+/* Distribution des cartes que ce joueur ne peut pas voir. Les jokers de la
+   manche sont regroupés : pour ranger une main, une couleur de 5 vaut l'autre. */
+function unseenClasses(p) {
+  const wr = S.wildRank;
+  const key = (c) => (c.rank === 0 ? "J" : c.rank === wr ? "W" : c.suit + c.rank);
+  const n = new Map();
+  for (const s of SUITS) for (let r = 3; r <= 13; r++) { const k = r === wr ? "W" : s + r; n.set(k, (n.get(k) || 0) + 2); }
+  n.set("J", JOKERS);
+  const seen = (c) => n.set(key(c), n.get(key(c)) - 1);
+  p.hand.forEach(seen);
+  S.discard.forEach(seen);
+  for (const q of S.players) if (q !== p) for (const c of q.pub.took.values()) seen(c);
+
+  const out = [];
+  let total = 0;
+  for (const [k, cnt] of n) {
+    if (cnt <= 0) continue;
+    const card = k === "J" ? { uid: -1, suit: null, rank: 0 }
+      : k === "W" ? { uid: -1, suit: "E", rank: wr }
+      : { uid: -1, suit: k[0], rank: Number(k.slice(1)) };
+    out.push({ card, n: cnt });
+    total += cnt;
+  }
+  for (const o of out) o.p = o.n / total;
+  return out;
+}
+
+/* Points espérés après avoir pioché une carte inconnue puis défaussé au mieux. */
+function expectDraw(hand, classes) {
+  let e = 0;
+  for (const o of classes) e += o.p * arrange([...hand, o.card], true).cost;
+  return e;
+}
+
+function denyCost(c, q) {
+  let worst = 0;
+  for (const t of q.pub.took.values()) {
+    if (isWild(t)) continue;
+    if (t.rank === c.rank) worst = Math.max(worst, AI.deny);
+    else if (t.suit === c.suit && Math.abs(t.rank - c.rank) <= 2) worst = Math.max(worst, AI.deny / 2);
+  }
+  return worst;
+}
+
+const sharpPolicy = {
+  /* Pas de raccourci « un joker se prend toujours » : sans combinaison où le
+     placer, on le rejette aussitôt, et trois IA se le repassaient sans fin.
+     La marge interdit toute prise qui ne rapporte rien. */
+  takeDiscard(p, top) {
+    const take = arrange([...p.hand, top], true).cost;
+    if (take === 0) return true;
+    return take + AI.margin < expectDraw(p.hand, unseenClasses(p));
+  },
+
+  discard(p) {
+    const base = arrange(p.hand, true);
+    // Sortir, ou limiter la casse au dernier tour : le coût immédiat suffit.
+    if (base.cost === 0 || S.finisher !== null) return base.discard;
+
+    const classes = unseenClasses(p);
+    const next = S.players[(S.current + 1) % nplayers()];
+    // Candidates : les cartes isolées et la défausse idéale ; toute la main si
+    // tout est déjà combiné.
+    const pool = base.dead.length ? [...base.dead, base.discard] : p.hand.slice();
+    const hasNatural = pool.some((c) => !isWild(c));
+    let best = base.discard, bestScore = Infinity;
+    const tried = new Set();
+    for (const c of pool) {
+      if (hasNatural && isWild(c)) continue;          // un joker ne se donne pas
+      if (tried.has(typeKey(c))) continue;
+      tried.add(typeKey(c));
+      const rest = p.hand.filter((x) => x !== c);
+      const now = arrange(rest, false).cost;
+      if (now > base.cost + AI.prune) continue;
+      const later = expectDraw(rest, classes);
+      const s = (1 - AI.hope) * now + AI.hope * later + denyCost(c, next) + Math.random() * 0.01;
+      if (s < bestScore) { bestScore = s; best = c; }
+    }
+    return best;
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+
+/* ------------------------------------------------------------ Tour d'une IA */
+async function aiTurn() {
+  const p = S.players[S.current];
+  const pol = policyOf(p);
+  const epoch = S.epoch;
+  S.busy = true;
+  await sleep(THINK_MS);
+  if (epoch !== S.epoch) return;       // partie relancée pendant la réflexion
+
+  const t = topCard();
+  if (t && pol.takeDiscard(p, t)) takeDiscard(p);
+  else if (!drawOne(p)) takeDiscard(p);
+  render();
+  await sleep(PLAY_MS);
+  if (epoch !== S.epoch) return;
+
+  const card = pol.discard(p);
+  S.busy = false;
+  discardCard(p, card);
+  afterDiscard();
+}
+
+/* ================================================================= ENTRÉES */
+
+function onDrawClick() {
+  if (S.busy || S.current !== 0 || S.phase !== "draw") return;
+  const me = S.players[0];
+  const c = drawOne(me) || takeDiscard(me);
+  S.drawnUid = c.uid;
+  S.phase = "discard";
+  render();
+}
+
+function onDiscardPileClick() {
+  if (S.busy || S.current !== 0 || S.phase !== "draw" || !topCard()) return;
+  S.drawnUid = takeDiscard(S.players[0]).uid;
+  S.phase = "discard";
+  render();
+}
+
+function onHandClick(uid) {
+  if (S.busy || S.current !== 0 || S.phase !== "discard") return;
+  const me = S.players[0];
+  const card = me.hand.find((c) => c.uid === uid);
+  if (!card) return;
+  discardCard(me, card);
+  afterDiscard();
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/* Une carte (ou un dos si `c` est null) sous forme de bouton inerte. */
+function cardEl(c, extra) {
+  let cls = "card";
+  if (!c) cls += " back";
+  else if (c.rank === 0) cls += " joker";
+  else cls += " s-" + c.suit + (c.rank === S.wildRank ? " wild" : "");
+  const b = mk("button", cls + (extra ? " " + extra : ""));
+  if (c) {
+    const corner = mk("span", "corner");
+    corner.appendChild(mk("b", null, c.rank === 0 ? "JK" : rankLabel(c.rank)));
+    if (c.rank !== 0) corner.appendChild(mk("i", null, SUIT_SYM[c.suit]));
+    b.appendChild(corner);
+    b.appendChild(mk("span", "pip", c.rank === 0 ? "♛" : SUIT_SYM[c.suit]));
+    if (c.rank === S.wildRank) b.appendChild(mk("span", "crown", "♛"));
+  } else {
+    b.appendChild(mk("span", "pip", "♛"));
+  }
+  b.disabled = true;
+  return b;
+}
+
+/* Une main rangée dans `host` : un plateau par combinaison, puis les cartes
+   isolées. `decorate(card, el)` permet d'ajouter classes et clics. */
+function handView(result, host, decorate) {
+  const add = (group, cards) => {
+    for (const c of cards) {
+      const b = cardEl(c);
+      if (decorate) decorate(c, b);
+      group.appendChild(b);
+    }
+    host.appendChild(group);
+  };
+  for (const m of result.melds) add(mk("div", "group meld"), m.cards);
+  if (result.dead.length) add(mk("div", "group dead"), result.dead);
+}
+
+function buildBoard() {
+  el("opponents").innerHTML = "";
+  S.players.forEach((p, pi) => {
+    if (pi === 0) return;
+    const host = mk("div", "player");
+    const name = mk("div", "name");
+    name.appendChild(mk("span", null, p.name));
+    const tag = mk("span", "tag", "");
+    const out = mk("span", "badge", "a tout posé");
+    name.appendChild(tag);
+    name.appendChild(out);
+    host.appendChild(name);
+    const fan = mk("div", "fan");
+    host.appendChild(fan);
+    el("opponents").appendChild(host);
+    p._host = host;
+    p._tag = tag;
+    p._out = out;
+    p._fan = fan;
+  });
+}
+
+let outCount = 0;                // défausses qui font sortir, calculées par renderHand()
+let shownUids = new Set();       // pour n'animer que les cartes nouvellement arrivées
+
+function statusHtml() {
+  const last = S.finisher !== null;
+  const p = S.players[S.current];
+  switch (S.phase) {
+    case "ai": return `<b>${p.name}</b> ${last ? "joue son dernier tour…" : "réfléchit…"}`;
+    case "draw": return last
+      ? `<b>Dernier tour !</b> Prends une carte sur la pioche ou la défausse.`
+      : "À toi : prends une carte sur la pioche ou la défausse.";
+    case "discard":
+      if (outCount > 0) {
+        return last
+          ? "Dernier tour : défausse une carte <b>entourée de vert</b> pour ne rien marquer."
+          : "Tu peux sortir : défausse une carte <b>entourée de vert</b>.";
+      }
+      return last ? "<b>Dernier tour</b> : défausse une carte." : "Défausse une carte.";
+    default: return "";
+  }
+}
+
+function renderHand() {
+  const host = el("hand");
+  const me = S.players[0];
+  host.innerHTML = "";
+  host.style.setProperty("--n", me.hand.length);
+  outCount = 0;
+  const picking = S.phase === "discard" && S.current === 0 && !S.busy;
+
+  const outs = new Set();
+  if (picking) {
+    for (const c of me.hand) {
+      if (arrange(me.hand.filter((x) => x !== c), false).cost === 0) outs.add(c.uid);
+    }
+    outCount = outs.size;
+  }
+
+  const next = new Set();
+  handView(arrange(me.hand, false), host, (c, b) => {
+    next.add(c.uid);
+    if (picking) {
+      b.classList.add("pickable");
+      b.disabled = false;
+      b.addEventListener("click", () => onHandClick(c.uid));
+    }
+    if (outs.has(c.uid)) b.classList.add("out");
+    if (c.uid === S.drawnUid) b.classList.add("drawn");
+    if (!shownUids.has(c.uid)) b.classList.add("pop");
+  });
+  shownUids = next;
+
+  // Points des cartes isolées ; pendant la défausse, après la meilleure défausse.
+  const pts = arrange(me.hand, picking).cost;
+  el("myTag").textContent = `${picking ? "au mieux" : "en main"} : ${pts} pt${pts > 1 ? "s" : ""} · total ${me.score}`;
+}
+
+function render() {
+  if (!S.players.length) return;
+  // Adversaires
+  S.players.forEach((p, pi) => {
+    if (pi === 0 || !p._host) return;
+    p._host.classList.toggle("active", S.current === pi && S.phase !== "over");
+    p._tag.textContent = `${p.hand.length} carte${p.hand.length > 1 ? "s" : ""} · ${p.score} pt${p.score > 1 ? "s" : ""}`;
+    p._out.hidden = S.finisher !== pi;
+    p._fan.innerHTML = "";
+    const shown = Math.min(p.hand.length, 8);
+    for (let i = 0; i < shown; i++) p._fan.appendChild(cardEl(null));
+    if (p.hand.length > shown) p._fan.appendChild(mk("span", "more", `+${p.hand.length - shown}`));
+  });
+
+  // Table
+  const canTake = S.current === 0 && !S.busy && S.phase === "draw";
+  el("drawCount").textContent = S.draw.length;
+  const drawSlot = el("drawSlot");
+  drawSlot.innerHTML = "";
+  const back = cardEl(null);
+  if (canTake) { back.disabled = false; back.addEventListener("click", onDrawClick); }
+  drawSlot.appendChild(back);
+  el("drawPile").classList.toggle("clickable", canTake);
+
+  const dSlot = el("discardSlot");
+  dSlot.innerHTML = "";
+  if (topCard()) {
+    const face = cardEl(topCard());
+    if (canTake) { face.disabled = false; face.addEventListener("click", onDiscardPileClick); }
+    dSlot.appendChild(face);
+  } else {
+    dSlot.appendChild(mk("div", "slot-empty"));
+  }
+  el("discardPile").classList.toggle("clickable", canTake && !!topCard());
+  el("wildRank").textContent = rankLabel(S.wildRank);
+
+  // Ma main — avant le statut, qui dépend des sorties possibles.
+  renderHand();
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.join("<br>");
+  el("roundInfo").innerHTML = `Manche ${S.round}/${ROUNDS}<span> · ${S.wildRank} cartes</span>`;
+}
+
+/* ============================================================== Interface */
+let chosenPlayers = 3;
+let chosenLevel = "sharp";
+
+function buildChoice(host, items, current, onPick) {
+  for (const it of items) {
+    const b = mk("button", it.id === current ? "sel" : null, it.label);
+    b.addEventListener("click", () => {
+      onPick(it.id);
+      [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
+    });
+    host.appendChild(b);
+  }
+}
+
+buildChoice(el("playerChoice"),
+  [2, 3, 4].map((n) => ({ id: n, label: `${n} joueurs` })),
+  chosenPlayers, (id) => { chosenPlayers = id; });
+
+buildChoice(el("levelChoice"), [
+  { id: "simple", label: "Tranquille" },
+  { id: "sharp", label: "Redoutable" },
+], chosenLevel, (id) => { chosenLevel = id; });
+
+el("btnStart").addEventListener("click", () => {
+  el("startOverlay").hidden = true;
+  newGame(chosenPlayers);
+});
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  if (el("btnNext").dataset.over) {
+    for (const p of S.players) { p.score = 0; p.rounds = []; }
+    S.round = 1;
+  } else {
+    S.round++;
+  }
+  startRound();
+});
+</script>
+</body>
+</html>
