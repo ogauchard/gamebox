@@ -23,9 +23,8 @@ function openRound(policies) {
   if (S.current === 0 && S.phase === "play") beginTurn();
 }
 
-async function playGame(policies, variants) {
-  g(`chosenPlayers = ${policies.length}; chosenFormat = "long";
-     Object.assign(chosenVariants, ${JSON.stringify(variants)});`);
+async function playGame(policies) {
+  g(`chosenPlayers = ${policies.length}; chosenFormat = "long";`);
   byId.get("btnStart").click();
   openRound(policies);
   let guard = 0;
@@ -53,28 +52,23 @@ function record(result) {
   }
 }
 
-async function table(n, N, variants) {
+async function table(n, N) {
   stats = {};
   for (let i = 0; i < N; i++) {
     const seats = Array(n).fill("simple");
     seats[i % n] = "sharp";
-    record(await playGame(seats, variants));
+    record(await playGame(seats));
   }
   const sh = stats.sharp, si = stats.simple;
   return { win: 100 * sh.wins / sh.games, sharp: sh.pts / sh.rounds, simple: si.pts / si.rounds };
 }
 
-const ALL_OFF = { revolution: false, equal: false, trump: false, noTwoFinish: false };
-const ALL_ON = { revolution: true, equal: true, trump: true, noTwoFinish: true };
-
 async function duel(N) {
-  for (const [label, v] of [["sans variante", ALL_OFF], ["toutes variantes", ALL_ON]]) {
-    console.log(`\n=== 1 redoutable contre des tranquilles, ${label} (${N} parties par table) ===`);
-    for (const n of [4, 5, 6]) {
-      const r = await table(n, N, v);
-      console.log(`${n} joueurs : victoires ${r.win.toFixed(1).padStart(5)} % (${(100 / n).toFixed(0)} % attendus)`
-        + ` · points par manche ${r.sharp.toFixed(2)} contre ${r.simple.toFixed(2)} (${((n - 1) / 2).toFixed(1)} en moyenne)`);
-    }
+  console.log(`\n=== 1 redoutable contre des tranquilles (${N} parties par table) ===`);
+  for (const n of [4, 5, 6]) {
+    const r = await table(n, N);
+    console.log(`${n} joueurs : victoires ${r.win.toFixed(1).padStart(5)} % (${(100 / n).toFixed(0)} % attendus)`
+      + ` · points par manche ${r.sharp.toFixed(2)} contre ${r.simple.toFixed(2)} (${((n - 1) / 2).toFixed(1)} en moyenne)`);
   }
 }
 
@@ -88,14 +82,17 @@ async function sweep(N) {
     { name: "danger 8", set: { danger: 8 } },
     { name: "breakCost 4", set: { breakCost: 4 } },
     { name: "breakCost 12", set: { breakCost: 12 } },
+    { name: "jokerCost 0", set: { jokerCost: 0 } },
+    { name: "jokerCost 8", set: { jokerCost: 8 } },
     { name: "passAbove 6", set: { passAbove: 6 } },
+    { name: "passAbove 10", set: { passAbove: 10 } },
     { name: "passAbove 12", set: { passAbove: 12 } },
     { name: "passAbove 99", set: { passAbove: 99 } },
   ];
-  console.log(`\n=== Réglage (4 joueurs, toutes variantes, ${N} parties par configuration) ===`);
+  console.log(`\n=== Réglage (4 joueurs, ${N} parties par configuration) ===`);
   for (const cfg of configs) {
     Object.assign(AI, base, cfg.set);
-    const r = await table(4, N, ALL_ON);
+    const r = await table(4, N);
     console.log(`${cfg.name.padEnd(13)} victoires ${r.win.toFixed(1).padStart(5)} % · points par manche ${r.sharp.toFixed(2)}`);
   }
   Object.assign(AI, base);

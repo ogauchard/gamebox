@@ -103,6 +103,8 @@
     padding: 22% 0 0 18%;
     font-size: calc(var(--cw) * .62); line-height: 1;
   }
+  .card.joker { background: linear-gradient(160deg, #3b2d5e, #1b1532); color: var(--accent); }
+  .card.joker .corner b { font-size: calc(var(--cw) * .24); }
   .card.back {
     background: repeating-linear-gradient(45deg, #7d2530 0 5px, #8e2c38 5px 10px);
     box-shadow: inset 0 0 0 calc(var(--cw) * .07) #f1e6d2, 0 3px 8px rgba(0,0,0,.45);
@@ -348,9 +350,7 @@
     <div class="choice" id="levelChoice"></div>
     <h3>Durée</h3>
     <div class="choice" id="formatChoice"></div>
-    <h3>Variantes</h3>
-    <div class="choice" id="variantChoice"></div>
-    <p class="hint">Le détail de chacune est dans les règles.</p>
+    <p class="hint">Jeu de 54 cartes avec jokers, révolution et même valeur : le détail est dans les règles.</p>
     <div class="actions">
       <button class="primary" id="btnStart">Commencer</button>
       <button id="btnRules2">Voir les règles</button>
@@ -362,24 +362,42 @@
 <div class="overlay" id="rulesOverlay" hidden>
   <div class="sheet">
     <h2>Règles</h2>
-    <p>Un jeu de <b>52 cartes</b> est distribué également entre 4 à 6 joueurs ; les cartes en trop
-       sont montrées à tous et mises de côté.</p>
+    <p>Un jeu de <b>54 cartes</b>, les deux jokers compris, est distribué également entre 4 à 6
+       joueurs ; les cartes en trop sont montrées à tous et mises de côté.</p>
     <h3>L'ordre des cartes</h3>
     <p>Du plus faible au plus fort : <b>3, 4, 5, 6, 7, 8, 9, 10, Valet, Dame, Roi, As, 2</b>.
        Les couleurs ne comptent pas.</p>
+    <h3>Les jokers</h3>
+    <p>Un joker <b>remplace n'importe quelle carte</b> : un 9 et un joker font une paire de 9. Posé
+       sans carte normale — seul, ou les deux ensemble — il vaut la <b>plus forte carte</b> : un 2,
+       ou un 3 pendant une révolution.</p>
     <h3>Un pli</h3>
     <p>Le premier joueur pose <b>une à quatre cartes de même valeur</b>. Chacun à son tour
-       <b>passe</b> ou <b>monte</b> : il pose autant de cartes, d'une valeur plus forte.
-       Passer n'empêche pas de rejouer quand son tour revient. Quand tous les autres ont passé,
-       le dernier à avoir posé ouvre le pli suivant — s'il n'a plus de cartes, c'est son voisin.</p>
+       <b>passe</b> ou <b>monte</b> : il pose autant de cartes, d'une valeur plus forte — un 2 seul
+       ne bat pas une paire. <b>Qui passe sort du pli</b> : il ne rejoue qu'au pli suivant. Quand le
+       tour revient au dernier à avoir posé, il ramasse et ouvre le pli suivant — s'il n'a plus de
+       cartes, c'est son voisin.</p>
+    <ul>
+      <li><b>Même valeur</b> — on peut aussi poser la <b>même valeur</b> que la carte à battre : le
+          joueur suivant <b>saute son tour</b>. Il n'est pas sorti du pli pour autant et rejoue si
+          le tour lui revient.</li>
+      <li><b>La plus forte carte arrête le pli</b> — un 2 (un 3 pendant une révolution), ou des
+          jokers seuls : personne ne peut monter ni égaliser, son auteur ramasse aussitôt.</li>
+      <li><b>Révolution</b> — poser un <b>carré</b>, jokers compris, inverse l'ordre des cartes :
+          le 3 devient la plus forte, le 2 la plus faible. L'inversion vaut aussitôt et jusqu'à la
+          fin de la manche, ou jusqu'à ce qu'un autre carré fasse la contre-révolution.</li>
+    </ul>
     <h3>Fin de manche et rôles</h3>
     <p>Le premier à se débarrasser de ses cartes devient <b>Président</b>, le deuxième
        <b>Vice-président</b> ; l'avant-dernier est <b>Vice-trou du cul</b> et le dernier,
        <b>Trou du cul</b>. À 5 ou 6 joueurs, ceux du milieu sont <b>Neutres</b>.</p>
+    <p><b>Interdit de finir</b> sur un 2 (sur un 3 pendant une révolution) ni sur une combinaison
+       qui contient un joker : qui le fait devient <b>Trou du cul d'office</b>, même sorti le
+       premier.</p>
     <h3>Les échanges</h3>
     <ul>
-      <li>Le Trou du cul donne ses <b>2 meilleures cartes</b> au Président, qui lui en rend
-          <b>2 de son choix</b>.</li>
+      <li>Le Trou du cul donne ses <b>2 meilleures cartes</b> (les jokers d'abord) au Président,
+          qui lui en rend <b>2 de son choix</b>.</li>
       <li>Le Vice-trou du cul donne sa <b>meilleure carte</b> au Vice-président, qui lui en rend
           <b>une de son choix</b>.</li>
       <li>Les Neutres n'échangent rien.</li>
@@ -390,17 +408,6 @@
     <p>À chaque manche, le Président marque autant de points qu'il y a d'adversaires, le suivant un de
        moins, et ainsi de suite jusqu'au Trou du cul, qui marque 0. La partie s'arrête à la fin de la
        manche où quelqu'un atteint l'objectif ; le plus haut total gagne.</p>
-    <h3 id="rulesVarTitle">Variantes</h3>
-    <ul>
-      <li><b>Révolution</b> — poser un <b>carré</b> inverse l'ordre des cartes : le 3 devient la plus
-          forte, le 2 la plus faible. L'inversion vaut aussitôt et jusqu'à la fin de la manche, ou
-          jusqu'à ce qu'un autre carré fasse la contre-révolution.</li>
-      <li><b>Même valeur</b> — on peut aussi poser la <b>même valeur</b> que la carte à battre. Le joueur
-          suivant doit alors poser à son tour cette valeur, ou passer.</li>
-      <li><b>Le 2 en atout</b> — un <b>2 seul</b> bat n'importe quelle combinaison : paire, brelan ou
-          carré (sauf pendant une révolution, où le 2 est la plus faible).</li>
-      <li><b>Pas de fin sur un 2</b> — qui pose un 2 comme dernière carte devient Trou du cul d'office.</li>
-    </ul>
     <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
   </div>
 </div>
@@ -423,14 +430,20 @@
    TROU DU CUL — jeu de défausse traditionnel (aussi appelé Président).
    Un humain contre 3 à 5 adversaires gérés par l'ordinateur.
 
-   Règles et variantes d'après l'article de Wikipédia « Trou du cul (jeu) ».
-   VAR fige les variantes retenues sur l'écran de démarrage.
+   Règles d'après l'article de Wikipédia « Trou du cul (jeu) », avec des
+   choix maison fixes : jeu de 54 cartes à jokers libres, révolution, même
+   valeur qui fait sauter le suivant, la plus forte carte qui arrête le pli,
+   interdiction de finir sur un 2 ou un joker. Le détail est dans le panneau
+   des règles.
    ========================================================================= */
 
 const SUITS = ["P", "C", "K", "T"];                  // pique, cœur, carreau, trèfle
-const SUIT_SYM = { P: "♠", C: "♥", K: "♦", T: "♣" };
-/* Valeurs 3 à 14 (As), et 15 pour le 2 : la plus forte, rangée en haut. */
-const RANK_SHORT = { 11: "V", 12: "D", 13: "R", 14: "A", 15: "2" };
+const SUIT_SYM = { P: "♠", C: "♥", K: "♦", T: "♣", J: "★" };
+/* Valeurs 3 à 14 (As), et 15 pour le 2 : la plus forte, rangée en haut.
+   Un joker porte le rang 16, mais ce n'est pas sa valeur : il prend celle de
+   sa combinaison (voir comboRank). */
+const JOKER = 16;
+const RANK_SHORT = { 11: "V", 12: "D", 13: "R", 14: "A", 15: "2", 16: "JK" };
 const RANK_NAME = { 11: "Valet", 12: "Dame", 13: "Roi", 14: "As", 15: "2" };
 const ROLE_NAME = { P: "Président", VP: "Vice-président", N: "Neutre", VT: "Vice-trou du cul", T: "Trou du cul" };
 const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
@@ -438,18 +451,19 @@ const THINK_MS = 700;            // réflexion d'un adversaire
 const FAST_MS = 280;             // quand l'humain a fini : on n'attend pas les autres
 const TRICK_MS = 900;            // temps de lecture de la dernière carte avant de ramasser le pli
 
-const VAR = { revolution: false, equal: false, trump: false, noTwoFinish: false, long: false };
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ------------------------------------------------------------------ Paquet */
 let uidSeq = 0;
 const mkCard = (suit, rank) => ({ uid: ++uidSeq, suit, rank });
+const mkJoker = () => mkCard("J", JOKER);
+const isJoker = (c) => c.rank === JOKER;
 
 function buildDeck() {
   const d = [];
   for (const s of SUITS) for (let r = 3; r <= 15; r++) d.push(mkCard(s, r));
-  return d;                                            // 4 × 13 = 52
+  d.push(mkJoker(), mkJoker());
+  return d;                                            // 4 × 13 + 2 = 54
 }
 
 function shuffle(a) {
@@ -461,7 +475,7 @@ function shuffle(a) {
 }
 
 const rankLabel = (r) => RANK_SHORT[r] || String(r);
-const cardLabel = (c) => rankLabel(c.rank) + SUIT_SYM[c.suit];
+const cardLabel = (c) => (isJoker(c) ? "Joker" : rankLabel(c.rank) + SUIT_SYM[c.suit]);
 
 /* « un 9 », « une Dame », « une paire d'As », « un brelan de Rois »… */
 function playName(rank, count) {
@@ -471,10 +485,21 @@ function playName(rank, count) {
   return `${["", "", "une paire", "un brelan", "un carré"][count]} ${rank === 14 ? "d'" : "de "}${plural}`;
 }
 
+/* Une combinaison posée : « une paire de 9 avec un joker », « deux jokers »… */
+function comboName(cards) {
+  const jk = cards.filter(isJoker).length;
+  const jokers = jk === 1 ? "un joker" : "deux jokers";
+  if (jk === cards.length) return jokers;
+  const base = playName(comboRank(cards), cards.length);
+  return jk ? `${base} avec ${jokers}` : base;
+}
+
 const ordinal = (n) => (n === 1 ? "1re" : `${n}e`);
 
 /* ------------------------------------------------------------------- État */
-const emptyTrick = () => ({ rank: null, count: 0, by: null, cards: [], forcedSeat: null });
+/* rank : valeur de la combinaison à battre (jamais JOKER) ; skipped : siège qui
+   vient de sauter son tour sur une même valeur. */
+const emptyTrick = () => ({ rank: null, count: 0, by: null, cards: [], skipped: null });
 
 const S = {
   players: [],        // { name, ai, policy, hand, score, rounds, role, gain }
@@ -484,10 +509,10 @@ const S = {
   leader: 0,
   phase: "idle",      // idle | give | play | ai | over
   trick: emptyTrick(),
-  lastTrick: null,    // { by, cards } : le pli qu'on vient de ramasser, affiché en grisé
-  passed: new Set(),  // sièges qui ont passé depuis la dernière pose
+  lastTrick: null,    // { by, cards, closed } : le pli qu'on vient de ramasser, affiché en grisé
+  passed: new Set(),  // sièges qui ont passé dans ce pli : ils n'y rejouent plus
   finished: [],       // sièges sortis, dans l'ordre
-  offenders: [],      // sièges sortis sur un 2 (variante) : relégués en fin de classement
+  offenders: [],      // sièges sortis sur une carte interdite : relégués en fin de classement
   order: [],          // classement de la manche terminée
   revolution: false,
   played: [],         // toutes les cartes posées dans la manche : information publique
@@ -523,39 +548,60 @@ function log(msg) {
 const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
 
 /* --------------------------------------------------------------- Légalité */
-/* Force d'une valeur, de 0 (le 3) à 12 (le 2) ; renversée pendant une révolution. */
+/* Force d'une valeur, de 0 (le 3) à 12 (le 2) ; renversée pendant une révolution.
+   Jamais appelée sur JOKER : un joker n'a que la valeur de sa combinaison. */
 const strength = (rank) => (S.revolution ? 15 - rank : rank - 3);
+/* La plus forte valeur du moment : elle arrête le pli et on ne peut pas finir dessus. */
+const topRank = () => (S.revolution ? 3 : 15);
 
-/* Toute la légalité tient ici : le rendu, les clics et les IA passent par elle. */
-function canPlayCards(cards, seat) {
-  if (cards.length < 1 || cards.length > 4) return false;
-  const rank = cards[0].rank;
-  if (!cards.every((c) => c.rank === rank)) return false;
-  const t = S.trick;
-  if (t.rank === null) return true;                               // ouverture : tout est permis
-  // Variante « même valeur » : le joueur visé ne peut que reposer la même chose.
-  if (t.forcedSeat === seat) return rank === t.rank && cards.length === t.count;
-  // Variante « 2 en atout » : un 2 seul bat toute combinaison.
-  if (VAR.trump && !S.revolution && cards.length === 1 && rank === 15 && t.rank !== 15) return true;
-  if (cards.length !== t.count) return false;
-  if (strength(rank) > strength(t.rank)) return true;
-  return VAR.equal && rank === t.rank;
+/* Valeur d'une combinaison : celle de ses cartes normales, qui doivent toutes
+   être de même valeur ; des jokers seuls valent la plus forte. null si les
+   cartes normales diffèrent. */
+function comboRank(cards) {
+  const nat = cards.filter((c) => !isJoker(c));
+  if (!nat.length) return topRank();
+  return nat.every((c) => c.rank === nat[0].rank) ? nat[0].rank : null;
 }
 
-/* Tous les coups possibles d'un siège, une combinaison par valeur et par taille. */
-function legalPlays(seat) {
+/* Toute la légalité tient ici : le rendu, les clics et les IA passent par elle.
+   Égaler la valeur est permis (le suivant saute son tour) ; la plus forte
+   valeur arrête le pli, donc on ne l'égale jamais. */
+function canPlayCards(cards) {
+  if (cards.length < 1 || cards.length > 4) return false;
+  const rank = comboRank(cards);
+  if (rank === null) return false;
+  const t = S.trick;
+  if (t.rank === null) return true;                               // ouverture : tout est permis
+  return cards.length === t.count && strength(rank) >= strength(t.rank);
+}
+
+/* Groupes de cartes normales d'une main par valeur, du plus faible au plus
+   fort dans l'ordre courant. Les jokers n'en font pas partie. */
+function groupsOf(hand) {
   const by = new Map();
-  for (const c of S.players[seat].hand) {
+  for (const c of hand) {
+    if (isJoker(c)) continue;
     if (!by.has(c.rank)) by.set(c.rank, []);
     by.get(c.rank).push(c);
   }
+  return [...by.values()].sort((a, b) => strength(a[0].rank) - strength(b[0].rank));
+}
+
+/* Tous les coups possibles d'un siège : pour chaque valeur et chaque taille,
+   une combinaison par nombre de jokers employés ; plus les jokers seuls. */
+function legalPlays(seat) {
+  const hand = S.players[seat].hand;
+  const jokers = hand.filter(isJoker);
   const out = [];
-  for (const cards of by.values()) {
-    for (let k = 1; k <= cards.length; k++) {
-      const pick = cards.slice(0, k);
-      if (canPlayCards(pick, seat)) out.push(pick);
+  const add = (pick) => { if (canPlayCards(pick)) out.push(pick); };
+  for (const group of groupsOf(hand)) {
+    for (let k = 1; k <= 4; k++) {
+      for (let m = Math.min(group.length, k); m >= 1 && k - m <= jokers.length; m--) {
+        add([...group.slice(0, m), ...jokers.slice(0, k - m)]);
+      }
     }
   }
+  for (let k = 1; k <= jokers.length; k++) add(jokers.slice(0, k));
   return out;
 }
 
@@ -566,7 +612,7 @@ function newGame(nPlayers) {
     S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, hand: [], score: 0, rounds: [], role: null });
   }
   S.round = 1;
-  S.target = (nPlayers - 1) * (VAR.long ? 6 : 3);
+  S.target = (nPlayers - 1) * (chosenFormat === "long" ? 6 : 3);
   buildBoard();
   startRound();
 }
@@ -575,9 +621,9 @@ function startRound() {
   S.epoch++;
   const n = nplayers();
   const deck = shuffle(buildDeck());
-  const per = Math.floor(52 / n);
-  S.aside = deck.splice(0, 52 - per * n);
-  for (const p of S.players) { p.hand = deck.splice(0, per); p.gain = 0; }
+  const per = Math.floor(deck.length / n);
+  S.aside = deck.splice(0, deck.length - per * n);
+  for (const p of S.players) { p.hand = deck.splice(0, per); p.gain = 0; p.offense = null; }
   S.played = [];
   S.trick = emptyTrick();
   S.lastTrick = null;
@@ -612,7 +658,8 @@ function startRound() {
   nextGive();
 }
 
-/* Les k cartes les plus fortes (ordre normal : aucune révolution en début de manche). */
+/* Les k cartes les plus fortes, jokers en tête (rang 16) ; ordre normal :
+   aucune révolution en début de manche. */
 function bestCards(seat, k) {
   return S.players[seat].hand.slice().sort((a, b) => b.rank - a.rank).slice(0, k);
 }
@@ -657,58 +704,79 @@ function beginTurn() {
   render();
 }
 
+/* Qui joue après `from` dans ce pli : le prochain siège qui a des cartes et
+   n'a pas passé. null quand le tour revient au dernier à avoir posé — tous
+   les autres ont passé ou sauté leur tour : le pli est fini. */
+function nextTurn(from) {
+  for (let k = 1; k <= nplayers(); k++) {
+    const j = (from + k) % nplayers();
+    if (j === S.trick.by) return null;
+    if (S.players[j].hand.length > 0 && !S.passed.has(j)) return j;
+  }
+  return null;
+}
+
 function doPlay(seat, cards) {
   const p = S.players[seat];
-  const t = S.trick;
-  const equal = t.rank !== null && cards[0].rank === t.rank;
+  const rank = comboRank(cards);
+  const equal = rank === S.trick.rank;
+  // Jugé avant une éventuelle révolution : un carré de 2 arrête le pli.
+  const top = rank === topRank();
   for (const c of cards) p.hand.splice(p.hand.indexOf(c), 1);
   S.played.push(...cards);
-  S.passed.clear();
   S.lastTrick = null;
-  S.trick = { rank: cards[0].rank, count: cards.length, by: seat, cards, forcedSeat: null };
-  const what = playName(cards[0].rank, cards.length);
+  S.trick = { rank, count: cards.length, by: seat, cards, skipped: null };
+  const what = comboName(cards);
   log(says(p, `poses ${what}.`, `pose ${what}.`));
 
-  if (VAR.revolution && cards.length === 4) {
+  if (cards.length === 4) {
     S.revolution = !S.revolution;
     log(S.revolution ? "Révolution ! Le 3 devient la plus forte, le 2 la plus faible."
                      : "Contre-révolution : retour à l'ordre normal.");
   }
-  if (p.hand.length === 0) finish(seat, cards);
+  if (p.hand.length === 0) finish(seat, cards, top);
   if (activeSeats().length <= 1) { endRound(); return; }
+  if (top) { endTrick(true); return; }
 
-  if (VAR.equal && equal) S.trick.forcedSeat = nextActive(seat);
-  S.current = nextActive(seat);
+  let next = nextTurn(seat);
+  if (equal && next !== null) {
+    S.trick.skipped = next;
+    log(says(S.players[next], "sautes ton tour.", "saute son tour."));
+    next = nextTurn(next);
+  }
+  if (next === null) { endTrick(false); return; }
+  S.current = next;
   beginTurn();
 }
 
 function doPass(seat) {
   S.passed.add(seat);
-  if (S.trick.forcedSeat === seat) S.trick.forcedSeat = null;
-  const others = activeSeats().filter((q) => q !== S.trick.by);
-  if (others.every((q) => S.passed.has(q))) { endTrick(); return; }
-  S.current = nextActive(seat);
+  const next = nextTurn(seat);
+  if (next === null) { endTrick(false); return; }
+  S.current = next;
   beginTurn();
 }
 
-/* Tous les autres ont passé : le dernier à avoir posé ramasse et rouvre —
-   ou, s'il est sorti, son voisin. */
-function endTrick() {
+/* Le dernier à avoir posé ramasse et rouvre — ou, s'il est sorti, son voisin.
+   `closed` : le pli a été arrêté par la plus forte carte. */
+function endTrick(closed) {
   const by = S.trick.by;
-  S.lastTrick = { by, cards: S.trick.cards };
+  S.lastTrick = { by, cards: S.trick.cards, closed };
   S.trick = emptyTrick();
   S.passed.clear();
   const leader = S.players[by].hand.length ? by : nextActive(by);
-  log(`Pli pour ${by === 0 ? "toi" : S.players[by].name}.`);
+  log(`${closed ? "Pli arrêté" : "Pli"} pour ${by === 0 ? "toi" : S.players[by].name}.`);
   S.current = leader;
   beginTurn();
 }
 
-function finish(seat, cards) {
+/* `top` : la combinaison valait la plus forte carte au moment d'être posée. */
+function finish(seat, cards, top) {
   const p = S.players[seat];
-  if (VAR.noTwoFinish && cards[0].rank === 15) {
+  if (top || cards.some(isJoker)) {
+    p.offense = cards.some(isJoker) ? "un joker" : `un ${rankLabel(cards[0].rank)}`;
     S.offenders.push(seat);
-    log(says(p, "finis sur un 2 : Trou du cul d'office !", "finit sur un 2 : Trou du cul d'office !"));
+    log(says(p, `finis sur ${p.offense} : Trou du cul d'office !`, `finit sur ${p.offense} : Trou du cul d'office !`));
     return;
   }
   S.finished.push(seat);
@@ -722,7 +790,7 @@ const roleFor = (pos, n) => (pos === 0 ? "P" : pos === 1 ? "VP" : pos === n - 1 
 function endRound() {
   const n = nplayers();
   // Classement : les sortis dans l'ordre, le dernier à tenir des cartes, puis
-  // ceux qui ont fini sur un 2 — le premier fautif tout en bas.
+  // ceux qui ont fini sur une carte interdite — le premier fautif tout en bas.
   S.order = [...S.finished, ...activeSeats(), ...S.offenders.slice().reverse()];
   S.order.forEach((seat, pos) => {
     const p = S.players[seat];
@@ -744,7 +812,7 @@ function showScores(over) {
   S.order.forEach((seat, pos) => {
     const p = S.players[seat];
     const win = over && p.score === best ? ' class="win"' : "";
-    const two = S.offenders.includes(seat) ? " (fini sur un 2)" : "";
+    const two = p.offense ? ` (fini sur ${p.offense})` : "";
     html += `<tr${win}><td>${ordinal(pos + 1)}</td><td>${p.name}${over && p.score === best ? " 🏆" : ""}</td>`
           + `<td><span class="role r-${p.role}">${ROLE_NAME[p.role]}</span>${two}</td>`
           + `<td>+${p.gain}</td><td>${p.score}</td></tr>`;
@@ -788,30 +856,53 @@ function showScores(over) {
    politique ne triche. */
 function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
 
-/* Groupes d'une main par valeur, du plus faible au plus fort dans l'ordre courant. */
-function groupsOf(hand) {
-  const by = new Map();
-  for (const c of hand) {
-    if (!by.has(c.rank)) by.set(c.rank, []);
-    by.get(c.rank).push(c);
-  }
-  return [...by.values()].sort((a, b) => strength(a[0].rank) - strength(b[0].rank));
+/* Pour trier des cartes isolées : un joker vaut plus que tout. */
+const power = (c) => (isJoker(c) ? 13 : strength(c.rank));
+const lowestCards = (hand, k) => hand.slice().sort((a, b) => power(a) - power(b)).slice(0, k);
+
+/* On ne peut pas finir sur ces cartes : les jokers et la plus forte valeur. */
+const isBanned = (c) => isJoker(c) || c.rank === topRank();
+/* Ce coup viderait la main sur une carte interdite. */
+const badFinish = (p, cards) => cards.length === p.hand.length && cards.some(isBanned);
+/* Après ce coup, il ne resterait que des cartes interdites : Trou du cul assuré. */
+function leavesBanned(p, cards) {
+  const rest = p.hand.filter((c) => !cards.includes(c));
+  return rest.length > 0 && rest.every(isBanned);
 }
 
-const lowestCards = (hand, k) => hand.slice().sort((a, b) => strength(a.rank) - strength(b.rank)).slice(0, k);
+/* Les combinaisons d'une main : `safe`, les valeurs ordinaires, et `banned`,
+   celles sur lesquelles on ne peut pas finir (la plus forte valeur, les
+   jokers seuls). Les secondes arrêtent le pli : jouées en ouverture, elles
+   rendent aussitôt la main. */
+function combosOf(hand) {
+  const groups = groupsOf(hand);
+  const safe = groups.filter((g) => g[0].rank !== topRank());
+  const banned = groups.filter((g) => g[0].rank === topRank());
+  const jokers = hand.filter(isJoker);
+  if (jokers.length) banned.push(jokers);
+  return { safe, banned };
+}
 
 /* ---------------------------------------------------------------------------
    Politique « tranquille » : ouvre avec sa plus petite valeur (toutes ses
-   cartes de cette valeur), monte au plus juste sans casser de paire si elle
-   peut, et rend ses plus petites cartes.
+   cartes de cette valeur), monte au plus juste sans casser de paire ni
+   dépenser de joker si elle peut, et rend ses plus petites cartes. Elle
+   évite seulement de finir sur une carte interdite.
    --------------------------------------------------------------------------- */
 const simplePolicy = {
   play(p, seat) {
-    if (S.trick.rank === null) return groupsOf(p.hand)[0];
-    const legal = legalPlays(seat);
+    if (S.trick.rank === null) {
+      const { safe, banned } = combosOf(p.hand);
+      // Plus qu'une valeur ordinaire : les cartes interdites d'abord.
+      if (safe.length <= 1 && banned.length) return banned[0];
+      return safe[0];
+    }
+    const legal = legalPlays(seat).filter((m) => !badFinish(p, m) && !leavesBanned(p, m));
     if (!legal.length) return null;
-    const copies = (cards) => p.hand.filter((c) => c.rank === cards[0].rank).length;
-    legal.sort((a, b) => (copies(a) > a.length) - (copies(b) > b.length) || strength(a[0].rank) - strength(b[0].rank));
+    const jokers = (m) => m.filter(isJoker).length;
+    const breaks = (m) => m.some((c) => !isJoker(c)) && p.hand.some((c) => c.rank === comboRank(m) && !m.includes(c));
+    legal.sort((a, b) => breaks(a) - breaks(b) || jokers(a) - jokers(b)
+      || strength(comboRank(a)) - strength(comboRank(b)));
     return legal[0];
   },
   give(p, k) { return lowestCards(p.hand, k); },
@@ -819,69 +910,72 @@ const simplePolicy = {
 
 /* ---------------------------------------------------------------------------
    Politique « redoutable ». Elle compte les cartes posées pour savoir quelles
-   combinaisons sont *maîtresses* (plus personne ne peut les battre), et :
-     - finit proprement : quand il ne lui reste qu'une combinaison non
-       maîtresse, elle joue d'abord les maîtresses, qui lui rendent la main ;
-     - passe plutôt que brûler une carte forte (As, 2) tant que personne
-       n'est près de finir ;
-     - évite de casser une paire pour monter ;
+   combinaisons sont *maîtresses* (plus personne ne peut les reprendre), et :
+     - finit proprement : quand il ne lui reste qu'une combinaison ordinaire
+       non maîtresse, elle joue d'abord ses cartes interdites (qui arrêtent le
+       pli) puis ses maîtresses, qui lui rendent la main ;
+     - passe plutôt que brûler une carte forte (As, 2, joker) tant que
+       personne n'est près de finir ;
+     - évite de casser une paire ou de dépenser un joker pour monter ;
      - déclenche la révolution quand sa main est surtout faite de petites cartes ;
-     - ne finit jamais sur un 2 quand la variante l'interdit, si elle peut l'éviter.
+     - ne finit jamais sur un 2 ni un joker si elle peut l'éviter.
    --------------------------------------------------------------------------- */
 /* Coût d'un coup = force de la valeur posée (0 pour le 3, 12 pour le 2), plus
    les pénalités ci-dessous. Au-delà de `passAbove`, on passe : c'est ce seuil
-   qui garde les As et les 2 pour reprendre la main plus tard. */
+   qui garde les As, les 2 et les jokers pour reprendre la main plus tard. */
 const AI = {
   breakCost: 8,    // coût de casser un groupe pour monter
+  jokerCost: 4,    // coût de chaque joker employé pour monter
   passAbove: 8,    // au-delà de ce coût, passer plutôt que jouer
   danger: 5,       // un adversaire à ce nombre de cartes ou moins : on ne passe plus
 };
 
-/* Nombre d'exemplaires d'une valeur que les autres peuvent encore tenir. */
+/* Nombre d'exemplaires d'une valeur (JOKER compris) que les autres peuvent encore tenir. */
 function unseen(p, rank) {
-  let n = 4;
+  let n = rank === JOKER ? 2 : 4;
   for (const c of S.played) if (c.rank === rank) n--;
   for (const c of S.aside) if (c.rank === rank) n--;
   for (const c of p.hand) if (c.rank === rank) n--;
   return n;
 }
 
-/* Une combinaison est maîtresse si aucun adversaire ne peut la battre. */
+/* Une combinaison est maîtresse si aucun adversaire ne peut la reprendre, ni
+   en montant ni en égalant, jokers compris. La plus forte valeur l'est
+   toujours : elle arrête le pli. */
 function isMaster(p, rank, count) {
+  if (rank === topRank()) return true;
+  const jokers = unseen(p, JOKER);
+  if (jokers >= count) return false;                              // des jokers seuls
   for (let r = 3; r <= 15; r++) {
-    if (strength(r) > strength(rank) && unseen(p, r) >= count) return false;
+    const u = unseen(p, r);
+    if (strength(r) >= strength(rank) && u >= 1 && u + jokers >= count) return false;
   }
-  if (VAR.trump && !S.revolution && count > 1 && rank !== 15 && unseen(p, 15) >= 1) return false;
   return true;
 }
 
 const sharpPolicy = {
   play(p, seat) {
-    const groups = groupsOf(p.hand);
     const danger = activeSeats().some((i) => i !== seat && S.players[i].hand.length <= AI.danger);
 
     /* ---- Ouverture ---- */
     if (S.trick.rank === null) {
-      if (groups.length === 1) return groups[0];
-      const masters = groups.filter((g) => isMaster(p, g[0].rank, g.length));
-      const others = groups.filter((g) => !masters.includes(g));
-      if (others.length <= 1) {
-        // Les maîtresses d'abord : elles rendent la main. Les 2 en premier si
-        // finir dessus est interdit, pour garder une autre carte en dernier.
-        if (masters.length) {
-          const twos = masters.find((g) => g[0].rank === 15);
-          return (VAR.noTwoFinish && twos) || masters[0];
-        }
-        return others[0];
+      const { safe, banned } = combosOf(p.hand);
+      if (!safe.length) return banned[0];
+      const masters = safe.filter((g) => isMaster(p, g[0].rank, g.length));
+      const others = safe.filter((g) => !masters.includes(g));
+      // Fin de main : ce qui rend la main d'abord, la dernière combinaison en dernier.
+      if (others.length <= 1) return banned[0] || masters[0] || others[0];
+      // Révolution : un carré, au plus un joker compris, qui renverse l'ordre
+      // si le reste de la main y gagne.
+      const jokers = p.hand.filter(isJoker);
+      for (const g of safe) {
+        if (g.length < 3 || g.length + jokers.length < 4) continue;
+        const quad = [...g, ...jokers.slice(0, 4 - g.length)];
+        const rest = p.hand.filter((c) => !isJoker(c) && !quad.includes(c));
+        const now = rest.reduce((s, c) => s + strength(c.rank), 0);
+        const flipped = rest.reduce((s, c) => s + (12 - strength(c.rank)), 0);
+        if (flipped - now > (4 - g.length) * AI.jokerCost) return quad;
       }
-      // Révolution : un carré qui renverse l'ordre, si la main y gagne.
-      const quad = groups.find((g) => g.length === 4);
-      if (VAR.revolution && quad) {
-        const now = p.hand.reduce((s, c) => s + strength(c.rank), 0);
-        const flipped = p.hand.reduce((s, c) => s + (12 - strength(c.rank)), 0);
-        if (flipped > now) return quad;
-      }
-      // Sinon la plus faible combinaison non maîtresse, en évitant de finir sur un 2.
       return others[0];
     }
 
@@ -890,16 +984,18 @@ const sharpPolicy = {
     if (!legal.length) return null;
     let best = null, bestCost = Infinity;
     for (const cards of legal) {
-      const rank = cards[0].rank;
-      const left = p.hand.length - cards.length;
-      const copies = p.hand.filter((c) => c.rank === rank).length;
+      const rank = comboRank(cards);
+      const jokers = cards.filter(isJoker).length;
+      const rest = p.hand.filter((c) => !cards.includes(c));
       let cost = strength(rank);
-      if (left === 0) cost = VAR.noTwoFinish && rank === 15 ? 99 : -100;      // sortir
+      if (!rest.length) cost = badFinish(p, cards) ? 99 : -100;               // sortir
       else {
-        if (copies > cards.length) cost += AI.breakCost;
+        if (jokers < cards.length && rest.some((c) => c.rank === rank)) cost += AI.breakCost;
+        cost += jokers * AI.jokerCost;
         // Plus qu'une combinaison derrière celle-ci : la poser vaut de l'or.
-        if (groupsOf(p.hand.filter((c) => !cards.includes(c))).length === 1) cost -= 6;
-        if (VAR.noTwoFinish && left > 0 && p.hand.every((c) => cards.includes(c) || c.rank === 15)) cost += 30;
+        const { safe, banned } = combosOf(rest);
+        if (safe.length + banned.length === 1) cost -= 6;
+        if (rest.every(isBanned)) cost += 30;
       }
       if (cost < bestCost) { bestCost = cost; best = cards; }
     }
@@ -907,12 +1003,10 @@ const sharpPolicy = {
     return best;
   },
 
-  // Rendre des cartes : les plus faibles, en gardant ses paires si possible.
+  // Rendre des cartes : les plus faibles, en gardant ses paires et ses jokers si possible.
   give(p, k) {
-    const groups = groupsOf(p.hand);
-    const singles = groups.filter((g) => g.length === 1).flat();
-    const pool = singles.length >= k ? singles : p.hand;
-    return lowestCards(pool, k);
+    const singles = groupsOf(p.hand).filter((g) => g.length === 1).flat();
+    return lowestCards(singles.length >= k ? singles : p.hand, k);
   },
 };
 
@@ -928,13 +1022,12 @@ async function aiTurn() {
   if (epoch !== S.epoch) return;       // partie relancée pendant la réflexion
 
   let move = policyOf(p).play(p, seat);
-  if (!move && S.trick.rank === null) move = groupsOf(p.hand)[0];   // on ne passe pas en ouverture
-  if (move && !canPlayCards(move, seat)) move = null;
+  if (!move && S.trick.rank === null) move = legalPlays(seat)[0];   // on ne passe pas en ouverture
+  if (move && !canPlayCards(move)) move = null;
   S.busy = false;
   if (move) { doPlay(seat, move); return; }
   // Le pli va se ramasser : on laisse lire la dernière carte posée.
-  const others = activeSeats().filter((q) => q !== S.trick.by && q !== seat);
-  if (others.every((q) => S.passed.has(q))) {
+  if (nextTurn(seat) === null) {
     S.busy = true;
     S.passed.add(seat);
     render();
@@ -961,18 +1054,33 @@ function onCardClick(uid) {
   if (S.busy || S.current !== 0 || S.phase !== "play") return;
 
   const t = S.trick;
+  const selected = me.hand.filter((c) => S.sel.has(c.uid));
   if (t.rank === null) {
-    // Ouverture : sélection libre, dans une seule valeur.
-    const other = me.hand.some((c) => S.sel.has(c.uid) && c.rank !== card.rank);
-    if (other) S.sel.clear();
-    if (S.sel.has(uid)) S.sel.delete(uid); else S.sel.add(uid);
+    // Ouverture : sélection libre, une seule valeur plus des jokers, 4 cartes au plus.
+    if (S.sel.has(uid)) S.sel.delete(uid);
+    else {
+      if (!isJoker(card)) {
+        for (const c of selected) if (!isJoker(c) && c.rank !== card.rank) S.sel.delete(c.uid);
+      }
+      if (S.sel.size < 4) S.sel.add(uid);
+    }
   } else if (S.sel.has(uid)) {
     S.sel.clear();
+  } else if (isJoker(card)) {
+    // Un joker remplace une carte normale de la sélection ; sans sélection,
+    // il faut autant de jokers que de cartes à battre.
+    const nat = selected.filter((c) => !isJoker(c));
+    if (nat.length) { S.sel.delete(nat.at(-1).uid); S.sel.add(uid); }
+    else {
+      const jokers = [card, ...me.hand.filter((c) => isJoker(c) && c !== card)].slice(0, t.count);
+      if (jokers.length === t.count) S.sel = new Set(jokers.map((c) => c.uid));
+    }
   } else {
-    // Pour suivre, un clic prend d'un coup le bon nombre de cartes de cette valeur.
-    const same = me.hand.filter((c) => c.rank === card.rank);
-    const k = VAR.trump && !S.revolution && card.rank === 15 && t.forcedSeat !== 0 && t.count > 1 ? 1 : t.count;
-    if (same.length >= k) S.sel = new Set([card, ...same.filter((c) => c !== card)].slice(0, k).map((c) => c.uid));
+    // Pour suivre, un clic prend d'un coup le bon nombre de cartes : celles de
+    // cette valeur d'abord, complétées par des jokers.
+    const same = [card, ...me.hand.filter((c) => c.rank === card.rank && c !== card)].slice(0, t.count);
+    const pick = [...same, ...me.hand.filter(isJoker)].slice(0, t.count);
+    if (pick.length === t.count) S.sel = new Set(pick.map((c) => c.uid));
   }
   render();
 }
@@ -980,7 +1088,7 @@ function onCardClick(uid) {
 function onPlayClick() {
   if (S.busy || S.current !== 0 || S.phase !== "play") return;
   const cards = S.players[0].hand.filter((c) => S.sel.has(c.uid));
-  if (!canPlayCards(cards, 0)) return;
+  if (!canPlayCards(cards)) return;
   S.sel = new Set();
   S.gifts = new Set();
   doPlay(0, cards);
@@ -1011,7 +1119,7 @@ function mk(tag, cls, text) {
 }
 
 function cardEl(c, extra) {
-  const cls = "card" + (!c ? " back" : c.suit === "C" || c.suit === "K" ? " red" : "");
+  const cls = "card" + (!c ? " back" : isJoker(c) ? " joker" : c.suit === "C" || c.suit === "K" ? " red" : "");
   const b = mk("button", cls + (extra ? " " + extra : ""));
   if (c) {
     const corner = mk("span", "corner");
@@ -1063,13 +1171,14 @@ function statusHtml() {
     }
     case "ai":
       if (!me.hand.length) return `Tu as fini : la manche se joue sans toi. <b>${p.name}</b> réfléchit…`;
+      if (t.rank !== null && S.passed.has(0)) return `Tu as passé : tu rejoues au prochain pli. <b>${p.name}</b> réfléchit…`;
+      if (t.skipped === 0) return `Même valeur : tu sautes ton tour. <b>${p.name}</b> réfléchit…`;
       return `<b>${p.name}</b> réfléchit…`;
     case "play": {
       if (t.rank === null) return "À toi d'ouvrir : choisis une ou plusieurs cartes de même valeur.";
       const what = playName(t.rank, t.count);
-      if (t.forcedSeat === 0) return `<b>Même valeur</b> : pose toi aussi ${what}, ou passe.`;
       if (!legalPlays(0).length) return `À battre : <b>${what}</b>. Rien pour monter : passe.`;
-      return `À battre : <b>${what}</b>. Monte ou passe.`;
+      return `À battre : <b>${what}</b>. Monte, égalise ou passe.`;
     }
     default: return "";
   }
@@ -1089,7 +1198,7 @@ function renderActions() {
   if (S.phase === "give") {
     add(`Donner (${cards.length}/${S.give.k})`, "primary", onGiveClick, cards.length === S.give.k);
   } else if (S.phase === "play" && S.current === 0 && !S.busy) {
-    const ok = canPlayCards(cards, 0);
+    const ok = canPlayCards(cards);
     const label = ok ? ["", "Poser la carte", "Poser la paire", "Poser le brelan", "Poser le carré"][cards.length] : "Poser";
     add(label, "primary", onPlayClick, ok);
     if (S.trick.rank !== null) add("Passer", null, onPassClick, true);
@@ -1103,10 +1212,13 @@ function renderHand() {
   host.style.setProperty("--n", me.hand.length);
   const playing = S.phase === "play" && S.current === 0 && !S.busy;
   const giving = S.phase === "give";
-  const legalRanks = new Set(playing ? legalPlays(0).map((m) => m[0].rank) : []);
+  // Les valeurs jouables ; JOKER si un coup légal emploie un joker.
+  const legalRanks = new Set(playing ? legalPlays(0).flat().map((c) => c.rank) : []);
   const next = new Set();
 
-  for (const group of groupsOf(me.hand)) {
+  // Les jokers à part, au bout de la main : ils valent plus que tout, révolution ou pas.
+  const jokers = me.hand.filter(isJoker);
+  for (const group of [...groupsOf(me.hand), ...(jokers.length ? [jokers] : [])]) {
     const g = mk("div", "group");
     for (const c of group.sort((a, b) => SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit))) {
       next.add(c.uid);
@@ -1154,9 +1266,10 @@ function render() {
 
     const finishedAt = S.finished.indexOf(pi);
     let bubble = "";
-    if (S.offenders.includes(pi)) bubble = "fini sur un 2";
+    if (p.offense) bubble = `fini sur ${p.offense}`;
     else if (finishedAt >= 0) bubble = `${ordinal(finishedAt + 1)} place`;
     else if (S.passed.has(pi) && S.trick.rank !== null) bubble = "passe";
+    else if (S.trick.skipped === pi) bubble = "sauté";
     p._bubble.textContent = bubble;
     p._bubble.hidden = !bubble;
     p._bubble.className = "bubble" + (finishedAt >= 0 ? " done" : "");
@@ -1173,7 +1286,8 @@ function render() {
     const who = S.trick.by === 0 ? "Toi" : S.players[S.trick.by].name;
     cap.innerHTML = `<b>${who}</b> : ${playName(S.trick.rank, S.trick.count)}`;
   } else if (S.lastTrick && S.phase !== "over") {
-    cap.innerHTML = `Pli pour <b>${S.lastTrick.by === 0 ? "toi" : S.players[S.lastTrick.by].name}</b>`;
+    const who = S.lastTrick.by === 0 ? "toi" : S.players[S.lastTrick.by].name;
+    cap.innerHTML = `${S.lastTrick.closed ? "Pli arrêté" : "Pli"} pour <b>${who}</b>`;
   } else {
     cap.textContent = "";
   }
@@ -1193,7 +1307,6 @@ function render() {
 let chosenPlayers = 4;
 let chosenLevel = "sharp";
 let chosenFormat = "short";
-const chosenVariants = { revolution: true, equal: false, trump: false, noTwoFinish: false };
 
 function buildChoice(host, items, current, onPick) {
   for (const it of items) {
@@ -1201,17 +1314,6 @@ function buildChoice(host, items, current, onPick) {
     b.addEventListener("click", () => {
       onPick(it.id);
       [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
-    });
-    host.appendChild(b);
-  }
-}
-
-function buildToggles(host, items, state) {
-  for (const it of items) {
-    const b = mk("button", state[it.id] ? "sel" : null, it.label);
-    b.addEventListener("click", () => {
-      state[it.id] = !state[it.id];
-      b.classList.toggle("sel", state[it.id]);
     });
     host.appendChild(b);
   }
@@ -1231,16 +1333,8 @@ buildChoice(el("formatChoice"), [
   { id: "long", label: "Partie longue" },
 ], chosenFormat, (id) => { chosenFormat = id; });
 
-buildToggles(el("variantChoice"), [
-  { id: "revolution", label: "Révolution" },
-  { id: "equal", label: "Même valeur" },
-  { id: "trump", label: "Le 2 en atout" },
-  { id: "noTwoFinish", label: "Pas de fin sur un 2" },
-], chosenVariants);
-
 el("btnStart").addEventListener("click", () => {
   el("startOverlay").hidden = true;
-  Object.assign(VAR, chosenVariants, { long: chosenFormat === "long" });
   newGame(chosenPlayers);
 });
 el("btnNew").addEventListener("click", () => {

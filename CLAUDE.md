@@ -15,7 +15,8 @@ inline. No build step, no dependencies, no package manager, no framework. Open a
 - [cinq-rois.html](cinq-rois.html) — *Les Cinq Rois*, the French edition of Five Crowns (Set Enterprises), DOM/CSS
   rendering, human vs. 1–3 computer opponents: 11 rounds of rummy with a wild rank that changes every round.
 - [trou-du-cul.html](trou-du-cul.html) — the traditional climbing game (a.k.a. Président), rules from the French
-  Wikipedia article, DOM/CSS rendering, human vs. 3–5 computer opponents, variants toggled on the start screen.
+  Wikipedia article plus fixed house rules (54 cards with wild jokers, no variant toggles), DOM/CSS rendering, human
+  vs. 3–5 computer opponents.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games themselves independent of each other.
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
@@ -442,73 +443,92 @@ leftmost card vanished and the rightmost was cut, and a desktop window of 1000 p
 
 ### Rules as implemented
 
-52 cards dealt equally to 4–6 players; leftovers are shown to everyone and set aside (`S.aside`). Ranks are stored
-3..14 plus **15 for the 2**, so the natural order is just the number; `strength(rank)` is `rank - 3`, or `15 - rank`
-during a revolution. The Wikipedia article leaves several points open; these readings are deliberate and stated in
-the in-game rules panel:
+54 cards (two jokers) dealt equally to 4–6 players; leftovers are shown to everyone and set aside (`S.aside`): 2 at
+four players, 4 at five, none at six. Ranks are stored 3..14 plus **15 for the 2**, so the natural order is just the
+number; `strength(rank)` is `rank - 3`, or `15 - rank` during a revolution. A joker is stored as rank `JOKER` (16),
+which is **not its value**: `comboRank(cards)` gives a combination's value — its naturals' rank, or `topRank()` (15,
+or 3 during a revolution) for jokers alone. Never pass a joker's rank to `strength()`.
 
-- **A player who passes may play again** when their turn comes back within the same trick. A trick ends when every
-  *other* player still holding cards has passed since the last play (`S.passed`, cleared on each play). The last
-  player to play leads next; if they are out, their next active neighbour does.
-- Round 1 is opened by the holder of the queen of hearts (seat 0 if it was set aside); later rounds by the previous
-  **Trou du cul**.
-- The round stops when one player still holds cards. Ranking = finishers in order, that player, then the players
-  who finished on a 2 (variant), the **first** offender at the very bottom. Points are `n - 1 - position`; the game
+The rules are fixed — the start screen has no variant toggles any more (the owner chose these house rules; the old
+`VAR` object and its tests are gone). All stated in the in-game rules panel:
+
+- **Wild jokers**: 9 + joker is a pair of 9s. Jokers alone are worth the top card.
+- **Passing is final** for the trick: `S.passed` is only cleared by `endTrick()`, and `nextTurn()` skips passed
+  seats. A trick ends when the turn would come back to the last player who played (`nextTurn()` returns `null`) —
+  everyone else passed or was skipped.
+- **Même valeur** is always on: playing the same value (same count) as the trick **skips the next player**
+  (`S.trick.skipped`) for that turn only — the skipped player is not out of the trick. If the turn then comes back
+  to the player who equalled, they win the trick.
+- **The top value closes the trick at once** (`endTrick(true)`): a combination of 2s (3s in a revolution), jokers
+  alone, or 2 + joker. Nobody may beat or equal it; its author leads next. A joker *with* naturals of another rank
+  does not close anything — only the value counts. "Top" is judged **before** a carré flips the order, so a carré of
+  2s closes the trick and starts a revolution.
+- **The 2 is not a trump**: it needs the same count as the trick, like any card.
+- **Forbidden finish**: going out on the top value (a 2, or a 3 in a revolution) **or on any combination containing a
+  joker** makes you Trou du cul d'office (`p.offense` records the card). Ranking = finishers in order, the last
+  holder, then the offenders, the **first** offender at the very bottom. Points are `n - 1 - position`; the game
   stops at the end of the round where someone reaches `S.target = (n - 1) × 3` (or × 6 for a long game).
-- Exchanges at the start of every later round: the Trou du cul's 2 best and the Vice-trou du cul's best card go
-  automatically; then the Président gives back 2 and the Vice-président 1 **of their choice**, after seeing what they
-  received. `S.gives` is the queue; `nextGive()` pauses in `phase = "give"` when the giver is the human.
-- **Révolution** lasts until the end of the round or a counter-revolution by another carré. Wikipedia says it "ne
-  dure qu'un tour"; read as one trick it would do almost nothing (only carrés can follow a carré), so the common
-  whole-round reading was chosen. It's one line in `doPlay()` plus the reset in `startRound()` if that ever changes.
-- **Même valeur**: playing the same rank is allowed and targets the next active player (`S.trick.forcedSeat`), who
-  may only repeat that rank or pass. **2 en atout**: a single 2 beats any combination, except a combination of 2s,
-  and not during a revolution. Not implemented: the putsch and the 54-card deck with jokers.
+- **Révolution** (always on) lasts until the end of the round or a counter-revolution by another carré, jokers
+  counting. Wikipedia says it "ne dure qu'un tour"; read as one trick it would do almost nothing, so the common
+  whole-round reading was chosen.
+- Round 1 is opened by the holder of the queen of hearts (seat 0 if it was set aside); later rounds by the previous
+  **Trou du cul**. Exchanges at the start of every later round: the Trou du cul's 2 best (jokers first) and the
+  Vice-trou du cul's best card go automatically; then the Président gives back 2 and the Vice-président 1 **of their
+  choice**. `S.gives` is the queue; `nextGive()` pauses in `phase = "give"` when the giver is the human.
+- Not implemented: the putsch.
 
 ### Legality and flow
 
-`canPlayCards(cards, seat)` is the only legality check: the renderer, the click handlers and the AIs go through it
-(`legalPlays(seat)` enumerates one candidate per rank and size). The suite asserts every `doPlay` was legal and made
-by `S.current`, and every `endTrick` happened with all the others passed.
+`canPlayCards(cards)` is the only legality check: the renderer, the click handlers and the AIs go through it
+(`legalPlays(seat)` enumerates one candidate per rank, size and number of jokers used, plus jokers alone). Equal
+strength is legal because the top value never stays on the table. The suite asserts every `doPlay` was legal, made by
+`S.current`, and never by a seat that passed or was just skipped; every `endTrick` either closed on the top value or
+had all the others passed or skipped.
 
-`doPlay` → optional revolution → `finish` if the hand is empty → `endRound` if one holder is left → next active
-seat. `doPass` → `endTrick` or next active seat. `aiTurn()` checks `S.epoch` like the other games, and when its pass
-is the one that closes the trick it pauses `TRICK_MS` with its "passe" bubble shown, so the winning cards can be read
-before they are cleared. The cleared trick stays on the table, dimmed, as `S.lastTrick`.
+`doPlay` → optional revolution → `finish` if the hand is empty → `endRound` if one holder is left → `endTrick(true)`
+on the top value → skip on an equal value → `nextTurn()`. `doPass` → `nextTurn()` or `endTrick(false)`. `aiTurn()`
+checks `S.epoch` like the other games, and when its pass is the one that ends the trick it adds itself to
+`S.passed` early and pauses `TRICK_MS` with its "passe" bubble shown, so the winning cards can be read before they are
+cleared — which is why the test does not assert "not already passed" on `doPass`. The cleared trick stays on the
+table, dimmed, as `S.lastTrick`.
 
 ### Opponent AI
 
-`play(p, seat) -> cards | null` and `give(p, k) -> cards`. `simple` leads its weakest rank (all copies), follows with
-the cheapest play that doesn't break a group, and gives back its weakest cards. `sharp` counts cards: `unseen(p,
-rank)` is 4 minus played, set aside and own copies, and a group is **master** when no rank above it has enough
-unseen copies (or a single 2 remains, with the trump variant). It plays its masters before its last group, prices
-each follow by `strength + breakCost`, **passes above `passAbove`** unless an opponent is down to `danger` cards,
-triggers a revolution when the flipped hand is stronger, and plays its 2s early when finishing on one is forbidden.
-Neither policy may read another hand; the test enforces it with counting `Proxy`s as in Uno.
+`play(p, seat) -> cards | null` and `give(p, k) -> cards`. Both policies avoid finishing on a forbidden card:
+`combosOf(hand)` splits a hand into `safe` groups and `banned` ones (top value, jokers alone), and when at most one
+ordinary group is left they lead the banned ones first — they close the trick, so they hand the lead straight back.
+`simple` leads its weakest rank (all copies), follows with the cheapest play that breaks no group and spends no joker,
+and gives back its weakest cards. `sharp` counts cards: `unseen(p, rank)` (also for `JOKER`) is what the others may
+still hold, and a group is **master** when nobody can beat *or equal* it, jokers included — the top value always is.
+It plays its masters before its last group, prices each follow by `strength + breakCost + jokerCost`, **passes above
+`passAbove`** unless an opponent is down to `danger` cards, triggers a revolution (a carré, at most one joker) when
+the rest of its hand gains from the flip, and never gives a joker back. Neither policy may read another hand; the
+test enforces it with counting `Proxy`s as in Uno.
 
 ```
-node tests/trou-du-cul-bench.js 300        # 1 redoutable contre 3, 4 et 5 tranquilles, sans puis avec variantes
-node tests/trou-du-cul-bench.js sweep 400  # compare des réglages de l'objet AI (4 joueurs, toutes variantes)
+node tests/trou-du-cul-bench.js 300        # 1 redoutable contre 3, 4 et 5 tranquilles
+node tests/trou-du-cul-bench.js sweep 400  # compare des réglages de l'objet AI (4 joueurs)
 ```
 
 Reference points at the shipped settings, 300 games per table, one `sharp` against `simple` players — win rate
-(baseline 1/n) and average points per round (baseline (n − 1)/2):
+(baseline 1/n) and average points per round (baseline (n − 1)/2): **4 players 35 % · 1.73, 5 players 25 % · 2.21,
+6 players 20 % · 2.64.**
 
-| Players | No variant        | All variants      |
-|---------|-------------------|-------------------|
-| 4       | 51 % · 1.97       | 72 % · 2.11       |
-| 5       | 41 % · 2.47       | 53 % · 2.63       |
-| 6       | 33 % · 2.94       | 39 % · 3.04       |
-
-The pass threshold is what makes `sharp` strong: in the 4-player sweep, `passAbove 99` (never pass voluntarily)
-drops its win rate from ~71 % to ~44 %, and `danger 1` (keep passing even when someone is about to go out) to ~33 %.
-A separate "save the aces" penalty was removed once `passAbove` made it redundant. Terminations can't stall: every trick starts with a mandatory play.
+The house rules cut `sharp`'s edge sharply (it was 51–72 % at four players under the old rules). Its old strength
+was passing to save aces and coming back later in the same trick; a final pass removed that. Now `sharp` is
+rarely Trou du cul (~16 % at four) but no more often Président than chance (~26 %): passing trades first places for
+second places. Sweeps at 600 games found nothing better than noise (±2 points): `passAbove`, `danger`, `breakCost`,
+`jokerCost`, a bonus for master follows, and "never pass with ≤ 1–2 rivals left in the trick" all land within
+31–37 %. `danger 1` still collapses it (~1 %). A real gain probably needs a win-probability model that uses who has
+already passed. Terminations can't stall: every trick starts with a mandatory play and passes are final.
 
 ### Rendering and layout
 
 `render()` rebuilds the hand every call, grouped by rank (overlapped cards, weakest first in the *current* order,
-so a revolution flips the hand). Following a trick, one click on a card selects the required number of copies of
-its rank; leading, clicks toggle cards within one rank. Unplayable cards are darkened with `filter`, not `opacity`:
-inside an overlapped group, transparency shows the card underneath. Phone layout as in Uno and Cinq Rois; the
-opponents grid gets `--cols` from `buildBoard()` (up to 3 per row, 2×2 for four opponents) because five opponents
-don't fit in one row.
+so a revolution flips the hand), with the jokers as a last group whatever the order. Following a trick, one click
+on a card selects the required count — its rank first, topped up with jokers; a click on a joker swaps it for a
+natural in the selection, or with nothing selected takes jokers alone. Leading, clicks toggle cards within one rank
+plus any jokers. Unplayable cards are darkened with `filter`, not `opacity`: inside an overlapped group,
+transparency shows the card underneath. The skipped opponent gets a "sauté" bubble. Phone layout as in Uno and
+Cinq Rois; the opponents grid gets `--cols` from `buildBoard()` (up to 3 per row, 2×2 for four opponents) because
+five opponents don't fit in one row.
