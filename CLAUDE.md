@@ -432,7 +432,11 @@ you click. The wild rank gets a gold inner border and a crown, the table shows i
 Desktop centres the column with `margin-top/bottom: auto` on the first and last children of `main` (not
 `justify-content: center`, which would clip the top when the table overflows). The phone layout copies Uno's:
 opponents grid, `#table` as a `cqh`-sized flex filler, wrapping hand. Hand card width comes from `--n`, the hand
-size set inline by `renderHand()`, because CSS can't count cards spread across several meld groups.
+size set inline by `renderHand()`, because CSS can't count cards spread across several meld groups: `--k =
+clamp(4, n, 6)` isolated cards per row, gaps included, so up to 6 cards sit on one row and the size never grows with
+the hand (it would jump on every draw). **`.group` must keep `flex-wrap: wrap`**: `#hand` is centred, so a group wider
+than the hand (the dead cards, as one block) overflowed on *both* sides — from 5 isolated cards on a phone the
+leftmost card vanished and the rightmost was cut, and a desktop window of 1000 px did the same with 14.
 
 ## Architecture — trou-du-cul.html
 

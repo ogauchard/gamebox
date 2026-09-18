@@ -217,7 +217,9 @@
     padding: 14px 10px 8px;
     --cw: var(--hand-card);
   }
-  .group { display: flex; align-items: flex-end; }
+  /* Un groupe plus large que la main passe à la ligne : la main est centrée,
+     un groupe qui déborderait serait rogné des deux côtés. */
+  .group { display: flex; flex-wrap: wrap; align-items: flex-end; row-gap: 14px; }
   .group.meld {
     padding: 5px 6px 5px calc(var(--cw) * .42 + 6px);
     border-radius: calc(var(--cw) * .16);
@@ -225,7 +227,7 @@
     box-shadow: inset 0 0 0 1px rgba(79, 191, 106, .35);
   }
   .group.meld .card { margin-left: calc(var(--cw) * -.42); }
-  .group.dead { gap: 6px; padding: 5px 0; }
+  .group.dead { column-gap: 6px; justify-content: center; padding: 5px 0; }
   #hand .card.pickable { cursor: pointer; }
   #hand .card.pickable:hover { transform: translateY(-8px); }
   #hand .card.drawn { box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgba(0,0,0,.5); }
@@ -341,15 +343,20 @@
     #log { font-size: 11px; height: calc(11px * 1.3 * 2); padding: 0 8px; }
 
     /* Taille des cartes selon le nombre en main (--n, posé par le rendu) :
-       les combinaisons se chevauchent, donc une main de 14 tient en deux ou
-       trois rangées. */
+       --k cartes isolées tiennent sur une rangée, espaces compris. Jusqu'à 6
+       cartes, toute la main tient sur une rangée ; au-delà la taille ne bouge
+       plus et les groupes passent à la ligne (trois rangées au pire pour 14
+       cartes isolées, moins dès qu'il y a des combinaisons, qui se
+       chevauchent). Jamais de carte plus grande avec une main plus grosse :
+       la main sauterait à chaque pioche. */
     #me .name { font-size: 13px; }
     #hand {
-      --k: clamp(4.5, calc(var(--n, 7) * .4 + 1.8), 7);
-      --hand-card: min((100vw - 24px) / var(--k), 84px);
+      --k: clamp(4, var(--n, 7), 6);
+      --hand-card: min((100vw - 20px - (var(--k) - 1) * 6px) / var(--k), 84px);
       gap: 12px 8px;
       padding: 12px 8px 2px;
     }
+    #hand .group { row-gap: 12px; }
     #hand .card.pickable:hover { transform: none; }
     #hand .card.out:hover { transform: translateY(-6px); }
 
