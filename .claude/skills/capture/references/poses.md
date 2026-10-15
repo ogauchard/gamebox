@@ -6,20 +6,19 @@ nomme.
 
 ## Démarrer une partie (Skyjo, Uno, Cinq Rois, Trou du cul)
 
-Les quatre jeux de cartes partagent les mêmes noms : `chosenPlayers`, `chosenLevel`, le bouton `btnStart`, `aiTurn()`,
-`beginTurn()`, `render()`.
+Les quatre jeux de cartes partagent les mêmes noms : le bouton `btnStart`, `startGame()`, `aiTurn()`, `beginTurn()`,
+`render()`. Une partie a toujours 4 joueurs, toi et 3 adversaires « Redoutable » : rien à choisir avant le clic.
 
 ```js
 aiTurn = async () => {};   // gèle les adversaires : sans ça ils jouent pendant le budget de temps virtuel
-chosenPlayers = 4;         // Skyjo / Uno / Cinq Rois : 2–4, Trou du cul : 4–6
 el("btnStart").click();
 ```
 
 Sans le gel, la capture montre un moment quelconque de la partie, différent à chaque lancement. Si un adversaire
 commence, la table reste figée sur « X réfléchit… » ; pour avoir la main, ajouter `S.current = 0; beginTurn();`.
 
-Options propres à un jeu, à poser **avant** le clic : `chosenFormat` (`"match"`/`"round"` pour Uno,
-`"short"`/`"long"` pour Trou du cul), `chosenVariants` (Uno, objet `{ stack, challenge, sevenZero }`).
+Seul Uno a encore des options, à poser **avant** le clic : `chosenFormat` (`"match"`/`"single"`) et `chosenVariants`
+(objet `{ stack, challenge, sevenZero }`).
 
 ## Grossir la main du joueur (Uno, Cinq Rois, Trou du cul)
 

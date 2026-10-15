@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Les Cinq Rois</title>
-<link rel="stylesheet" href="cartes.css?v=b19a8023">
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
 <style>
   /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
      Ici : la teinte, les cartes des Cinq Rois, la table, la main rangée. */
@@ -246,10 +246,7 @@
     <h2>♛ Les Cinq Rois</h2>
     <p>Onze manches, de 3 à 13 cartes. Range ta main en brelans et en suites,
        sors avant les autres, et termine la partie avec <b>le moins de points</b>.</p>
-    <h3>Nombre de joueurs</h3>
-    <div class="choice" id="playerChoice"></div>
-    <h3>Niveau des adversaires</h3>
-    <div class="choice" id="levelChoice"></div>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur.</p>
     <div class="actions">
       <button class="primary" id="btnStart">Commencer</button>
       <button id="btnRules2">Voir les règles</button>
@@ -313,7 +310,7 @@
 
 /* =========================================================================
    LES CINQ ROIS — d'après « Five Crowns », publié par Set Enterprises.
-   Un humain contre 1 à 3 adversaires gérés par l'ordinateur.
+   Un humain contre 3 adversaires gérés par l'ordinateur.
    ========================================================================= */
 
 const SUITS = ["E", "C", "T", "P", "K"];            // étoiles, cœurs, trèfles, piques, carreaux
@@ -552,7 +549,7 @@ const isWildIn = (c, wr) => (c.rank === 0 || c.rank === wr ? 1 : 0);
 function newGame(nPlayers) {
   S.players = [{ name: "Toi", ai: false, hand: [], score: 0, rounds: [] }];
   for (let i = 0; i < nPlayers - 1; i++) {
-    S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, hand: [], score: 0, rounds: [] });
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: "sharp", hand: [], score: 0, rounds: [] });
   }
   S.round = 1;
   buildBoard();
@@ -719,8 +716,10 @@ function showScores(over) {
 function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
 
 /* ---------------------------------------------------------------------------
-   Politique « tranquille » : gloutonne. Elle prend la défausse si cela fait
-   baisser ses points tout de suite, et jette la carte qui coûte le plus.
+   Politique simple : gloutonne. Elle prend la défausse si cela fait baisser ses
+   points tout de suite, et jette la carte qui coûte le plus. Les adversaires
+   jouent toujours « sharp » ; celle-ci ne sert plus que de référence au banc
+   d'essai (tests/cinq-rois-bench.js).
    --------------------------------------------------------------------------- */
 const simplePolicy = {
   takeDiscard(p, top) {
@@ -1054,33 +1053,16 @@ function render() {
 }
 
 /* ============================================================== Interface */
-let chosenPlayers = 3;
-let chosenLevel = "sharp";
+/* Toujours quatre joueurs : toi et trois adversaires « sharp ». newGame()
+   reste générique — les tests et le banc d'essai y asseyent d'autres tablées
+   par startGame(n). */
+const PLAYERS = 4;
 
-function buildChoice(host, items, current, onPick) {
-  for (const it of items) {
-    const b = mk("button", it.id === current ? "sel" : null, it.label);
-    b.addEventListener("click", () => {
-      onPick(it.id);
-      [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
-    });
-    host.appendChild(b);
-  }
-}
-
-buildChoice(el("playerChoice"),
-  [2, 3, 4].map((n) => ({ id: n, label: `${n} joueurs` })),
-  chosenPlayers, (id) => { chosenPlayers = id; });
-
-buildChoice(el("levelChoice"), [
-  { id: "simple", label: "Tranquille" },
-  { id: "sharp", label: "Redoutable" },
-], chosenLevel, (id) => { chosenLevel = id; });
-
-el("btnStart").addEventListener("click", () => {
+function startGame(nPlayers = PLAYERS) {
   el("startOverlay").hidden = true;
-  newGame(chosenPlayers);
-});
+  newGame(nPlayers);
+}
+el("btnStart").addEventListener("click", () => startGame());
 el("btnNew").addEventListener("click", () => {
   el("scoreOverlay").hidden = true;
   el("startOverlay").hidden = false;

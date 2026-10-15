@@ -105,8 +105,10 @@ function humanAct() {
 
 /* --------------------------------------------------------- Partie complète */
 async function playGame(nPlayers) {
-  g(`chosenPlayers = ${nPlayers}`);
-  byId.get("btnStart").click();
+  if (nPlayers === 4) byId.get("btnStart").click();   // le chemin du joueur : toujours 4
+  else g("startGame")(nPlayers);
+  ok(S.players.slice(1).every((p) => p.ai && p.policy === "counting"),
+     "les adversaires jouent tous la politique « counting » (Redoutable)");
 
   ok(S.players.length === nPlayers, `partie à ${nPlayers} joueurs`);
   ok(S.players.every((p) => p.grid.length === 12), "12 cartes par joueur");
@@ -182,7 +184,6 @@ function checkRound() {
 
 /* ------------------ Temporisation de révélation et pile « En main » ------ */
 async function revealTest() {
-  g("chosenPlayers = 3");
   byId.get("btnStart").click();
   while (S.phase === "setup") humanAct();
   while (S.current !== 0 || S.phase !== "source") await tick();
@@ -243,8 +244,9 @@ function roundScoreFor(totals, finisher) {
 }
 
 function targetedTests() {
-  g("chosenPlayers = 3");            // les cas ci-dessous fournissent 3 totaux
-  byId.get("btnStart").click();
+  // Les cas ci-dessous fournissent 3 totaux : le moteur reste générique, on y
+  // assied une table de 3 sans passer par l'écran de départ (toujours 4).
+  g("startGame")(3);
 
   // Remélange quand la pioche est vide.
   S.draw = [];
@@ -275,9 +277,10 @@ function targetedTests() {
 
 /* ------------------------------------------------------------------ Main */
 (async () => {
-  for (const n of [2, 3, 4]) {
-    for (let i = 0; i < 4; i++) await playGame(n);
-  }
+  // Le jeu se joue toujours à 4 ; quelques parties à 2 et 3 gardent le moteur
+  // générique honnête (le banc d'essai s'en sert pour ses duels).
+  for (let i = 0; i < 10; i++) await playGame(4);
+  for (const n of [2, 3]) await playGame(n);
   await revealTest();
   targetedTests();
 

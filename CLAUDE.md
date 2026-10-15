@@ -10,16 +10,22 @@ except that the four card games load one shared stylesheet, [cartes.css](cartes.
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
 - [asteroids.html](asteroids.html) — remake of the 1979 Atari arcade game, canvas + vector rendering.
-- [skyjo.html](skyjo.html) — the Magilano card game, DOM/CSS rendering, human vs. 1–3 computer opponents.
-- [uno.html](uno.html) — the Mattel card game, DOM/CSS rendering, human vs. 1–3 computer opponents, house
-  rules toggled on the start screen.
+- [skyjo.html](skyjo.html) — the Magilano card game, DOM/CSS rendering.
+- [uno.html](uno.html) — the Mattel card game, DOM/CSS rendering; format and house rules toggled on the start screen.
 - [cinq-rois.html](cinq-rois.html) — *Les Cinq Rois*, the French edition of Five Crowns (Set Enterprises), DOM/CSS
-  rendering, human vs. 1–3 computer opponents: 11 rounds of rummy with a wild rank that changes every round.
+  rendering: 11 rounds of rummy with a wild rank that changes every round.
 - [trou-du-cul.html](trou-du-cul.html) — the traditional climbing game (a.k.a. Président), rules from the French
-  Wikipedia article plus fixed house rules (54 cards with wild jokers, no variant toggles), DOM/CSS rendering, human
-  vs. 3–5 computer opponents.
+  Wikipedia article plus fixed house rules (54 cards with wild jokers, a long game to 18 points, no options at all),
+  DOM/CSS rendering.
 - [cartes.css](cartes.css) — the card games' shared layout and components; each game keeps its tint, card faces and
   table contents inline.
+
+**The card games are deliberately simple to start**: always **4 players** (you and 3 computer opponents) and **one AI
+level**, the strongest ("Redoutable") — the owner removed the player-count, level and Trou-du-cul length choices.
+Only Uno keeps options (format, house rules). The engines stayed generic: `newGame(n)` still seats 2–6, and
+`startGame(n = PLAYERS)` — what the "Commencer" button calls — lets tests and benches seat other tables. The weaker
+policies Skyjo, Cinq Rois and Trou du cul still contain are **benchmark baselines only**, never dealt to a player; Uno
+had no bench, so its weak policy was deleted.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games' logic independent of each other. The **`nouveau-jeu` skill**
   ([.claude/skills/nouveau-jeu/](.claude/skills/nouveau-jeu/SKILL.md)) holds the full checklist for adding one.
@@ -125,8 +131,8 @@ faces, the contents of its table, its hand. The DOM is the same skeleton everywh
 - **The log is two lines, bottom-aligned, one `<div>` per entry.** Games keep 3 entries; with `<br>`-joined text and
   overflow clipped at the top-left, it was the *newest* line that got cut on phones. `(max-height: 700px)` hides it at
   every width — iPhone SE, and a 768-px laptop screen once the browser bar is gone.
-- **Phones** (`max-width: 560px`): opponents become a grid with one equal column each (Trou du cul overrides it with
-  `--cols`), a lone opponent goes on one row, overlays become bottom-anchored sheets.
+- **Phones** (`max-width: 560px`): the three opponents become a grid with one equal column each, overlays become
+  bottom-anchored sheets.
 
 After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the four links,
 and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
@@ -235,15 +241,17 @@ phone layout was a horizontal rail that cut the third opponent off: re-run the `
 ### Opponent AI
 
 Two interchangeable policies behind one interface — `chooseDiscard(p, top) -> idx | null` and
-`afterDraw(p, v) -> {kind, idx}` — selected per player via `p.policy` from the start screen. `aiTurn()` owns all the
-timing and animation; the policies are pure decisions. **Neither policy may read `c.v` of a face-down cell**, not
-even its own: they get public information only. (An earlier version cheated here.)
+`afterDraw(p, v) -> {kind, idx}` — selected per player via `p.policy`. Every opponent dealt to a player is
+`counting`; `greedy` only plays in the bench. `aiTurn()` owns all the timing and animation; the policies are pure
+decisions. **Neither policy may read `c.v` of a face-down cell**, not even its own: they get public information only.
+(An earlier version cheated here.)
 
-`greedy` ("Tranquille") is the simple one: `bestPlacement()` scores each cell as `costBefore - v`, plus `3 * v` when
-the placement completes a column — a signed bonus, so it correctly *avoids* clearing columns of negative cards.
-Fixed thresholds then decide (`>= 2` to take the discard, `> 0.5` to swap after drawing).
+`greedy` (the bench baseline, "Tranquille" when the level was a choice) is the simple one: `bestPlacement()` scores
+each cell as `costBefore - v`, plus `3 * v` when the placement completes a column — a signed bonus, so it correctly
+*avoids* clearing columns of negative cards. Fixed thresholds then decide (`>= 2` to take the discard, `> 0.5` to swap
+after drawing).
 
-`counting` ("Redoutable") replaces the thresholds with a model:
+`counting` ("Redoutable", the one players meet) replaces the thresholds with a model:
 
 - `refreshUnseen()` recomputes the distribution of cards nobody can see (deck − discard − all face-up cells − held),
   so `unseenEV` is live rather than pinned at 5.07, and `pValue(v)` gives real column-completion odds.
@@ -265,14 +273,16 @@ Any future change to the ending logic must be re-checked in self-play, not just 
 ```
 node tests/skyjo-bench.js 300         # duel + table à 3 contre la politique greedy
 node tests/skyjo-bench.js sweep 300   # compare des réglages de l'objet AI
-node tests/skyjo-bench.js stall 40    # 3 « redoutables » entre elles
+node tests/skyjo-bench.js stall 40    # 4 « redoutables » entre elles, la table du jeu
 ```
 
-The bench seats AI at *every* place (`p.ai = true` on seat 0, flip two of its cards, then `decideStarter()` +
-`beginTurn()` — repeated each round, since `startRound()` hands back to the human seat).
+The bench seats its table with `startGame(n)` and puts AI at *every* place (`p.ai = true` on seat 0, flip two of its
+cards, then `decideStarter()` + `beginTurn()` — repeated each round, since `startRound()` hands back to the human
+seat).
 
 Reference points at the shipped settings, 600 games each: **88 % wins in a 2-player duel** (50 % baseline) and
-**60 % at a 3-player table** (33 % baseline), average round score 17.4 vs 29.6.
+**60 % at a 3-player table** (33 % baseline), average round score 17.4 vs 29.6. Four `counting` players — the table a
+player now always faces — take about 53 turns a round (worst seen 59) and never stall.
 
 Two failure modes to watch, both of which have already happened here:
 
@@ -321,12 +331,12 @@ colour. Only `doChallenge()` may read it. A policy that peeks at it is cheating,
 
 ### Opponent AI
 
-Two interchangeable policies behind one interface — `pick`, `color`, `playDrawn`, `challenge`, `swapTarget` —
-selected per player via `p.policy`. `simple` ("Tranquille") sheds its biggest card and hoards jokers; `sharp`
-("Redoutable") scores each move (`AI` holds the seven tunables) against the next player's hand size, keeps a
-playable colour in reserve, and prices the risk of a contestable +4.
+One policy, `sharp` ("Redoutable"), behind the interface `pick`, `color`, `playDrawn`, `challenge`, `swapTarget`,
+reached through `policyOf(p)` (a `function`, so the test can wrap it). It scores each move (`AI` holds the seven
+tunables) against the next player's hand size, keeps a playable colour in reserve, and prices the risk of a
+contestable +4. The old `simple` policy went with the level choice: Uno has no bench to keep it as a baseline.
 
-**Neither policy may look at another player's hand or the draw order.** They get `hand.length`, the discard, and
+**The policy may not look at another player's hand or the draw order.** They get `hand.length`, the discard, and
 `p.pub` — the last colour each player laid and the colours they had to draw on. The test enforces this: during
 every policy call it swaps the other players' `hand` arrays for a `Proxy` that counts indexed and iterated
 access (`length` stays free) and asserts the count is zero.
@@ -416,11 +426,12 @@ through `says()` — no il/elle, same as Uno.
 
 ### Opponent AI
 
-Interface `takeDiscard(p, top) -> bool` and `discard(p) -> card`, selected by `p.policy`:
+Interface `takeDiscard(p, top) -> bool` and `discard(p) -> card`, selected by `p.policy`. Every opponent dealt to a
+player is `sharp`; `simple` only plays in the bench.
 
-- `simple` ("Tranquille") is greedy on the engine: take the discard iff it strictly lowers the arranged cost,
+- `simple` (the bench baseline) is greedy on the engine: take the discard iff it strictly lowers the arranged cost,
   discard what `arrange(hand, true)` throws.
-- `sharp` ("Redoutable") counts cards. `unseenClasses(p)` is the deck minus its own hand, the whole discard pile,
+- `sharp` ("Redoutable", the one players meet) counts cards. `unseenClasses(p)` is the deck minus its own hand, the whole discard pile,
   and the cards other players took from the discard and still hold (`p.pub.took`, public information). Taking
   the discard must beat the **expected cost of a blind draw** by `AI.margin`. Discarding weighs the immediate cost
   against the expected cost after the next draw (`AI.hope`), over the dead cards only, and penalises cards close
@@ -437,12 +448,12 @@ Neither policy may read another hand or `S.draw`: the test swaps them for counti
 ```
 node tests/cinq-rois-bench.js 300        # duel + table à 3 contre la politique simple
 node tests/cinq-rois-bench.js sweep 150  # compare des réglages de l'objet AI
-node tests/cinq-rois-bench.js stall 40   # 3 « redoutables » entre elles : garde-fou jamais atteint
+node tests/cinq-rois-bench.js stall 40   # 4 « redoutables », la table du jeu : garde-fou jamais atteint
 ```
 
 Reference points at the shipped settings, 300 games each: **76 % wins in a 2-player duel** (50 % baseline) and
-**53 % at a 3-player table** (33 % baseline), average round score 8.1 vs 11.2; three `sharp` players average about
-9 turns per round, worst seen 34, far from `TURN_CAP`. The sweep is noisy at 150 games — compare the average
+**53 % at a 3-player table** (33 % baseline), average round score 8.1 vs 11.2; four `sharp` players — the table a
+player now always faces — average about 10.5 turns per round, worst seen 38, far from `TURN_CAP`. The sweep is noisy at 150 games — compare the average
 score per round, which moves far less than the win rate. `hope` 0.55 beat 0, 0.3 and 0.8 on that measure; `deny`
 is neutral against `simple` (which never exploits the discard pile) and kept for humans. Run `stall` before shipping
 any change to `takeDiscard`.
@@ -466,14 +477,14 @@ leftmost card vanished and the rightmost was cut, and a desktop window of 1000 p
 
 ### Rules as implemented
 
-54 cards (two jokers) dealt equally to 4–6 players; leftovers are shown to everyone and set aside (`S.aside`): 2 at
-four players, 4 at five, none at six. Ranks are stored 3..14 plus **15 for the 2**, so the natural order is just the
+54 cards (two jokers) dealt to the 4 players, 13 each; the 2 leftovers are shown to everyone and set aside (`S.aside`).
+The engine still deals 4–6 (4 aside at five, none at six) for the tests and the bench. Ranks are stored 3..14 plus **15 for the 2**, so the natural order is just the
 number; `strength(rank)` is `rank - 3`, or `15 - rank` during a revolution. A joker is stored as rank `JOKER` (16),
 which is **not its value**: `comboRank(cards)` gives a combination's value — its naturals' rank, or `topRank()` (15,
 or 3 during a revolution) for jokers alone. Never pass a joker's rank to `strength()`.
 
-The rules are fixed — the start screen has no variant toggles any more (the owner chose these house rules; the old
-`VAR` object and its tests are gone). All stated in the in-game rules panel:
+The rules are fixed — the start screen has no option at all, not even the length (the owner chose these house rules
+and the long game; the old `VAR` object and its tests are gone). All stated in the in-game rules panel:
 
 - **Wild jokers**: 9 + joker is a pair of 9s. Jokers alone are worth the top card.
 - **Passing is final** for the trick: `S.passed` is only cleared by `endTrick()`, and `nextTurn()` skips passed
@@ -490,7 +501,8 @@ The rules are fixed — the start screen has no variant toggles any more (the ow
 - **Forbidden finish**: going out on the top value (a 2, or a 3 in a revolution) **or on any combination containing a
   joker** makes you Trou du cul d'office (`p.offense` records the card). Ranking = finishers in order, the last
   holder, then the offenders, the **first** offender at the very bottom. Points are `n - 1 - position`; the game
-  stops at the end of the round where someone reaches `S.target = (n - 1) × 3` (or × 6 for a long game).
+  stops at the end of the round where someone reaches `S.target = (n - 1) × 6`: 18 points at four, six
+  rounds as Président (about 8 rounds in practice). There was a short game at × 3; the owner kept only the long one.
 - **Révolution** (always on) lasts until the end of the round or a counter-revolution by another carré, jokers
   counting. Wikipedia says it "ne dure qu'un tour"; read as one trick it would do almost nothing, so the common
   whole-round reading was chosen.
@@ -520,7 +532,7 @@ table, dimmed, as `S.lastTrick`.
 `play(p, seat) -> cards | null` and `give(p, k) -> cards`. Both policies avoid finishing on a forbidden card:
 `combosOf(hand)` splits a hand into `safe` groups and `banned` ones (top value, jokers alone), and when at most one
 ordinary group is left they lead the banned ones first — they close the trick, so they hand the lead straight back.
-`simple` leads its weakest rank (all copies), follows with the cheapest play that breaks no group and spends no joker,
+`simple` (the bench baseline; every opponent dealt to a player is `sharp`) leads its weakest rank (all copies), follows with the cheapest play that breaks no group and spends no joker,
 and gives back its weakest cards. `sharp` counts cards: `unseen(p, rank)` (also for `JOKER`) is what the others may
 still hold, and a group is **master** when nobody can beat *or equal* it, jokers included — the top value always is.
 It plays its masters before its last group, prices each follow by `strength + breakCost + jokerCost`, **passes above
@@ -529,13 +541,13 @@ the rest of its hand gains from the flip, and never gives a joker back. Neither 
 test enforces it with counting `Proxy`s as in Uno.
 
 ```
-node tests/trou-du-cul-bench.js 300        # 1 redoutable contre 3, 4 et 5 tranquilles
+node tests/trou-du-cul-bench.js 300        # 1 redoutable contre 3 tranquilles, la table du jeu
 node tests/trou-du-cul-bench.js sweep 400  # compare des réglages de l'objet AI (4 joueurs)
 ```
 
-Reference points at the shipped settings, 300 games per table, one `sharp` against `simple` players — win rate
-(baseline 1/n) and average points per round (baseline (n − 1)/2): **4 players 35 % · 1.73, 5 players 25 % · 2.21,
-6 players 20 % · 2.64.**
+Reference points at the shipped settings, 300 games, one `sharp` against three `simple` — win rate (baseline 25 %)
+and average points per round (baseline 1.5): **35 % · 1.73** (measured when 5- and 6-player tables still existed:
+25 % · 2.21 and 20 % · 2.64).
 
 The house rules cut `sharp`'s edge sharply (it was 51–72 % at four players under the old rules). Its old strength
 was passing to save aces and coming back later in the same trick; a final pass removed that. Now `sharp` is
@@ -557,5 +569,4 @@ transparency shows the card underneath. The skipped opponent gets a "sauté" bub
 The shared layout (see *Shared layout*), with the trick as the table: `#table` is a column (trick cards, caption,
 order badge) and `--trick-card` sizes on its height in `cqh`, minus 52 px for the two text lines. An empty trick shows
 a dashed card outline (`#trickCards:empty::before`), like the other games' empty discard, rather than a hole. On
-phones the opponents grid gets `--cols` from `buildBoard()` (up to 3 per row, 2×2 for four opponents) because five
-opponents don't fit in one row, with a 12 px row gap and extra top padding for the bubbles.
+phones `main` gets extra top padding for the opponents' bubbles.

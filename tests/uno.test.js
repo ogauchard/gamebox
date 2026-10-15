@@ -159,21 +159,25 @@ async function humanAct() {
 }
 
 /* --------------------------------------------------------- Partie complète */
+/* Le jeu se joue toujours à 4 (écran de départ) ; les cas ciblés posent parfois
+   une autre tablée, que le moteur sait toujours jouer, par startGame(n). */
 function start(sc) {
-  g(`chosenPlayers = ${sc.n};
-     chosenLevel = ${JSON.stringify(sc.level)};
-     chosenFormat = ${JSON.stringify(sc.format)};
+  const n = sc.n || 4;
+  g(`chosenFormat = ${JSON.stringify(sc.format)};
      chosenVariants.stack = ${!!sc.vars.stack};
      chosenVariants.challenge = ${!!sc.vars.challenge};
      chosenVariants.sevenZero = ${!!sc.vars.sevenZero};`);
-  byId.get("btnStart").click();
+  if (n === 4) byId.get("btnStart").click();
+  else g("startGame")(n);
 }
 
 async function playGame(sc) {
   start(sc);
-  const label = `${sc.n} joueurs / ${sc.level}`;
+  const label = `${sc.format} ${JSON.stringify(sc.vars)}`;
 
-  okOnce(S.players.length === sc.n, `partie à ${sc.n} joueurs`);
+  okOnce(S.players.length === 4, "l'écran de départ lance une partie à 4 joueurs");
+  okOnce(S.players.slice(1).every((p) => p.ai && p.policy === "sharp"),
+         "les trois adversaires jouent la politique « sharp » (Redoutable)");
   okOnce(S.discard.length === 1, "une seule carte ouvre la défausse");
   cov.opens[S.discard[0].kind] = (cov.opens[S.discard[0].kind] || 0) + 1;
   checkConservation("distribution " + label);
@@ -274,7 +278,7 @@ function targetedTests() {
      "barème : les jokers valent 50");
 
   /* -------------------------------------------------- Cartes compatibles */
-  start({ n: 3, level: "sharp", format: "match", vars: {} });
+  start({ format: "match", vars: {} });
   S.pending = 0;
   S.discard = [mkCard("R", "num", 5)];
   S.color = "R";
@@ -301,7 +305,7 @@ function targetedTests() {
      étant neutralisés, c'est le seul moyen que le moteur résolve de bout en
      bout (pénalités comprises) et de façon synchrone. */
   const table = (nb, vars) => {
-    start({ n: nb, level: "sharp", format: "match", vars });
+    start({ n: nb, format: "match", vars });
     for (const p of S.players) p.ai = false;
     S.busy = false; S.pending = 0; S.pendingKind = null; S.wild4 = null;
     S.dir = 1; S.current = 0; S.phase = "play"; S.drawn = null;
@@ -507,19 +511,19 @@ function targetedTests() {
 function openingTests() {
   let wild4 = 0;
   for (let i = 0; i < 150; i++) {
-    start({ n: 3, level: "sharp", format: "match", vars: {} });
+    start({ format: "match", vars: {} });
     if (S.discard[0].kind === "wild4") wild4++;
     cov.opens[S.discard[0].kind] = (cov.opens[S.discard[0].kind] || 0) + 1;
     const dealt = S.players.reduce((t, p) => t + p.hand.length, 0);
     if (S.discard[0].kind !== "draw2") {
-      okOnce(dealt === 21, `7 cartes distribuées à chacun (${dealt} au total)`);
+      okOnce(dealt === 28, `7 cartes distribuées à chacun des 4 joueurs (${dealt} au total)`);
     }
     if (S.discard[0].kind === "skip") {
       okOnce(S.current === 1, "Passe en ouverture : le premier joueur saute son tour");
     }
     if (S.discard[0].kind === "draw2") {
       // Le premier joueur est l'humain : beginTurn() solde la pénalité aussitôt.
-      okOnce(dealt === 23 && S.pending === 0 && S.current === 1,
+      okOnce(dealt === 30 && S.pending === 0 && S.current === 1,
              "+2 en ouverture : le premier joueur pioche 2 cartes et passe son tour");
     }
     if (S.discard[0].kind === "wild") {
@@ -527,7 +531,7 @@ function openingTests() {
              "Joker en ouverture : le premier joueur annonce la couleur");
     }
     if (S.discard[0].kind === "rev") {
-      okOnce(S.dir === -1 && S.current === 2,
+      okOnce(S.dir === -1 && S.current === 3,
              "Sens interdit en ouverture : le sens s'inverse avant le premier tour");
     }
   }
@@ -535,14 +539,15 @@ function openingTests() {
 }
 
 /* ------------------------------------------------------------------ Main */
+// Toujours 4 joueurs et des adversaires « sharp » : seuls le format et les
+// variantes se choisissent encore.
 const scenarios = [
-  { n: 2, level: "sharp", format: "match", vars: {} },
-  { n: 3, level: "simple", format: "match", vars: {} },
-  { n: 4, level: "sharp", format: "match", vars: { stack: true } },
-  { n: 2, level: "sharp", format: "single", vars: { challenge: true } },
-  { n: 3, level: "sharp", format: "single", vars: { sevenZero: true } },
-  { n: 3, level: "sharp", format: "single", vars: { stack: true, challenge: true, sevenZero: true } },
-  { n: 4, level: "simple", format: "single", vars: { stack: true, challenge: true, sevenZero: true } },
+  { format: "match", vars: {} },
+  { format: "match", vars: { stack: true } },
+  { format: "single", vars: { challenge: true } },
+  { format: "single", vars: { sevenZero: true } },
+  { format: "single", vars: { stack: true, challenge: true } },
+  { format: "single", vars: { stack: true, challenge: true, sevenZero: true } },
 ];
 
 (async () => {

@@ -252,9 +252,16 @@ function humanAct() {
   }
 }
 
+/* Toujours 4 joueurs par l'écran de départ, adversaires « sharp ». La politique
+   simple ne sert plus que de référence au banc d'essai : on la fait jouer
+   aussi, pour qu'elle reste légale et honnête. Le premier tour d'IA n'a pas
+   encore consulté sa politique quand on la remplace (il attend son sleep). */
 async function playGame(n, level) {
-  g(`chosenPlayers = ${n}; chosenLevel = ${JSON.stringify(level)};`);
-  byId.get("btnStart").click();
+  if (n === 4) byId.get("btnStart").click();
+  else g("startGame")(n);
+  okOnce(S.players.length === n && S.players.slice(1).every((p) => p.ai && p.policy === "sharp"),
+         "l'écran de départ lance 4 joueurs, adversaires « sharp » (Redoutable)");
+  if (level !== "sharp") S.players.slice(1).forEach((p) => { p.policy = level; });
   let guard = 0;
   while (guard++ < 400000) {
     await tick();
@@ -325,8 +332,7 @@ function targetedTests() {
      chaque tour de façon synchrone. */
   const C = (s) => (s === "JK" ? mkCard(null, 0) : mkCard(s[0], Number(s.slice(1))));
   const table = (n, round) => {
-    g(`chosenPlayers = ${n}`);
-    byId.get("btnStart").click();
+    g("startGame")(n);
     S.round = round;
     S.wildRank = round + 2;
     for (const p of S.players) { p.ai = false; p.pub = { took: new Map() }; }
@@ -482,7 +488,7 @@ function targetedTests() {
 (async () => {
   const t0 = Date.now();
   engineTests();
-  for (const [n, level] of [[2, "sharp"], [3, "simple"], [4, "sharp"], [2, "simple"], [3, "sharp"], [4, "simple"]]) {
+  for (const [n, level] of [[4, "sharp"], [4, "sharp"], [4, "sharp"], [4, "sharp"], [4, "simple"], [2, "sharp"]]) {
     await playGame(n, level);
   }
   targetedTests();

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Skyjo</title>
-<link rel="stylesheet" href="cartes.css?v=b19a8023">
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
 <style>
   /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
      Ici : la teinte, les grilles et les cartes de Skyjo, la taille des piles. */
@@ -172,10 +172,7 @@
     <h2>SKYJO</h2>
     <p>Le but est d'avoir le total de points le plus bas. La partie s'arrête dès qu'un joueur
        atteint <b>100 points</b> ou plus : le joueur avec le total le plus bas l'emporte.</p>
-    <h3>Nombre de joueurs</h3>
-    <div class="choice" id="playerChoice"></div>
-    <h3>Niveau des adversaires</h3>
-    <div class="choice" id="levelChoice"></div>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur.</p>
     <div class="actions">
       <button class="primary" id="btnStart">Commencer</button>
       <button id="btnRules2">Voir les règles</button>
@@ -226,7 +223,7 @@
 
 /* =========================================================================
    SKYJO — d'après le jeu de Magilano (2015)
-   Un humain contre 1 à 3 adversaires gérés par l'ordinateur.
+   Un humain contre 3 adversaires gérés par l'ordinateur.
    ========================================================================= */
 
 const ROWS = 3, COLS = 4, CELLS = ROWS * COLS;
@@ -323,7 +320,7 @@ function log(msg) {
 function newGame(nPlayers) {
   S.players = [{ name: "Toi", ai: false, grid: [], total: 0, rounds: [] }];
   for (let i = 0; i < nPlayers - 1; i++) {
-    S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, grid: [], total: 0, rounds: [] });
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: "counting", grid: [], total: 0, rounds: [] });
   }
   S.round = 1;
   S.dealer = 0;
@@ -511,6 +508,9 @@ function bestFlip(p) {
   return hidden[Math.floor(Math.random() * hidden.length)];
 }
 
+/* Politique simple (« Tranquille » quand le niveau se choisissait). Les
+   adversaires jouent toujours « counting » ; celle-ci ne sert plus que de
+   référence au banc d'essai (tests/skyjo-bench.js). */
 const greedyPolicy = {
   chooseDiscard(p, top) {
     // Prendre la défausse coûte le droit de piocher : il faut un gain net réel.
@@ -911,38 +911,20 @@ function render() {
 function setStatus(html) { el("status").innerHTML = html; }
 
 /* ============================================================== Interface */
-let chosenPlayers = 3;
-let chosenLevel = "counting";
+/* Toujours quatre joueurs : toi et trois adversaires « counting ». newGame()
+   reste générique — les tests et le banc d'essai y asseyent d'autres tablées
+   par startGame(n). */
+const PLAYERS = 4;
 
-function buildChoice(host, items, current, onPick) {
-  for (const it of items) {
-    const b = document.createElement("button");
-    b.textContent = it.label;
-    b.classList.toggle("sel", it.id === current);
-    b.addEventListener("click", () => {
-      onPick(it.id);
-      [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
-    });
-    host.appendChild(b);
-  }
+function startGame(nPlayers = PLAYERS) {
+  el("startOverlay").hidden = true;
+  newGame(nPlayers);
 }
-
-buildChoice(el("playerChoice"),
-  [2, 3, 4].map((n) => ({ id: n, label: `${n} joueurs` })),
-  chosenPlayers, (id) => { chosenPlayers = id; });
-
-buildChoice(el("levelChoice"), [
-  { id: "greedy", label: "Tranquille" },
-  { id: "counting", label: "Redoutable" },
-], chosenLevel, (id) => { chosenLevel = id; });
 
 el("drawSlot").addEventListener("click", onDrawClick);
 el("discardSlot").addEventListener("click", onDiscardClick);
 
-el("btnStart").addEventListener("click", () => {
-  el("startOverlay").hidden = true;
-  newGame(chosenPlayers);
-});
+el("btnStart").addEventListener("click", () => startGame());
 el("btnNew").addEventListener("click", () => {
   el("scoreOverlay").hidden = true;
   el("startOverlay").hidden = false;

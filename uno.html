@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Uno</title>
-<link rel="stylesheet" href="cartes.css?v=b19a8023">
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
 <style>
   /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
      Ici : la teinte, les cartes d'Uno, la table et la main. */
@@ -255,10 +255,7 @@
     <h2>UNO</h2>
     <p>Débarrasse-toi de tes cartes avant les autres. Chaque carte laissée dans la main
        des perdants rapporte des points au gagnant de la manche.</p>
-    <h3>Nombre de joueurs</h3>
-    <div class="choice" id="playerChoice"></div>
-    <h3>Niveau des adversaires</h3>
-    <div class="choice" id="levelChoice"></div>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur.</p>
     <h3>Format</h3>
     <div class="choice" id="formatChoice"></div>
     <h3>Variantes</h3>
@@ -284,7 +281,7 @@
     <h3>Cartes spéciales</h3>
     <ul>
       <li><b>⊘ Passe</b> — le joueur suivant saute son tour.</li>
-      <li><b>⇄ Sens interdit</b> — le sens du jeu s'inverse. À deux joueurs, elle fait passer le tour.</li>
+      <li><b>⇄ Sens interdit</b> — le sens du jeu s'inverse.</li>
       <li><b>+2</b> — le suivant pioche 2 cartes et passe son tour.</li>
       <li><b>Joker</b> — tu choisis la couleur qui continue.</li>
       <li><b>Joker +4</b> — tu choisis la couleur, et le suivant pioche 4 cartes et passe son tour.</li>
@@ -343,7 +340,7 @@
 
 /* =========================================================================
    UNO — d'après le jeu de Merle Robbins (1971), édité par Mattel.
-   Un humain contre 1 à 3 adversaires gérés par l'ordinateur.
+   Un humain contre 3 adversaires gérés par l'ordinateur.
 
    Variantes et format se choisissent sur l'écran de démarrage ; VAR fige les
    règles retenues pour la partie en cours.
@@ -473,7 +470,7 @@ const legalMoves = (p) => p.hand.filter(canPlay);
 function newGame(nPlayers) {
   S.players = [{ name: "Toi", ai: false, hand: [], score: 0, rounds: [] }];
   for (let i = 0; i < nPlayers - 1; i++) {
-    S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, hand: [], score: 0, rounds: [] });
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: "sharp", hand: [], score: 0, rounds: [] });
   }
   S.round = 1;
   buildBoard();
@@ -818,30 +815,8 @@ const fewestCards = (pi) => {
 };
 
 /* ---------------------------------------------------------------------------
-   Politique « tranquille » : se débarrasse des grosses cartes, garde ses jokers
-   pour la fin, et ne réfléchit ni au blocage ni au bluff.
-   --------------------------------------------------------------------------- */
-const simplePolicy = {
-  pick(p, legal) {
-    // Elle ne bluffe jamais : si la contestation est en jeu, elle s'interdit le
-    // +4 tant qu'elle a la couleur en cours.
-    let pool = legal;
-    if (VAR.challenge && p.hand.some((c) => c.color === S.color)) {
-      const clean = legal.filter((c) => c.kind !== "wild4");
-      if (clean.length) pool = clean;
-    }
-    const plain = pool.filter((c) => !isJoker(c));
-    const from = plain.length ? plain : pool;
-    return from.reduce((a, b) => (cardValue(b) > cardValue(a) ? b : a));
-  },
-  color(p) { return dominantColor(p.hand); },
-  playDrawn() { return true; },
-  challenge() { return false; },
-  swapTarget(pi) { return fewestCards(pi); },
-};
-
-/* ---------------------------------------------------------------------------
-   Politique « redoutable ». Trois différences de fond :
+   Politique « redoutable », la seule (le niveau ne se choisit plus). Trois
+   différences de fond avec une politique gloutonne :
      1. elle note chaque coup au lieu de suivre un ordre de préférence figé ;
      2. elle surveille la main du joueur suivant : bloquer quelqu'un à deux
         cartes vaut plus que défausser un gros chiffre ;
@@ -932,7 +907,7 @@ const sharpPolicy = {
   swapTarget(pi) { return fewestCards(pi); },
 };
 
-const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+const POLICIES = { sharp: sharpPolicy };
 
 /* ------------------------------------------------------------ Tour d'une IA */
 async function aiTurn() {
@@ -1272,8 +1247,9 @@ function render() {
 }
 
 /* ============================================================== Interface */
-let chosenPlayers = 3;
-let chosenLevel = "sharp";
+/* Toujours quatre joueurs : toi et trois adversaires « sharp ». newGame()
+   reste générique — les tests y asseyent d'autres tablées par startGame(n). */
+const PLAYERS = 4;
 let chosenFormat = "match";
 const chosenVariants = { stack: false, challenge: false, sevenZero: false };
 
@@ -1299,15 +1275,6 @@ function buildToggles(host, items, state) {
   }
 }
 
-buildChoice(el("playerChoice"),
-  [2, 3, 4].map((n) => ({ id: n, label: `${n} joueurs` })),
-  chosenPlayers, (id) => { chosenPlayers = id; });
-
-buildChoice(el("levelChoice"), [
-  { id: "simple", label: "Tranquille" },
-  { id: "sharp", label: "Redoutable" },
-], chosenLevel, (id) => { chosenLevel = id; });
-
 buildChoice(el("formatChoice"), [
   { id: "match", label: "Match en 500 points" },
   { id: "single", label: "Manche unique" },
@@ -1327,11 +1294,12 @@ for (const c of COLORS) {
   el("colorGrid").appendChild(b);
 }
 
-el("btnStart").addEventListener("click", () => {
+function startGame(nPlayers = PLAYERS) {
   el("startOverlay").hidden = true;
   Object.assign(VAR, chosenVariants, { match: chosenFormat === "match" });
-  newGame(chosenPlayers);
-});
+  newGame(nPlayers);
+}
+el("btnStart").addEventListener("click", () => startGame());
 el("btnNew").addEventListener("click", () => {
   el("scoreOverlay").hidden = true;
   el("colorOverlay").hidden = true;

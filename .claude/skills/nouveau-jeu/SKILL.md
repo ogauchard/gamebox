@@ -1,6 +1,6 @@
 ---
 name: nouveau-jeu
-description: Ajoute un nouveau jeu à gamebox de bout en bout — page HTML autonome en français, adversaires « Tranquille » et « Redoutable », suite de tests Node, banc d'essai de l'IA, mise en page mobile, vignette sur index.html et section dans CLAUDE.md. À utiliser dès que l'utilisateur veut ajouter, créer, porter ou « faire » un jeu (de cartes, de plateau, d'arcade) dans ce dépôt, même s'il ne nomme qu'un jeu (« et si on faisait le Tarot ? », « ajoute le 8 américain »).
+description: Ajoute un nouveau jeu à gamebox de bout en bout — page HTML autonome en français, toujours 4 joueurs contre une IA « Redoutable », suite de tests Node, banc d'essai de l'IA, mise en page mobile, vignette sur index.html et section dans CLAUDE.md. À utiliser dès que l'utilisateur veut ajouter, créer, porter ou « faire » un jeu (de cartes, de plateau, d'arcade) dans ce dépôt, même s'il ne nomme qu'un jeu (« et si on faisait le Tarot ? », « ajoute le 8 américain »).
 ---
 
 # Ajouter un jeu à gamebox
@@ -21,11 +21,13 @@ Les règles d'un jeu traditionnel ont des variantes, et chaque jeu du dépôt a 
 Ces décisions appartiennent à l'utilisateur : poser les questions ensemble (AskUserQuestion), avec une recommandation.
 
 - Source des règles (règle officielle, article Wikipédia FR…) et nom affiché en français.
-- Nombre de joueurs (humain contre 1–3, ou 3–5, adversaires), format (manche unique, objectif de points, nombre de
-  manches).
+- Format (manche unique, objectif de points, nombre de manches) — en en choisissant **un** : l'auteur veut des jeux
+  simples à lancer. Le nombre de joueurs n'est pas une question : c'est toujours **4** (toi et 3 adversaires), avec
+  un seul niveau d'IA, le plus fort. Si les règles officielles ne se jouent pas à 4, le signaler.
 - Chaque point ambigu, avec la lecture proposée et pourquoi.
-- Variantes au choix sur l'écran de départ, ou règles maison fixes ? (Trou du cul a fini en règles fixes : l'auteur
-  du dépôt a préféré moins de boutons.)
+- Variantes au choix sur l'écran de départ, ou règles maison fixes ? Par défaut, fixes : l'auteur a retiré les choix
+  de nombre de joueurs, de niveau et de durée de tous les jeux de cartes, et le Trou du cul n'a plus aucune option.
+  Seul Uno garde son format et ses variantes.
 
 Chaque lecture retenue va **dans le panneau des règles du jeu** et dans la section CLAUDE.md : c'est ce qui permet
 plus tard de distinguer un bug d'un choix.
@@ -61,8 +63,11 @@ identiques : la feuille commune, le harnais, le banc d'essai et le skill `captur
   qui disparaisse.
 - **Ton tour** : `render()` bascule `#me.active` avec le même test que l'anneau `.active` d'un adversaire ; « Toi »
   passe alors à la couleur d'accent.
-- **Démarrage** : `let chosenPlayers`, `chosenLevel` (`"simple"`/`"sharp"`, libellés « Tranquille »/« Redoutable »),
-  écran construit par `buildChoice()`.
+- **Démarrage** : `const PLAYERS = 4` et `function startGame(nPlayers = PLAYERS)` (masque l'écran de départ, appelle
+  `newGame(nPlayers)`), que le bouton « Commencer » appelle sans argument. `newGame(n)` reste générique : les tests et
+  le banc d'essai y asseyent d'autres tablées. Les adversaires reçoivent `policy: "sharp"`. L'écran de départ
+  présente le jeu, dit « Tu joues contre trois adversaires », et n'offre de choix (`buildChoice()`) que si une option
+  a été retenue à l'étape 1.
 - **Noms de premier niveau** : ne jamais déclarer `top`, `name`, `length`, `status`, `parent`, `self`, `origin`… —
   la liste complète est `WINDOW_GLOBALS` dans `tests/harness.js`. Dans `node:vm` ça passe ; dans un navigateur, le
   script entier ne se parse pas et la page est morte.
@@ -91,11 +96,14 @@ petites et grosses mains) : rien ne doit défiler.
 
 ## 3. Les adversaires
 
-Deux politiques derrière une même interface, choisies par `p.policy` via `policyOf(p)` et un objet `POLICIES` :
+Les joueurs n'affrontent qu'**une** politique, mais il en faut deux, derrière une même interface, choisies par
+`p.policy` via `policyOf(p)` (une `function`, que le test enveloppe) et un objet `POLICIES` :
 
-- `simple` (« Tranquille ») : glouton et lisible.
-- `sharp` (« Redoutable ») : compte les cartes à partir de l'information publique uniquement ; ses réglages dans un
-  objet `const AI = { … }` commenté, ajustés par le banc d'essai et non à l'œil.
+- `sharp` (« Redoutable ») : la seule qu'on distribue aux adversaires. Elle compte les cartes à partir de
+  l'information publique uniquement ; ses réglages dans un objet `const AI = { … }` commenté, ajustés par le banc
+  d'essai et non à l'œil.
+- `simple` : gloutonne et lisible, **référence du banc d'essai uniquement** — sans elle, impossible de mesurer si
+  `sharp` progresse. Le dire en commentaire au-dessus d'elle. (Uno, sans banc, n'en a plus.)
 
 Les politiques sont des décisions pures ; `aiTurn()` gère le temps et l'animation. **Aucune politique ne lit la main
 d'un autre joueur, la pioche, ni une carte face cachée — même la sienne.** Une version de Skyjo trichait ainsi ; le
@@ -111,14 +119,16 @@ et pourquoi), soit il a un garde-fou du type `TURN_CAP` que le banc ne doit jama
 
 1. Dans `tests/harness.js` : `const loadX = () => loadDomGame("x.html");` et l'ajouter aux exports.
 2. Créer `tests/<jeu>.test.js` sur le modèle de `tests/trou-du-cul.test.js`, en deux parties :
-   - **Parties complètes** pour chaque nombre de joueurs et chaque niveau : le siège 0 joue au hasard parmi les coups
+   - **Parties complètes** à 4 joueurs par le bouton « Commencer » (vérifier : 4 joueurs, adversaires `sharp`), plus
+     quelques-unes avec `simple` (politique remplacée juste après le clic) pour garder la référence du banc honnête,
+     et éventuellement une autre tablée par `startGame(n)` si le banc s'en sert : le siège 0 joue au hasard parmi les coups
      légaux via les gestionnaires de clic (cartes adressées par `uid`, pas par nœud DOM), les autres normalement. Des
      invariants vérifiés à chaque coup en enveloppant les fonctions de premier niveau (`doPlay = function … { check;
      return _doPlay(…) }`) : conservation du paquet (compter aussi les cartes « en main » ou écartées), légalité de
      chaque coup *au moment où il est joué*, bon joueur, fin de manche et scores. Un garde-fou de boucle signale une
      partie qui ne termine pas.
-   - **Cas ciblés synchrones** : `aiTurn = async function () {};`, état posé à la main, une assertion par règle et par
-     lecture ambiguë choisie à l'étape 1.
+   - **Cas ciblés synchrones** : `aiTurn = async function () {};`, table posée par `startGame(n)`, état posé à la main,
+     une assertion par règle et par lecture ambiguë choisie à l'étape 1.
 3. **Anti-triche** : envelopper `policyOf` pour que, pendant chaque appel de politique, les mains des autres joueurs
    (et la pioche si elle n'est pas publique) soient des `Proxy` qui comptent tout accès par indice ou par itération ;
    `length` reste libre. Copier le bloc de `tests/trou-du-cul.test.js` (chercher `const _policyOf = policyOf`) et
@@ -134,12 +144,14 @@ déclenche immédiatement, donc une partie entière tourne en millisecondes.
 ## 5. Le banc d'essai
 
 `tests/<jeu>-bench.js` sur le modèle de `tests/trou-du-cul-bench.js` (ou `cinq-rois-bench.js` pour le mode `stall`) :
-toutes les places tenues par l'IA (`p.ai = true` sur le siège 0, relancer le tour s'il commence), puis trois modes :
+tables posées par `startGame(n)`, toutes les places tenues par l'IA (`p.ai = true` sur le siège 0, relancer le tour
+s'il commence), puis trois modes :
 
-- par défaut : un `sharp` contre des `simple`, taux de victoire (référence 1/n) et score moyen par manche ;
+- par défaut : un `sharp` contre trois `simple` (la table du jeu), taux de victoire (référence 25 %) et score moyen
+  par manche ;
 - `sweep` : compare des réglages de l'objet `AI` — juger sur le score moyen par manche, bien moins bruité que le taux
   de victoire ;
-- `stall` : uniquement des `sharp`, doit rapporter zéro partie bloquée.
+- `stall` : quatre `sharp`, la table que le joueur affronte vraiment ; doit rapporter zéro partie bloquée.
 
 Ce n'est pas un test : il ne va pas dans `run-all.js`. Noter les chiffres obtenus (nombre de parties, victoires,
 score moyen) : ils vont dans CLAUDE.md et dans le message de commit.
@@ -170,11 +182,11 @@ dans le style du dépôt :
 ```
 <Nom du jeu> : nouveau jeu, IA et suite de tests
 
-<Le jeu en deux ou trois phrases : source des règles, joueurs, format,
-lectures notables.>
+<Le jeu en deux ou trois phrases : source des règles, format, lectures
+notables.>
 
-Deux adversaires : « Tranquille » <…>, « Redoutable » qui <…> (<x> %
-de victoires à <n> joueurs contre le premier sur <N> parties).
+Trois adversaires « Redoutable » qui <…> (<x> % de victoires à 4 joueurs
+contre la politique de référence sur <N> parties).
 
 Page d'accueil : <ce qui a changé dans la grille>.
 ```

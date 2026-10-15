@@ -2,7 +2,7 @@
  *
  *   node tests/cinq-rois-bench.js [n]          duel + table à 3, n parties chacun
  *   node tests/cinq-rois-bench.js sweep [n]    compare des réglages de l'objet AI
- *   node tests/cinq-rois-bench.js stall [n]    3 « redoutables » entre elles
+ *   node tests/cinq-rois-bench.js stall [n]    4 « redoutables » entre elles, la table du jeu
  *
  * Le mode `stall` vérifie qu'une table d'IA identiques termine ses manches
  * bien avant le garde-fou TURN_CAP : prendre la défausse sans jamais piocher
@@ -27,8 +27,7 @@ function openRound(policies) {
 
 let capped = 0;
 async function playGame(policies) {
-  g(`chosenPlayers = ${policies.length}`);
-  byId.get("btnStart").click();
+  g("startGame")(policies.length);
   openRound(policies);
 
   let guard = 0;
@@ -121,10 +120,10 @@ async function stall(N) {
   g(`globalThis._turns = [];
      const _end = endRound; endRound = function () { globalThis._turns.push(S.roundTurns); _end(); };`);
   for (let i = 0; i < N; i++) {
-    await playGame(["sharp", "sharp", "sharp"]);
+    await playGame(["sharp", "sharp", "sharp", "sharp"]);
   }
   for (const t of g("globalThis._turns")) { rounds++; turns += t; worst = Math.max(worst, t); }
-  console.log(`\n=== 3 redoutables (${N} parties) ===`);
+  console.log(`\n=== 4 redoutables (${N} parties) ===`);
   console.log(`${(turns / rounds).toFixed(1)} tours/manche · pire manche ${worst} tours`
     + ` · garde-fou atteint ${capped}/${rounds} (limite ${TURN_CAP})`);
   if (capped) process.exitCode = 1;

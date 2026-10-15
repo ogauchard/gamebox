@@ -1,6 +1,6 @@
 /* Trou du cul — banc d'essai des politiques d'adversaire.
  *
- *   node tests/trou-du-cul-bench.js [n]          1 redoutable contre 3, 4 et 5 tranquilles
+ *   node tests/trou-du-cul-bench.js [n]          1 redoutable contre 3 tranquilles (la table du jeu)
  *   node tests/trou-du-cul-bench.js sweep [n]    compare des réglages de l'objet AI
  *
  * Le rôle d'une manche dépend beaucoup des échanges de la précédente : un
@@ -24,8 +24,7 @@ function openRound(policies) {
 }
 
 async function playGame(policies) {
-  g(`chosenPlayers = ${policies.length}; chosenFormat = "long";`);
-  byId.get("btnStart").click();
+  g("startGame")(policies.length);
   openRound(policies);
   let guard = 0;
   while (guard++ < 400000) {
@@ -65,7 +64,7 @@ async function table(n, N) {
 
 async function duel(N) {
   console.log(`\n=== 1 redoutable contre des tranquilles (${N} parties par table) ===`);
-  for (const n of [4, 5, 6]) {
+  for (const n of [4]) {
     const r = await table(n, N);
     console.log(`${n} joueurs : victoires ${r.win.toFixed(1).padStart(5)} % (${(100 / n).toFixed(0)} % attendus)`
       + ` · points par manche ${r.sharp.toFixed(2)} contre ${r.simple.toFixed(2)} (${((n - 1) / 2).toFixed(1)} en moyenne)`);

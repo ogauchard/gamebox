@@ -163,10 +163,16 @@ function humanAct() {
   onPlayClick();
 }
 
+/* Toujours 4 joueurs par l'écran de départ, adversaires « sharp », partie en
+   18 points. La politique simple ne sert plus que de référence au banc
+   d'essai : on la fait jouer aussi, pour qu'elle reste légale et honnête. Le
+   premier tour d'IA n'a pas encore consulté sa politique quand on la remplace. */
 async function playGame(n, level) {
-  g(`chosenPlayers = ${n}; chosenLevel = ${JSON.stringify(level)}; chosenFormat = "short";`);
   g("globalThis._rounds = []");
   byId.get("btnStart").click();
+  okOnce(S.players.length === 4 && S.players.slice(1).every((p) => p.ai && p.policy === "sharp"),
+         "l'écran de départ lance 4 joueurs, adversaires « sharp » (Redoutable)");
+  if (level !== "sharp") S.players.slice(1).forEach((p) => { p.policy = level; });
   let guard = 0;
   while (guard++ < 300000) {
     await tick();
@@ -238,7 +244,7 @@ function checkRound(n) {
 
   const over = S.players.some((p) => p.score >= S.target);
   ok(!!byId.get("btnNext").dataset.over === over, "la partie s'arrête dès qu'un joueur atteint l'objectif");
-  ok(S.target === (n - 1) * 3, "objectif proportionnel au nombre de joueurs");
+  ok(S.target === 18, "partie longue : objectif de 18 points à 4 joueurs");
   ok(g("globalThis._peeks") === 0, "aucune IA ne lit la main d'un autre joueur");
 }
 
@@ -259,8 +265,7 @@ function targetedTests() {
      jouent par doPlay/doPass. Tous humains : rien ne part en asynchrone. */
   const C = (spec) => (spec === "JK" ? g("mkJoker()") : mkCard(spec.slice(-1), Number(spec.slice(0, -1))));  // "9P", "15C" (le 2), "JK"
   const table = (n, hands) => {
-    g(`chosenPlayers = ${n};`);
-    byId.get("btnStart").click();
+    g("startGame")(n);                 // le moteur sait toujours jouer à 5 ou 6
     byId.get("scoreOverlay").hidden = true;
     S.players.forEach((p, i) => { p.ai = false; p.role = null; p.offense = null; p.hand = hands[i].map(C); });
     S.played = []; S.aside = [];
@@ -536,8 +541,8 @@ function targetedTests() {
 /* ------------------------------------------------------------------ Main */
 (async () => {
   const t0 = Date.now();
-  const scenarios = [[4, "sharp"], [4, "simple"], [5, "sharp"], [5, "simple"], [6, "sharp"], [6, "simple"]];
-  for (const [n, level] of scenarios) for (let i = 0; i < 5; i++) await playGame(n, level);
+  for (let i = 0; i < 12; i++) await playGame(4, "sharp");
+  for (let i = 0; i < 4; i++) await playGame(4, "simple");
   Object.assign(cov, g("globalThis._cov"));
   targetedTests();
   console.log("Couverture :", JSON.stringify(cov), `(${((Date.now() - t0) / 1000).toFixed(1)} s)`);

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Trou du cul</title>
-<link rel="stylesheet" href="cartes.css?v=b19a8023">
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
 <style>
   /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
      Ici : la teinte, les cartes, les rôles, le pli au centre et la main. */
@@ -148,13 +148,6 @@
   @media (max-width: 560px) {
     main { padding-top: 12px; }                   /* place pour les bulles de la première rangée */
 
-    /* Jusqu'à cinq adversaires : --cols (posé par le rendu) fixe la grille,
-       3 au plus par rangée ; 12px entre rangées pour les bulles. */
-    #opponents {
-      grid-auto-flow: row;
-      grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
-      gap: 12px 6px;
-    }
     #opponents .player { --mini-card: clamp(12px, 3.6vw, 17px); padding: 5px 7px 6px; }
     #opponents .player .name { margin-bottom: 3px; }
     #opponents .player .name .tag { order: 2; }
@@ -210,12 +203,8 @@
     <h2>Trou du cul</h2>
     <p>Débarrasse-toi de tes cartes le premier pour devenir <b>Président</b>. Le dernier est
        le <b>Trou du cul</b> : à la manche suivante, il donne ses meilleures cartes au Président.</p>
-    <h3>Nombre de joueurs</h3>
-    <div class="choice" id="playerChoice"></div>
-    <h3>Niveau des adversaires</h3>
-    <div class="choice" id="levelChoice"></div>
-    <h3>Durée</h3>
-    <div class="choice" id="formatChoice"></div>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur. La partie s'arrête à la
+       fin de la manche où quelqu'un atteint <b>18 points</b>.</p>
     <p class="hint">Jeu de 54 cartes avec jokers, révolution et même valeur : le détail est dans les règles.</p>
     <div class="actions">
       <button class="primary" id="btnStart">Commencer</button>
@@ -228,8 +217,8 @@
 <div class="overlay" id="rulesOverlay" hidden>
   <div class="sheet">
     <h2>Règles</h2>
-    <p>Un jeu de <b>54 cartes</b>, les deux jokers compris, est distribué également entre 4 à 6
-       joueurs ; les cartes en trop sont montrées à tous et mises de côté.</p>
+    <p>Un jeu de <b>54 cartes</b>, les deux jokers compris, est distribué entre les 4 joueurs :
+       <b>13 cartes</b> chacun. Les 2 cartes en trop sont montrées à tous et mises de côté.</p>
     <h3>L'ordre des cartes</h3>
     <p>Du plus faible au plus fort : <b>3, 4, 5, 6, 7, 8, 9, 10, Valet, Dame, Roi, As, 2</b>.
        Les couleurs ne comptent pas.</p>
@@ -256,7 +245,7 @@
     <h3>Fin de manche et rôles</h3>
     <p>Le premier à se débarrasser de ses cartes devient <b>Président</b>, le deuxième
        <b>Vice-président</b> ; l'avant-dernier est <b>Vice-trou du cul</b> et le dernier,
-       <b>Trou du cul</b>. À 5 ou 6 joueurs, ceux du milieu sont <b>Neutres</b>.</p>
+       <b>Trou du cul</b>.</p>
     <p><b>Interdit de finir</b> sur un 2 (sur un 3 pendant une révolution) ni sur une combinaison
        qui contient un joker : qui le fait devient <b>Trou du cul d'office</b>, même sorti le
        premier.</p>
@@ -266,14 +255,13 @@
           qui lui en rend <b>2 de son choix</b>.</li>
       <li>Le Vice-trou du cul donne sa <b>meilleure carte</b> au Vice-président, qui lui en rend
           <b>une de son choix</b>.</li>
-      <li>Les Neutres n'échangent rien.</li>
     </ul>
     <p>La première manche est ouverte par le joueur qui a la <b>Dame de cœur</b> (« Dame de cœur,
        à toi l'honneur ! ») ; les suivantes, par le <b>Trou du cul</b>.</p>
     <h3>Les points</h3>
-    <p>À chaque manche, le Président marque autant de points qu'il y a d'adversaires, le suivant un de
-       moins, et ainsi de suite jusqu'au Trou du cul, qui marque 0. La partie s'arrête à la fin de la
-       manche où quelqu'un atteint l'objectif ; le plus haut total gagne.</p>
+    <p>À chaque manche, le Président marque <b>3 points</b>, le Vice-président 2, le Vice-trou du cul
+       1 et le Trou du cul 0. La partie s'arrête à la fin de la manche où quelqu'un atteint
+       <b>18 points</b> ; le plus haut total gagne.</p>
     <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
   </div>
 </div>
@@ -294,7 +282,7 @@
 
 /* =========================================================================
    TROU DU CUL — jeu de défausse traditionnel (aussi appelé Président).
-   Un humain contre 3 à 5 adversaires gérés par l'ordinateur.
+   Un humain contre 3 adversaires gérés par l'ordinateur.
 
    Règles d'après l'article de Wikipédia « Trou du cul (jeu) », avec des
    choix maison fixes : jeu de 54 cartes à jokers libres, révolution, même
@@ -475,10 +463,11 @@ function legalPlays(seat) {
 function newGame(nPlayers) {
   S.players = [{ name: "Toi", ai: false, hand: [], score: 0, rounds: [], role: null }];
   for (let i = 0; i < nPlayers - 1; i++) {
-    S.players.push({ name: AI_NAMES[i], ai: true, policy: chosenLevel, hand: [], score: 0, rounds: [], role: null });
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: "sharp", hand: [], score: 0, rounds: [], role: null });
   }
   S.round = 1;
-  S.target = (nPlayers - 1) * (chosenFormat === "long" ? 6 : 3);
+  // Partie longue : six manches gagnées comme Président, 18 points à 4 joueurs.
+  S.target = (nPlayers - 1) * 6;
   buildBoard();
   startRound();
 }
@@ -750,10 +739,11 @@ function combosOf(hand) {
 }
 
 /* ---------------------------------------------------------------------------
-   Politique « tranquille » : ouvre avec sa plus petite valeur (toutes ses
-   cartes de cette valeur), monte au plus juste sans casser de paire ni
-   dépenser de joker si elle peut, et rend ses plus petites cartes. Elle
-   évite seulement de finir sur une carte interdite.
+   Politique simple : ouvre avec sa plus petite valeur (toutes ses cartes de
+   cette valeur), monte au plus juste sans casser de paire ni dépenser de
+   joker si elle peut, et rend ses plus petites cartes. Elle évite seulement de
+   finir sur une carte interdite. Les adversaires jouent toujours « sharp » ;
+   celle-ci ne sert plus que de référence au banc d'essai.
    --------------------------------------------------------------------------- */
 const simplePolicy = {
   play(p, seat) {
@@ -1003,8 +993,6 @@ const roleBadge = (role) => mk("span", "role r-" + role, ROLE_NAME[role]);
 function buildBoard() {
   const host = el("opponents");
   host.innerHTML = "";
-  const opp = nplayers() - 1;
-  host.style.setProperty("--cols", opp <= 3 ? opp : opp === 4 ? 2 : 3);
   S.players.forEach((p, pi) => {
     if (pi === 0) return;
     const box = mk("div", "player");
@@ -1172,39 +1160,16 @@ function render() {
 }
 
 /* ============================================================== Interface */
-let chosenPlayers = 4;
-let chosenLevel = "sharp";
-let chosenFormat = "short";
+/* Toujours quatre joueurs : toi et trois adversaires « sharp », partie en
+   18 points. newGame() reste générique — les tests et le banc d'essai y
+   asseyent d'autres tablées (4 à 6) par startGame(n). */
+const PLAYERS = 4;
 
-function buildChoice(host, items, current, onPick) {
-  for (const it of items) {
-    const b = mk("button", it.id === current ? "sel" : null, it.label);
-    b.addEventListener("click", () => {
-      onPick(it.id);
-      [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
-    });
-    host.appendChild(b);
-  }
-}
-
-buildChoice(el("playerChoice"),
-  [4, 5, 6].map((n) => ({ id: n, label: `${n} joueurs` })),
-  chosenPlayers, (id) => { chosenPlayers = id; });
-
-buildChoice(el("levelChoice"), [
-  { id: "simple", label: "Tranquille" },
-  { id: "sharp", label: "Redoutable" },
-], chosenLevel, (id) => { chosenLevel = id; });
-
-buildChoice(el("formatChoice"), [
-  { id: "short", label: "Partie courte" },
-  { id: "long", label: "Partie longue" },
-], chosenFormat, (id) => { chosenFormat = id; });
-
-el("btnStart").addEventListener("click", () => {
+function startGame(nPlayers = PLAYERS) {
   el("startOverlay").hidden = true;
-  newGame(chosenPlayers);
-});
+  newGame(nPlayers);
+}
+el("btnStart").addEventListener("click", () => startGame());
 el("btnNew").addEventListener("click", () => {
   el("scoreOverlay").hidden = true;
   el("startOverlay").hidden = false;

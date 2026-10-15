@@ -2,7 +2,7 @@
  *
  *   node tests/skyjo-bench.js [n]          duel + table à 3, n parties chacun
  *   node tests/skyjo-bench.js sweep [n]    compare des réglages de l'objet AI
- *   node tests/skyjo-bench.js stall [n]    3 « redoutables » entre elles
+ *   node tests/skyjo-bench.js stall [n]    4 « redoutables » entre elles, la table du jeu
  *
  * Le mode `stall` n'est pas optionnel avant de toucher à la logique de fin de
  * manche : un bonus mal calibré rend l'attente indéfiniment rentable, et une
@@ -32,8 +32,7 @@ function openRound(policies) {
 }
 
 async function playGame(policies) {
-  g(`chosenPlayers = ${policies.length}`);
-  byId.get("btnStart").click();
+  g("startGame")(policies.length);
   openRound(policies);
 
   let guard = 0;
@@ -130,19 +129,19 @@ async function stall(N) {
     { name: "patience 16", set: { patience: 16 } },
     { name: "patience 60", set: { patience: 60 } },
   ];
-  console.log(`\n=== 3 redoutables à la même table (${N} parties) ===`);
+  console.log(`\n=== 4 redoutables à la même table (${N} parties) ===`);
   for (const cfg of configs) {
     Object.assign(AI, base, cfg.set);
     let turns = 0, rounds = 0, worst = 0, scoreSum = 0, stuck = 0;
     for (let i = 0; i < N; i++) {
       g("globalThis._turnCount = 0");
-      const res = await playGame(["counting", "counting", "counting"]);
+      const res = await playGame(["counting", "counting", "counting", "counting"]);
       if (res === null) { stuck++; continue; }
       const n = res[0].rounds.length;
       const t = g("globalThis._turnCount");
       turns += t; rounds += n;
       worst = Math.max(worst, t / n);
-      scoreSum += res.reduce((a, r) => a + r.rounds.reduce((x, y) => x + y, 0), 0) / (3 * n);
+      scoreSum += res.reduce((a, r) => a + r.rounds.reduce((x, y) => x + y, 0), 0) / (4 * n);
     }
     console.log(`${cfg.name.padEnd(14)} ${(turns / rounds || 0).toFixed(1).padStart(5)} tours/manche`
       + ` (pire manche ${worst.toFixed(0).padStart(4)})`
