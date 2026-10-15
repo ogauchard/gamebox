@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Six **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
-except that the five card games load one shared stylesheet, [cartes.css](cartes.css), for their common layout (see
+Seven **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
+except that the six card games load one shared stylesheet, [cartes.css](cartes.css), for their common layout (see
 *Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
@@ -19,6 +19,8 @@ except that the five card games load one shared stylesheet, [cartes.css](cartes.
   DOM/CSS rendering.
 - [turkish.html](turkish.html) — Turkish, a shedding game where you play *down* instead of up, with a tarot deck
   minus the trumps; rules from the « Le jeu de Turkish » blog and its author's answers, DOM/CSS rendering.
+- [six-qui-prend.html](six-qui-prend.html) — *6 qui prend !* (Wolfgang Kramer's 6 nimmt!), official rules: everyone
+  plays a card at once, the sixth card of a row takes it, game to 66 heads. DOM/CSS rendering.
 - [cartes.css](cartes.css) — the card games' shared layout and components; each game keeps its tint, card faces and
   table contents inline.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
@@ -31,8 +33,8 @@ except that the five card games load one shared stylesheet, [cartes.css](cartes.
 level**, the strongest ("Redoutable") — the owner removed the player-count, level and Trou-du-cul length choices.
 Only Uno (format, house rules) and Turkish (number of deals, which the owner asked to keep as a choice) have options.
 The engines stayed generic: `newGame(n)` still seats 2–6, and `startGame(n = PLAYERS)` — what the "Commencer"
-button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du cul and
-Turkish still contain are **benchmark baselines only**, never dealt to a player; Uno had no bench, so its weak policy
+button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du cul,
+Turkish and 6 qui prend still contain are **benchmark baselines only**, never dealt to a player; Uno had no bench, so its weak policy
 was deleted.
 
 ## Hosting
@@ -48,15 +50,16 @@ hash (`cartes.css?v=<hash>`), kept in step by `node tests/cartes.test.js --fix`.
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les sept suites (~5700 assertions, le total varie — les cartes sont mélangées)
+node tests/run-all.js          # les huit suites (~6400 assertions, le total varie — les cartes sont mélangées)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
 node tests/trou-du-cul.test.js # règles du Trou du cul seules
 node tests/turkish.test.js     # règles du Turkish seules
+node tests/six-qui-prend.test.js # règles du 6 qui prend seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 node tests/cartes.test.js      # gabarit commun : liens vers cartes.css, empreinte, teintes
-node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 5 liens
+node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 6 liens
 ```
 
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
@@ -102,7 +105,9 @@ targeted test that plays another seat calls `drawOne`/`takeDiscard` → `discard
 Trou du cul through `onCardClick(uid)` + `onPlayClick`/`onPassClick`/`onGiveClick`, same seat-0 restriction (other
 seats: `doPlay`/`doPass`). Turkish through `onCardClick(zone, uid)` (`"hand"` or `"up"`) + `onPlayClick`,
 `onDownClick(i)` for a face-down card and `onPickupClick` then a hand-card click to show (other seats: `doPlay`/
-`doBlind`/`doPickup`). `loadDomGame(file)` in the harness loads any of the five card games.
+`doBlind`/`doPickup`). 6 qui prend through `onCardClick(uid)` (a second click on the same card, or `onPlayClick`,
+plays it) and `onRowClick(r)` when your card is too low; other seats: fill `S.chosen`, then the last choice calls
+`reveal()`. `loadDomGame(file)` in the harness loads any of the six card games.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -117,7 +122,7 @@ reaches the draw-pile reshuffle or a non-positive finisher total — those are t
 
 ## Shared layout — cartes.css
 
-The five card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish — look alike on purpose, on desktop as on phones; Asteroids
+The six card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend — look alike on purpose, on desktop as on phones; Asteroids
 and the landing page stay independent.
 [cartes.css](cartes.css) holds everything that used to be copied four times: base styles, header, buttons, opponent
 panels (`.player`, `.fan`), status, log, actions, the player's area, overlays and sheets, and the phone and short-screen
@@ -140,9 +145,9 @@ faces, the contents of its table, its hand. The DOM is the same skeleton everywh
 - **Phones** (`max-width: 560px`): the three opponents become a grid with one equal column each, overlays become
   bottom-anchored sheets.
 
-After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the five links,
+After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the six links,
 and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
-1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all five games fit with no scroll at every one
+1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all six games fit with no scroll at every one
 of those sizes (Turkish's only exception: a 30-card hand on an iPhone SE scrolls a little). `fit.js` switches CSS
 animations off before measuring: headless Edge doesn't advance them in virtual time, and a card frozen at the start of
 its `pop` (24 px lower) reads as a false overflow. Landscape phones fall outside the 560 px query and get the desktop layout.
@@ -660,3 +665,83 @@ count. `render()` rebuilds the hand every call, grouped by rank (10s last), `sho
 **Hands grow big here** — picking up a pile easily gives 20–30 cards — so the desktop hand card width follows `--n`
 (cards) and `--g` (rank groups), both set by `renderMe()`, to keep the whole hand on one row beside the spots
 (`#me` lifts the shared 1000 px cap for that). On phones the hand wraps with `--k` cards per row, growing with `--n`.
+
+## Architecture — six-qui-prend.html
+
+### Rules as implemented
+
+The official rules (Wolfgang Kramer, 1994); the owner kept all three official readings: the **104 cards** whatever
+the table (at four, 44 are dealt and 60 stay out, unseen), the game stops at the end of the round where someone
+reaches **66 heads** (lowest total wins, ties shared), and the player of a card lower than every row **chooses** the
+row to take, after seeing the cards revealed that turn. Cards are `{ uid, n, heads }`; `headsOf(n)`: 55 seven,
+multiples of 11 five, of 10 three, of 5 two, the rest one — 171 in all.
+
+- `targetRow(card)` is the placement rule, and the only one: the row whose last card is the highest below the card,
+  -1 when it is below them all. `placeCard(seat, card, row)` is the only function that touches `S.rows`; it ignores
+  `row` unless the card is too low. A sixth card takes the five; a too-low card takes the chosen row; either way it
+  starts the row.
+- **Only the head of the queue can be too low**: once placed, it is the lowest row end, so every later card has a
+  row. Phase `row` therefore stops a turn at most once.
+- **Terminates by construction**, no `TURN_CAP`: 40 cards on 4 rows of 5 places force at least one take per round,
+  so the totals climb every round.
+
+### Flow
+
+A turn is `pick → place (→ row) → pick`. `beginTurn()` resets `S.chosen` and calls `aiTurn()`: the opponents choose
+one after the other, `THINK_MS` apart. The last choice — theirs, or the human's (`onCardClick(uid)` selects and
+previews the row, a second click or « Poser » plays) — calls `reveal()`, which moves the chosen cards from the hands
+to `S.queue`, ascending, and adds them to `S.seen`. `resolveTurn()` places them one at a time with `sleep()`
+(`S.placing` is what the renderer shows: the incoming card in its slot, or the row in red while it is taken), stops
+in phase `row` when the human's card is too low, and `onRowClick(r)` resumes it with `resolveTurn(r)`. `aiTurn()`
+re-reads `p.ai` before each choice (`findIndex`): that is how the bench hands seat 0 to the computer right after
+`startGame()`. Card conservation: hands + rows + queue + piles + `S.out` = 104; a chosen card stays in its hand
+until `reveal()`.
+
+### Opponent AI
+
+`pick(p, seat) -> card` and `row(p, seat, card) -> index`. Hidden from the policies: the other hands, `S.chosen`
+before the reveal, and `S.out` (never dealt) — the test swaps all three for counting `Proxy`s. Public: their own hand,
+the rows, `S.seen` (starting rows + every card revealed this round), and for `row` the revealed cards still queued.
+
+- `simple` (bench baseline): plays the card that takes nothing and lands closest to its row end, otherwise the
+  cheapest one if nobody else played; too low, the cheapest row.
+- `sharp` ("Redoutable"): Monte Carlo with rollouts. The numbers it has not seen this round hide the other hands among
+  the 60 never dealt. `AI.samples` times, it deals each opponent a hand from them, tries each of its own cards
+  against it — this turn, then the rest of the round (`AI.depth` turns), everybody playing like `simple`, the
+  opponents at random with probability `AI.noise` — and keeps the card that takes the fewest heads on average. Too
+  low, it takes the cheapest row, minus `AI.spite` per head the queued cards will then make the others take (exact:
+  they are public).
+
+**What the bench taught.** The rollout is the whole strength: one turn of Monte Carlo alone wins about 35 %, the
+rest of the round about 55 %. **`noise 0` overfits**: the opponent model is then exactly `simple`, so it wins more
+against `simple` (60 %), but between sharps it loses (11.6 heads a round against 11.0 for `noise 0.3`). Judge a
+change to the opponent model in a table of sharps, not only against `simple`.
+
+**Cost.** `playOn()` allocates nothing (insertion sort into a reused buffer); a first decision (10 cards) takes about
+30 ms in Node at the shipped settings, three per turn. The test runs its full games with `AI.samples = 20`: they check
+the rules, not the strength.
+
+```
+node tests/six-qui-prend-bench.js 600        # 1 redoutable contre 3 tranquilles
+node tests/six-qui-prend-bench.js sweep 400  # compare des réglages de l'objet AI
+node tests/six-qui-prend-bench.js stall 100  # 4 redoutables : durée des parties
+```
+
+Reference points at the shipped settings: **57.8 % wins** over 600 games to 66 heads against three `simple` (25 %
+baseline), **8.6 heads a round against 13.8**. Between sharps, at a table of two against two over 200 games: the
+shipped settings beat `depth 0` 38.5 % to 11.5 % (9.9 heads a round against 14.5), and `noise 0` 27.6 % to 22.4 %
+(11.0 against 11.6). Four sharps — the table a player faces — take 4.7 rounds a game, 7 at most over 100
+games, none stuck.
+
+### Rendering and layout
+
+The shared layout (see *Shared layout*), with the rows as the table. Each `.line` is a heads count and six slots;
+the sixth, dashed red, is where a card that takes lands during `TAKE_MS`. The row cards size on `#rows`, not
+`#table`: a container query can't style its own container, and `@container (min-aspect-ratio: 12 / 5)` switches
+the rows to **2 × 2** when the table is wide and short — 92-px cards on a 1366×650 laptop instead of 37. The
+opponent panel adds `.played`, the card they chose (a back until the reveal); yours stays raised in your hand
+(`.chosen`) until placed. **Don't call a hand-card state `played`**: it picks up the `.played` container's size —
+the revealed card shrank to 40 px in the hand. `#actions` always holds one « Poser » button, disabled outside the
+choice: on phones an empty `#actions` collapses, and the table would resize twice per turn. On phones the hand is
+5 cards per row at a fixed width, so cards never resize as the hand shrinks. Card faces are tinted by heads (white 1,
+blue 2, yellow 3, red 5, violet 7), with the heads drawn by a CSS mask of an inline SVG bull (`--bull`).

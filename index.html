@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gamebox</title>
-<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois et Trou du cul, jouables directement dans le navigateur.">
+<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish et 6 qui prend, jouables directement dans le navigateur.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
 <style>
   :root {
@@ -247,6 +247,40 @@
   .k:nth-child(3) { transform: translate(4px, 0) rotate(2deg); filter: brightness(.6); }
   .k:nth-child(4) { transform: translate(36px, 5px) rotate(11deg); }
 
+  /* 6 qui prend : une rangée de cinq cartes, et la sixième qui arrive. */
+  .p-sqp {
+    background: radial-gradient(ellipse at 50% 20%, #2c2417 0%, #16130e 75%);
+    --bull: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1 2C1 7 5 10 9 10h6c4 0 8-3 8-8-2 3-5 5-8 5H9C6 7 3 5 1 2zM7.5 8h9l-1 9c-.3 3-1.7 5-3.5 5s-3.2-2-3.5-5zM7.5 9l-4 2 4.5 1zM16.5 9l4 2-4.5 1z'/%3E%3C/svg%3E");
+  }
+  /* Même principe qu'Uno : une boîte étroite, les cartes placées par rapport à
+     son centre. Cinq cartes de 36px décalées de 28px, la sixième à part :
+     196px en tout. Nombre et têtes à gauche, la partie visible d'une carte. */
+  .sqp-row { position: relative; width: 60px; height: 110px; --s: 1.2; }
+  .q {
+    position: absolute; left: 50%; top: 30px;
+    width: 36px; height: 50px;
+    border-radius: 5px;
+    background: var(--f, #f2eef8); color: #2b1f3d;
+    box-shadow: -1px 0 3px rgba(0,0,0,.25), 0 2px 6px rgba(0,0,0,.5);
+    display: grid; place-items: center start;
+    padding: 9px 0 0 4px;
+    font-weight: 900; font-size: 15px; letter-spacing: -.04em;
+  }
+  /* Les têtes de bœuf, autant que --h : un masque répété. */
+  .q::before {
+    content: ""; position: absolute; top: 5px; left: 4px;
+    width: calc(var(--h, 1) * 6px); height: 6px;
+    background: #5a2c7c;
+    -webkit-mask: var(--bull) left / 6px 6px repeat-x;
+    mask: var(--bull) left / 6px 6px repeat-x;
+  }
+  .q:nth-child(1) { margin-left: -98px; }
+  .q:nth-child(2) { margin-left: -70px; --f: #f39d86; --h: 3; }
+  .q:nth-child(3) { margin-left: -42px; --f: #cbe0f7; --h: 2; }
+  .q:nth-child(4) { margin-left: -14px; --f: #f6d973; --h: 3; }
+  .q:nth-child(5) { margin-left: 14px; }
+  .q:nth-child(6) { margin-left: 62px; top: 16px; transform: rotate(14deg); box-shadow: 0 0 0 2px #c8322b, 0 4px 12px rgba(0,0,0,.6); }
+
   footer { text-align: center; color: var(--dim); font-size: 13px; margin-top: 30px; }
   footer a { color: inherit; }
 
@@ -275,7 +309,7 @@
 <main>
   <header>
     <h1>GAMEBOX</h1>
-    <p>Six jeux, directement dans le navigateur.</p>
+    <p>Sept jeux, directement dans le navigateur.</p>
   </header>
 
   <nav class="games">
@@ -377,6 +411,24 @@
       <div class="info">
         <h2>Turkish</h2>
         <p>On descend au lieu de monter, et le 10 balaie le pli : débarrasse-toi le premier de tes cartes. Contre 3 adversaires.</p>
+        <span class="play">Jouer →</span>
+      </div>
+    </a>
+
+    <a class="game" href="six-qui-prend.html">
+      <div class="preview p-sqp" aria-hidden="true">
+        <div class="art sqp-row">
+          <div class="q">31</div>
+          <div class="q">33</div>
+          <div class="q">35</div>
+          <div class="q">40</div>
+          <div class="q">42</div>
+          <div class="q">43</div>
+        </div>
+      </div>
+      <div class="info">
+        <h2>6 qui prend !</h2>
+        <p>Tout le monde pose en même temps ; qui pose la sixième carte d'une rangée ramasse ses têtes de bœuf. Contre 3 adversaires.</p>
         <span class="play">Jouer →</span>
       </div>
     </a>

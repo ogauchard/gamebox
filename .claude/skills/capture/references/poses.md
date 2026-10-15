@@ -4,9 +4,9 @@ Chaque extrait se passe à `--eval '…'` ou s'écrit dans un fichier pour `--po
 page, une fois le DOM construit : il voit `S`, `el()`, `render()`, `aiTurn`… Chacun a été testé sur les jeux qu'il
 nomme.
 
-## Démarrer une partie (Skyjo, Uno, Cinq Rois, Trou du cul, Turkish)
+## Démarrer une partie (Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend)
 
-Les cinq jeux de cartes partagent les mêmes noms : le bouton `btnStart`, `startGame()`, `aiTurn()`, `beginTurn()`,
+Les six jeux de cartes partagent les mêmes noms : le bouton `btnStart`, `startGame()`, `aiTurn()`, `beginTurn()`,
 `render()`. Une partie a toujours 4 joueurs, toi et 3 adversaires « Redoutable » : rien à choisir avant le clic.
 
 ```js
@@ -16,6 +16,10 @@ el("btnStart").click();
 
 Sans le gel, la capture montre un moment quelconque de la partie, différent à chaque lancement. Si un adversaire
 commence, la table reste figée sur « X réfléchit… » ; pour avoir la main, ajouter `S.current = 0; beginTurn();`.
+
+Au 6 qui prend, le gel empêche les adversaires de choisir leur carte : la révélation n'arrive jamais, et l'on peut
+poser une sélection (`S.sel = S.players[0].hand.at(-1).uid; render();`) pour voir l'aperçu de sa rangée. Sa main ne
+grossit pas (dix cartes, une de moins par tour) : la recette ci-dessous ne s'y applique pas.
 
 Options à poser **avant** le clic : pour Uno, `chosenFormat` (`"match"`/`"single"`) et `chosenVariants` (objet
 `{ stack, challenge, sevenZero }`) ; pour Turkish, `chosenRounds` (4, 8 ou 12 donnes).
@@ -56,7 +60,7 @@ Ne pas fabriquer les scores à la main : Cinq Rois et Trou du cul lisent dans `s
 l'IA jouer la place du joueur et la manche aller à son terme, en temps virtuel (2 à 3 s réelles) :
 
 ```js
-// Uno, Cinq Rois, Trou du cul, Turkish — lancer avec --budget 600000 (900000 pour Turkish)
+// Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend — lancer avec --budget 600000 (900000 pour Turkish)
 el("btnStart").click();
 Object.assign(S.players[0], { ai: true, policy: "simple" });
 if (S.current === 0) beginTurn();   // sinon un tour d'IA est déjà en vol : ne pas en lancer un second
@@ -89,3 +93,14 @@ press("Enter");            // le prochain tour de boucle consomme la pression et
 ```
 
 `Math.random` n'est pas fixé : deux captures ne se ressemblent jamais exactement.
+
+## 6 qui prend : une manche en cours
+
+Laisser l'ordinateur jouer la place du joueur quelques tours : 16 s de temps virtuel mènent vers le 4e tour, rangées
+garnies et cartes révélées dans les vignettes. L'état exact change à chaque lancement.
+
+```js
+// --budget 16000
+el("btnStart").click();
+Object.assign(S.players[0], { ai: true, policy: "simple" });
+```

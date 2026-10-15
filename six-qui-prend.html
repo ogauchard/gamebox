@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>6 qui prend !</title>
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
+<style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les cartes et leurs têtes de bœuf, les quatre rangées,
+     la carte jouée de chaque adversaire et la main. */
+  :root {
+    --bg: #16130e;
+    --panel: #221d15;
+    --line: #3b3226;
+    --text: #f3eee4;
+    --dim: #ab9f8a;
+    --bg-top: #2c2417;
+    --btn: #2b2419;
+    --btn-hover: #382f22;
+    --red: #c8322b;
+    /* Une tête de bœuf : cornes, oreilles, museau. Masque, pour la teindre. */
+    --bull: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1 2C1 7 5 10 9 10h6c4 0 8-3 8-8-2 3-5 5-8 5H9C6 7 3 5 1 2zM7.5 8h9l-1 9c-.3 3-1.7 5-3.5 5s-3.2-2-3.5-5zM7.5 9l-4 2 4.5 1zM16.5 9l4 2-4.5 1z'/%3E%3C/svg%3E");
+    /* Ratio hauteur/largeur d'une carte : 1.4. Les rangées se dimensionnent sur
+       la place réelle de la table (voir #table). */
+    --hand-card: clamp(42px, min(9.5vh, 6.5vw), 72px);
+    --row-card: clamp(34px, min(8vh, 6vw), 70px);      /* navigateurs sans cqh */
+    --mini-card: clamp(12px, min(2.4vh, 3.4vw), 18px);
+    --tab-card: clamp(26px, min(5.6vh, 4vw), 40px);    /* carte jouée d'un adversaire */
+  }
+
+  /* -------------------------------------------------------------- Cartes */
+  /* Le fond dit le nombre de têtes, comme sur les vraies cartes : blanc 1,
+     bleu 2, jaune 3, rouge 5, violet 7 (le 55). */
+  .card {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    border: 0; padding: 0;
+    border-radius: calc(var(--cw) * .12);
+    background: var(--face, #f2eef8);
+    color: #2b1f3d;
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 3px 8px rgba(0,0,0,.45);
+    overflow: hidden;
+    cursor: default;
+    font: inherit;
+    transition: transform .15s, box-shadow .15s, opacity .15s;
+  }
+  .card:disabled { opacity: 1; }
+  .card.h2 { --face: #cbe0f7; }
+  .card.h3 { --face: #f6d973; }
+  .card.h5 { --face: #f39d86; }
+  .card.h7 { --face: #d29df0; }
+  .card .heads {
+    position: absolute; top: 7%; left: 5%; right: 5%;
+    display: flex; justify-content: center; gap: calc(var(--cw) * .015);
+    color: #5a2c7c;
+  }
+  .card .heads i {
+    width: calc(var(--cw) * .2); aspect-ratio: 1;
+    background: currentColor;
+    -webkit-mask: var(--bull) center / contain no-repeat;
+    mask: var(--bull) center / contain no-repeat;
+  }
+  .card.h5 .heads i { width: calc(var(--cw) * .13); }
+  .card.h7 .heads i { width: calc(var(--cw) * .11); }
+  .card.h7 .heads { color: #3a1656; }
+  .card .num {
+    position: absolute; inset: 24% 0 2%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--cw) * .44); font-weight: 900; letter-spacing: -.04em; line-height: 1;
+  }
+  .card.back {
+    background: repeating-linear-gradient(45deg, #4d2c70 0 5px, #5b3684 5px 10px);
+    box-shadow: inset 0 0 0 calc(var(--cw) * .07) #e8dcc4, 0 3px 8px rgba(0,0,0,.45);
+  }
+
+  /* ------------------------------------------------------------ Adversaires */
+  /* La vignette : nom, total et main à gauche ; à droite, la carte jouée ce
+     tour — de dos tant que les cartes ne sont pas révélées. */
+  .player { display: flex; align-items: center; gap: 10px; }
+  .player .info { min-width: 0; }
+  .player.active .played .card { box-shadow: 0 0 0 2px var(--accent), 0 3px 8px rgba(0,0,0,.45); }
+  .fan { --fan: .7; align-items: center; min-height: calc(var(--mini-card) * 1.4); }
+  .fan .more { margin-left: 6px; }
+  .played { --cw: var(--tab-card); flex: none; width: var(--cw); height: calc(var(--cw) * 1.4); }
+  .played:empty { border: 1px dashed var(--line); border-radius: calc(var(--cw) * .12); }
+  /* Les têtes ramassées dans la manche. */
+  .bubble {
+    position: absolute; top: -8px; right: 8px;
+    font-size: 11px; font-weight: 800;
+    padding: 1px 7px; border-radius: 999px;
+    background: #8e2c38; color: #fff;
+    border: 1px solid #b4414f;
+  }
+  .tag .gain { color: #f0907e; }
+
+  /* ----------------------------------------------------------------- Table */
+  /* Quatre rangées de six places : cinq cartes, et la sixième, en rouge, qui
+     fait ramasser. Les cartes se dimensionnent sur la table (cqh, cqw). Une
+     rangée = bordure 4 + marges 7 + décompte 34 + 6 cartes + 6 écarts de 4,
+     soit 6 cartes + 69px de large et 1,4 carte + 6px de haut. */
+  #rows { --cw: var(--row-card); display: grid; gap: 4px 28px; }
+  @supports (width: 1cqh) {
+    /* En colonne : quatre rangées, trois écarts. */
+    #rows { --row-card: clamp(26px, min((100cqh - 36px) / 5.6, (100cqw - 72px) / 6), 96px); }
+    /* Table large et basse (portable, grand écran) : deux colonnes de deux
+       rangées, des cartes presque deux fois plus grandes. C'est le meilleur
+       choix dès que la table est environ 2,4 fois plus large que haute. */
+    @container (min-aspect-ratio: 12 / 5) {
+      #rows { grid-template-columns: auto auto; --row-card: clamp(26px, min((100cqh - 16px) / 2.8, (100cqw - 172px) / 12), 96px); }
+    }
+  }
+  .line {
+    display: flex; align-items: center; gap: 4px;
+    padding: 1px 6px 1px 1px;
+    border: 2px solid transparent; border-radius: 12px;
+    transition: background .15s, border-color .15s;
+  }
+  .line .count {
+    flex: none; width: 34px;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    font-size: 14px; font-weight: 800; line-height: 1; color: var(--dim);
+  }
+  .line .count i {
+    width: 15px; height: 15px; background: currentColor;
+    -webkit-mask: var(--bull) center / contain no-repeat;
+    mask: var(--bull) center / contain no-repeat;
+  }
+  .line .count.hot { color: #f0907e; }
+  .slot {
+    flex: none; width: var(--cw); height: calc(var(--cw) * 1.4);
+    border: 2px dashed rgba(255,255,255,.08); border-radius: calc(var(--cw) * .12);
+  }
+  .slot.six {
+    border-color: rgba(200,50,43,.45);
+    display: grid; place-items: center;
+    color: rgba(200,50,43,.6); font-weight: 900; font-size: calc(var(--cw) * .42);
+  }
+  .line.target { border-color: var(--accent); background: rgba(255,206,58,.06); }
+  .line.danger, .line.taking { border-color: var(--red); background: rgba(200,50,43,.16); }
+  .line.pickable { border-color: var(--accent); cursor: pointer; }
+  .line.pickable:hover { background: rgba(255,206,58,.12); }
+  #rows .card.ghost { opacity: .5; }
+  #rows .card.incoming { box-shadow: 0 0 0 3px var(--accent), 0 4px 10px rgba(0,0,0,.5); }
+  #rows .line.taking .card.incoming { box-shadow: 0 0 0 3px var(--red), 0 4px 10px rgba(0,0,0,.5); }
+  #rows .card.pop { animation: pop .26s ease-out; }
+
+  /* ------------------------------------------------------------------ Main */
+  #hand {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 10px 8px;
+    padding: 16px 10px 8px;
+    --cw: var(--hand-card);
+  }
+  #hand .card.pickable { cursor: pointer; }
+  #hand .card.pickable:hover { transform: translateY(-5px); }
+  #hand .card.sel, #hand .card.sel:hover, #hand .card.chosen {
+    transform: translateY(-12px);
+    box-shadow: 0 0 0 3px var(--accent), 0 10px 18px rgba(0,0,0,.55);
+  }
+  #hand .card.pop { animation: pop .26s ease-out; }
+
+  /* -------------------------------------------------------------- Feuilles */
+  .sheet .heads-scale { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 4px; --cw: 40px; }
+
+  /* ------------------------------------------------- Téléphone (portrait) */
+  @media (max-width: 560px) {
+    main { padding-top: 12px; }                   /* place pour les bulles de la première rangée */
+
+    #opponents .player { --mini-card: clamp(10px, 3vw, 14px); --tab-card: clamp(26px, 8.4vw, 34px); gap: 5px; padding: 5px 6px 6px; }
+    #opponents .fan { --fan: .74; }
+    .bubble { font-size: 9.5px; top: -9px; right: 4px; padding: 0 5px; }
+
+    /* Une rangée = bordure 4 + marges 4 + décompte 26 + 6 cartes + 6 écarts de 3. */
+    @supports (width: 1cqh) {
+      #rows { --row-card: clamp(24px, min((100cqh - 36px) / 5.6, (100cqw - 54px) / 6), 80px); }
+    }
+    .line { gap: 3px; padding: 1px 3px 1px 1px; border-radius: 9px; }
+    .line .count { width: 26px; font-size: 12px; }
+    .line .count i { width: 12px; height: 12px; }
+
+    /* Cinq cartes par rangée, de la même taille d'un bout à l'autre de la manche. */
+    #hand {
+      --hand-card: min((100vw - 44px) / 5, 7.6vh, 60px);
+      gap: 10px 6px;
+      padding: 14px 6px 2px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>6 QUI PREND !</h1>
+  <span class="meta" id="roundInfo">Manche 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div id="rows"></div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions"></div>
+  <div id="me">
+    <div class="name"><span>Toi</span><span class="tag" id="myTag"></span></div>
+    <div id="hand"></div>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>6 qui prend !</h2>
+    <p>Tout le monde pose une carte en même temps ; chacune rejoint la rangée qui lui va. Qui pose
+       la <b>sixième carte</b> d'une rangée la ramasse, avec ses <b>têtes de bœuf</b>. Le moins de
+       têtes gagne.</p>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur. La partie s'arrête à la
+       fin de la manche où quelqu'un atteint <b>66 têtes</b>.</p>
+    <p class="hint">104 cartes, 10 par joueur et par manche : le détail est dans les règles.</p>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p><b>104 cartes</b>, numérotées de 1 à 104. Chacune porte des <b>têtes de bœuf</b> : ce sont
+       les points de pénalité.</p>
+    <div class="heads-scale" id="headsScale"></div>
+    <ul>
+      <li>le <b>55</b> : 7 têtes ;</li>
+      <li>les doubles — <b>11, 22, 33…</b> : 5 têtes ;</li>
+      <li>les dizaines — <b>10, 20, 30…</b> : 3 têtes ;</li>
+      <li>les autres multiples de 5 — <b>5, 15, 25…</b> : 2 têtes ;</li>
+      <li>toutes les autres : 1 tête.</li>
+    </ul>
+    <h3>La manche</h3>
+    <p>Chacun reçoit <b>10 cartes</b>, et 4 cartes posées face visible commencent les <b>4
+       rangées</b>. Les 60 autres restent hors jeu : personne ne sait lesquelles.</p>
+    <h3>Un tour</h3>
+    <p>Chacun choisit une carte <b>en secret</b>. On les révèle ensemble, puis on les pose une à
+       une, <b>de la plus petite à la plus grande</b>.</p>
+    <ul>
+      <li><b>Où va une carte</b> — sur la rangée dont la dernière carte est la plus proche
+          <b>en dessous</b> d'elle. On n'a pas le choix.</li>
+      <li><b>6 qui prend</b> — si cette rangée a déjà 5 cartes, la carte posée est la sixième :
+          son joueur <b>ramasse les 5 cartes</b>, et la sienne commence la rangée.</li>
+      <li><b>Carte trop petite</b> — plus petite que les dernières cartes de toutes les rangées :
+          son joueur <b>choisit une rangée</b>, la ramasse, et sa carte la remplace. Il choisit
+          en voyant les cartes révélées ce tour-là.</li>
+    </ul>
+    <h3>Les points</h3>
+    <p>Après 10 tours, chacun compte les têtes de bœuf qu'il a ramassées. La partie s'arrête à
+       la fin de la manche où quelqu'un atteint <b>66 têtes</b> ; le plus petit total gagne.</p>
+    <p class="hint">Règle officielle de Wolfgang Kramer (1994).</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de manche / de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la manche</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Manche suivante</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   6 QUI PREND ! — le jeu de cartes de Wolfgang Kramer (6 nimmt!, 1994).
+   Un humain contre 3 adversaires gérés par l'ordinateur.
+
+   Règle officielle : 104 cartes, 10 par joueur et par manche, les 60 autres
+   hors jeu ; chacun choisit une carte en secret, on les pose de la plus petite
+   à la plus grande ; la sixième carte d'une rangée la fait ramasser ; une
+   carte plus petite que toutes les rangées fait ramasser la rangée de son
+   choix. La partie s'arrête à 66 têtes, le plus petit total gagne.
+   ========================================================================= */
+
+const CARDS = 104;
+const ROWS = 4;
+const ROW_MAX = 5;               // la sixième carte fait ramasser
+const DEAL = 10;                 // cartes par joueur et par manche
+const TARGET = 66;               // fin de partie
+const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo", "Lou", "Inès", "Tom", "Ada"];
+const THINK_MS = 350;            // un adversaire choisit sa carte
+const REVEAL_MS = 900;           // lecture des cartes révélées avant de les poser
+const PLACE_MS = 600;            // une carte posée
+const TAKE_MS = 1400;            // une rangée ramassée : on la laisse voir
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ----------------------------------------------------------------- Paquet */
+/* Têtes de bœuf : le 55 sept, les doubles (11, 22…) cinq, les dizaines trois,
+   les autres multiples de 5 deux, le reste une. 171 en tout. */
+const headsOf = (n) => (n === 55 ? 7 : n % 11 === 0 ? 5 : n % 10 === 0 ? 3 : n % 5 === 0 ? 2 : 1);
+const HEADS = Array.from({ length: CARDS + 1 }, (_, n) => (n ? headsOf(n) : 0));
+
+let uidSeq = 0;
+const mkCard = (n) => ({ uid: ++uidSeq, n, heads: HEADS[n] });
+
+function buildDeck() {
+  const d = [];
+  for (let n = 1; n <= CARDS; n++) d.push(mkCard(n));
+  return d;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const sumHeads = (cards) => cards.reduce((t, c) => t + c.heads, 0);
+const headsLabel = (h) => `${h} tête${h > 1 ? "s" : ""}`;
+
+/* ------------------------------------------------------------------- État */
+const S = {
+  players: [],        // { name, ai, policy, hand, pile (ramassé dans la manche), score, rounds, last }
+  rows: [],           // les rangées, cartes dans l'ordre de pose ; la dernière est celle qui compte
+  chosen: [],         // la carte choisie par chaque siège ce tour, null tant qu'il n'a pas choisi : secret
+  queue: [],          // cartes révélées pas encore posées : { seat, card }, de la plus petite à la plus grande
+  placing: null,      // { seat, card, row, take, low } : la pose en cours d'affichage
+  seen: [],           // tout ce qui a été montré dans la manche (rangées de départ, cartes révélées) : public
+  out: [],            // les cartes jamais distribuées, 60 à quatre : personne ne les voit
+  round: 1,
+  turn: 0,            // tour de la manche, 1 à 10
+  target: TARGET,
+  phase: "idle",      // idle | pick | place | row | over
+  sel: null,          // uid de la carte que l'humain s'apprête à poser
+  logs: [],
+  busy: false,        // des cartes se posent : l'humain attend
+  epoch: 0,           // change à chaque manche : une pose en vol d'une manche passée s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+const nplayers = () => S.players.length;
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* Tutoie l'humain, troisième personne pour les adversaires — jamais il/elle. */
+const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+
+/* --------------------------------------------------------------- Légalité */
+/* Où va une carte : la rangée dont la dernière carte est la plus proche en
+   dessous d'elle. -1 si elle est plus petite que toutes : son joueur choisit
+   alors la rangée qu'il ramasse. Toute la règle de pose tient ici : la pose,
+   le rendu et les IA passent par elle. */
+function targetRow(card) {
+  let best = -1;
+  S.rows.forEach((row, r) => {
+    const end = row[row.length - 1].n;
+    if (end < card.n && (best < 0 || end > S.rows[best][S.rows[best].length - 1].n)) best = r;
+  });
+  return best;
+}
+
+/* La rangée la moins chère ; à égalité, la plus courte, puis la première. */
+function cheapestRow() {
+  let best = 0;
+  for (let r = 1; r < S.rows.length; r++) {
+    const a = sumHeads(S.rows[r]), b = sumHeads(S.rows[best]);
+    if (a < b || (a === b && S.rows[r].length < S.rows[best].length)) best = r;
+  }
+  return best;
+}
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.players = [{ name: "Toi", ai: false, hand: [], pile: [], score: 0, rounds: [], last: 0 }];
+  for (let i = 0; i < nPlayers - 1; i++) {
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: "sharp", hand: [], pile: [], score: 0, rounds: [], last: 0 });
+  }
+  S.round = 1;
+  buildBoard();
+  startRound();
+}
+
+function startRound() {
+  S.epoch++;
+  const deck = shuffle(buildDeck());
+  for (const p of S.players) {
+    p.hand = deck.splice(0, DEAL).sort((a, b) => a.n - b.n);
+    p.pile = [];
+  }
+  S.rows = deck.splice(0, ROWS).map((c) => [c]);
+  S.out = deck;
+  S.seen = S.rows.map((row) => row[0]);
+  S.chosen = [];
+  S.queue = [];
+  S.placing = null;
+  S.turn = 0;
+  S.sel = null;
+  S.logs = [];
+  S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
+  S.busy = false;
+  beginTurn();
+}
+
+/* ------------------------------------------------------------------ Tours */
+/* Un tour : chacun choisit en secret (phase pick), puis les cartes révélées se
+   posent de la plus petite à la plus grande (place), avec un arrêt si l'humain
+   doit choisir la rangée qu'il ramasse (row). */
+function beginTurn() {
+  if (S.phase === "over") return;
+  S.turn++;
+  S.phase = "pick";
+  S.chosen = S.players.map(() => null);
+  S.queue = [];
+  S.placing = null;
+  S.sel = null;
+  render();
+  aiTurn();
+}
+
+/* La carte d'un siège tenu par l'ordinateur, vérifiée. */
+function choose(seat) {
+  const p = S.players[seat];
+  const card = policyOf(p).pick(p, seat);
+  return p.hand.includes(card) ? card : p.hand[0];
+}
+
+/* Les adversaires choisissent l'un après l'autre. Le dernier choix — le leur
+   ou celui de l'humain — déclenche la révélation. La boucle relit p.ai à chaque
+   fois : le banc d'essai confie le siège 0 à l'ordinateur en cours de route. */
+async function aiTurn() {
+  const epoch = S.epoch, turn = S.turn;
+  for (;;) {
+    const seat = S.players.findIndex((p, i) => p.ai && !S.chosen[i]);
+    if (seat < 0) break;
+    await sleep(THINK_MS);
+    if (epoch !== S.epoch || turn !== S.turn || S.phase !== "pick") return;
+    if (!S.chosen[seat]) S.chosen[seat] = choose(seat);
+    render();
+  }
+  if (S.chosen.every(Boolean)) reveal();
+}
+
+/* Tout le monde a choisi : les cartes quittent les mains et se posent. */
+function reveal() {
+  S.queue = S.chosen.map((card, seat) => ({ seat, card })).sort((a, b) => a.card.n - b.card.n);
+  for (const { seat, card } of S.queue) {
+    const hand = S.players[seat].hand;
+    hand.splice(hand.indexOf(card), 1);
+  }
+  S.seen.push(...S.queue.map((q) => q.card));
+  S.sel = null;
+  S.phase = "place";
+  S.busy = true;
+  render();
+  resolveTurn();
+}
+
+/* Pose les cartes révélées une à une, en laissant le temps de suivre. `row` :
+   la rangée que l'humain vient de choisir pour sa carte trop petite — on
+   reprend alors là où on s'était arrêté, sans nouvelle pause de lecture. */
+async function resolveTurn(row) {
+  const epoch = S.epoch;
+  if (row === undefined) {
+    await sleep(REVEAL_MS);
+    if (epoch !== S.epoch) return;
+  }
+  while (S.queue.length) {
+    const { seat, card } = S.queue[0];
+    const p = S.players[seat];
+    let r = targetRow(card);
+    const low = r < 0;
+    if (low) {
+      if (row !== undefined) r = row;
+      else if (p.ai) r = rowFor(seat, card);
+      else { S.phase = "row"; S.busy = false; render(); return; }
+    }
+    row = undefined;
+    const take = low || S.rows[r].length >= ROW_MAX;
+    S.placing = { seat, card, row: r, take, low };
+    render();
+    await sleep(take ? TAKE_MS : PLACE_MS);
+    if (epoch !== S.epoch) return;
+    S.placing = null;
+    placeCard(seat, card, r);
+    render();
+  }
+  S.busy = false;
+  if (S.players.every((p) => !p.hand.length)) { endRound(); return; }
+  beginTurn();
+}
+
+/* La rangée ramassée par un siège de l'ordinateur, vérifiée. */
+function rowFor(seat, card) {
+  const p = S.players[seat];
+  const r = policyOf(p).row(p, seat, card);
+  return Number.isInteger(r) && r >= 0 && r < S.rows.length ? r : cheapestRow();
+}
+
+/* Pose une carte révélée : la seule fonction qui touche aux rangées. La
+   rangée est imposée par targetRow ; `row` ne sert que pour une carte trop
+   petite, c'est alors le choix de son joueur. Renvoie les cartes ramassées. */
+function placeCard(seat, card, row) {
+  const p = S.players[seat];
+  S.queue = S.queue.filter((q) => q.card !== card);
+  const target = targetRow(card);
+  const r = target >= 0 ? target : row;
+  const line = S.rows[r];
+  if (target >= 0 && line.length < ROW_MAX) {
+    line.push(card);
+    return [];
+  }
+  p.pile.push(...line);
+  S.rows[r] = [card];
+  const what = headsLabel(sumHeads(line));
+  const take = p.ai ? "ramasse" : "ramasses";
+  log(target < 0
+    ? `${says(p, "ramasses", "ramasse")} la rangée du ${line[line.length - 1].n} avec ${p.ai ? "son" : "ton"} ${card.n} : ${what}.`
+    : `${says(p, "poses", "pose")} le ${card.n} en 6e carte et ${take} ${what}.`);
+  return line;
+}
+
+/* ------------------------------------------------------------ Fin de manche */
+function endRound() {
+  for (const p of S.players) {
+    p.last = sumHeads(p.pile);
+    p.score += p.last;
+    p.rounds.push(p.last);
+  }
+  S.phase = "over";
+  S.busy = false;
+  render();
+  showScores(S.players.some((p) => p.score >= S.target));
+}
+
+function showScores(over) {
+  const best = Math.min(...S.players.map((p) => p.score));
+  let html = "<table><thead><tr><th>Joueur</th><th>Manche</th><th>Total</th></tr></thead><tbody>";
+  for (const p of S.players) {
+    const win = over && p.score === best;
+    html += `<tr${win ? ' class="win"' : ""}><td>${p.name}${win ? " 🏆" : ""}</td>`
+          + `<td>+${p.last}</td><td>${p.score}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  if (over) {
+    const winners = S.players.filter((p) => p.score === best);
+    html += winners.length === 1 && !winners[0].ai
+      ? `<p class="next-round">🏆 <b>Tu l'emportes avec ${headsLabel(best)} !</b></p>`
+      : `<p class="next-round">🏆 <b>${winners.map((p) => p.name).join(" et ")}</b> ${winners.length > 1 ? "l'emportent" : "l'emporte"} avec ${headsLabel(best)}.</p>`;
+  } else {
+    const worst = Math.max(...S.players.map((p) => p.score));
+    html += `<p class="next-round">La partie s'arrête à la fin de la manche où quelqu'un atteint <b>${S.target} têtes</b>`
+          + ` — le plus chargé en a ${worst}.</p>`;
+  }
+  el("scoreBody").innerHTML = html;
+  el("scoreTitle").textContent = over ? "Fin de la partie" : `Fin de la manche ${S.round}`;
+  el("btnNext").textContent = over ? "Rejouer" : "Manche suivante";
+  el("btnNext").dataset.over = over ? "1" : "";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose :
+     pick(p, seat)       -> la carte à poser, prise dans p.hand
+     row(p, seat, card)  -> la rangée à ramasser quand `card` est trop petite
+
+   Aucune ne consulte la main d'un autre joueur, la carte qu'il a choisie avant
+   la révélation, ni les cartes jamais distribuées (S.out) : elles disposent de
+   leur main, des rangées, de ce qui a été montré dans la manche (S.seen) et,
+   pour choisir une rangée, des cartes révélées qui restent à poser. */
+
+/* Déclarée en `function` : les tests la remplacent pour vérifier qu'aucune
+   politique ne triche. */
+function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
+
+/* Les rangées réduites à des nombres : dernière carte, longueur, têtes. */
+function rowState() {
+  return {
+    ends: S.rows.map((row) => row[row.length - 1].n),
+    lens: S.rows.map((row) => row.length),
+    heads: S.rows.map(sumHeads),
+  };
+}
+
+function targetIn(n, ends) {
+  let best = -1;
+  for (let r = 0; r < ends.length; r++) if (ends[r] < n && (best < 0 || ends[r] > ends[best])) best = r;
+  return best;
+}
+
+function cheapestIn(heads, lens) {
+  let best = 0;
+  for (let r = 1; r < heads.length; r++) {
+    if (heads[r] < heads[best] || (heads[r] === heads[best] && lens[r] < lens[best])) best = r;
+  }
+  return best;
+}
+
+const copyRows = (rs) => ({ ends: rs.ends.slice(), lens: rs.lens.slice(), heads: rs.heads.slice() });
+
+/* Joue des cartes (des nombres) sur les rangées données, qu'elle modifie, de
+   la plus petite à la plus grande ; une carte trop petite ramasse la rangée
+   la moins chère. Renvoie les têtes ramassées par la première carte de la
+   liste ; `taken`, s'il est donné, reçoit celles de chaque carte. Appelée des
+   dizaines de milliers de fois par décision : rien n'y est alloué. */
+const byValue = new Array(16);             // ordre de pose, réutilisé d'un appel à l'autre
+function playOn(rs, cards, taken) {
+  const { ends, lens, heads } = rs;
+  const k = cards.length;
+  for (let i = 0; i < k; i++) {
+    let j = i;
+    while (j > 0 && cards[byValue[j - 1]] > cards[i]) { byValue[j] = byValue[j - 1]; j--; }
+    byValue[j] = i;
+  }
+  let first = 0;
+  for (let q = 0; q < k; q++) {
+    const i = byValue[q], n = cards[i];
+    let r = targetIn(n, ends), t = 0;
+    if (r < 0 || lens[r] >= ROW_MAX) {
+      if (r < 0) r = cheapestIn(heads, lens);
+      t = heads[r];
+      ends[r] = n; lens[r] = 1; heads[r] = HEADS[n];
+    } else {
+      ends[r] = n; lens[r]++; heads[r] += HEADS[n];
+    }
+    if (i === 0) first = t;
+    if (taken) taken[i] = t;
+  }
+  return first;
+}
+
+/* Le coup « au plus juste », sur des nombres : la carte qui ne ramasse rien
+   et se glisse au plus près de la fin de sa rangée ; à défaut, celle qui
+   coûte le moins si personne d'autre ne jouait. Cherche parmi les `len`
+   premiers nombres de la main et renvoie la position du coup. */
+function greedyIdx(hand, rs, len = hand.length) {
+  let best = 0, bestCost = Infinity, low = 0;
+  for (let i = 0; i < len; i++) {
+    const n = hand[i];
+    const r = targetIn(n, rs.ends);
+    let cost;
+    if (r < 0) cost = low || (low = Math.min(...rs.heads));
+    else if (rs.lens[r] >= ROW_MAX) cost = rs.heads[r];
+    else cost = (n - rs.ends[r]) / 1000;
+    if (cost < bestCost) { bestCost = cost; best = i; }
+  }
+  return best;
+}
+
+/* Les nombres que ce joueur n'a jamais vus dans la manche : les mains des
+   autres s'y cachent, parmi les cartes jamais distribuées. */
+function unseenNumbers(p) {
+  const known = new Uint8Array(CARDS + 1);
+  for (const c of p.hand) known[c.n] = 1;
+  for (const c of S.seen) known[c.n] = 1;
+  const out = [];
+  for (let n = 1; n <= CARDS; n++) if (!known[n]) out.push(n);
+  return out;
+}
+
+/* ---------------------------------------------------------------------------
+   Politique simple : joue au plus juste, comme si personne d'autre ne jouait,
+   et ramasse la rangée la moins chère. Les adversaires jouent toujours
+   « sharp » ; celle-ci ne sert que de référence au banc d'essai.
+   --------------------------------------------------------------------------- */
+const simplePolicy = {
+  pick(p) { return p.hand[greedyIdx(p.hand.map((c) => c.n), rowState())]; },
+  row() { return cheapestRow(); },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable ». Elle compte les cartes : les mains des autres sont
+   cachées parmi les nombres qu'elle n'a pas vus dans la manche. Pour choisir sa
+   carte, elle tire au hasard AI.samples jeux possibles pour les adversaires et
+   essaie chacune de ses cartes contre chacun : ce tour-ci, puis le reste de la
+   manche (AI.depth tours), où tout le monde joue au plus juste — les
+   adversaires au hasard une fois sur AI.noise. Elle garde la carte qui lui fait
+   ramasser le moins de têtes en moyenne. C'est ce qui lui fait sentir qu'une
+   rangée de quatre cartes est dangereuse quand beaucoup de nombres peuvent se
+   glisser avant elle, qu'il vaut mieux se débarrasser d'une carte qui sera
+   difficile à placer plus tard, ou garder une petite carte pour ramasser une
+   rangée bon marché au bon moment.
+   Pour une carte trop petite, elle voit les cartes révélées : elle ramasse la
+   rangée la moins chère, et à coût proche celle qui en fait ramasser aux autres.
+
+   Réglages mesurés au banc d'essai : jouer la suite de la manche fait passer de
+   35 à 55 % de victoires contre la politique simple. Sans bruit (noise 0), le
+   modèle est exactement la politique simple et gagne davantage contre elle, mais
+   perd contre des redoutables : c'est du surapprentissage.
+   --------------------------------------------------------------------------- */
+const AI = {
+  samples: 100,    // jeux adverses tirés par décision
+  noise: 0.3,      // part des adversaires qu'on fait jouer au hasard dans ces tirages
+  spite: 0.1,      // carte trop petite : chaque tête que les suivants ramasseront compte pour ça
+  depth: 9,        // tours suivants joués dans chaque tirage (9 : toute la manche)
+  future: 1,       // poids des têtes ramassées dans ces tours-là
+};
+
+/* Le coup d'un adversaire dans un tirage : au plus juste, ou au hasard. */
+const modelIdx = (hand, rs, len) => (Math.random() < AI.noise ? Math.floor(Math.random() * len) : greedyIdx(hand, rs, len));
+
+const sharpPolicy = {
+  pick(p) {
+    const h = p.hand.length;
+    if (h === 1) return p.hand[0];
+    const hand = p.hand.map((c) => c.n);
+    const rs = rowState();
+    const pool = unseenNumbers(p);
+    const n = nplayers();
+    const cost = new Array(h).fill(0);
+    const opp = Array.from({ length: n }, () => new Array(h));   // les mains tirées (opp[0] : inutilisée)
+    const first = new Array(n);                                  // leur coup ce tour-ci, par position
+    const left = Array.from({ length: n }, () => new Array(h));  // ce qui reste à chacun ensuite
+    const play = new Array(n);
+    for (let s = 0; s < AI.samples; s++) {
+      // Tirage sans remise : les mains adverses, prises au bout du tableau mélangé.
+      let k = pool.length;
+      for (let o = 1; o < n; o++) {
+        for (let j = 0; j < h; j++) {
+          const x = Math.floor(Math.random() * k--);
+          [pool[x], pool[k]] = [pool[k], pool[x]];
+          opp[o][j] = pool[k];
+        }
+        first[o] = modelIdx(opp[o], rs, h);
+      }
+      for (let i = 0; i < h; i++) {
+        play[0] = hand[i];
+        for (let o = 1; o < n; o++) play[o] = opp[o][first[o]];
+        const st = copyRows(rs);
+        cost[i] += playOn(st, play);
+        // La suite de la manche, chacun au plus juste avec ce qui lui reste.
+        let m = h - 1;
+        if (!AI.depth || !m) continue;
+        for (let j = 0, q = 0; j < h; j++) if (j !== i) left[0][q++] = hand[j];
+        for (let o = 1; o < n; o++) for (let j = 0, q = 0; j < h; j++) if (j !== first[o]) left[o][q++] = opp[o][j];
+        for (let t = 0; t < AI.depth && m > 0; t++) {
+          for (let o = 0; o < n; o++) {
+            const x = o ? modelIdx(left[o], st, m) : greedyIdx(left[0], st, m);
+            play[o] = left[o][x];
+            left[o][x] = left[o][m - 1];
+          }
+          m--;
+          cost[i] += AI.future * playOn(st, play);
+        }
+      }
+    }
+    let best = 0;
+    for (let i = 1; i < h; i++) if (cost[i] < cost[best]) best = i;
+    return p.hand[best];
+  },
+
+  row(p, seat, card) {
+    const rs = rowState();
+    const rest = S.queue.filter((q) => q.card !== card).map((q) => q.card.n);
+    let best = 0, bestCost = Infinity;
+    for (let r = 0; r < rs.ends.length; r++) {
+      const after = copyRows(rs);
+      after.ends[r] = card.n; after.lens[r] = 1; after.heads[r] = card.heads;
+      const taken = new Array(rest.length).fill(0);
+      playOn(after, rest, taken);
+      const others = taken.reduce((a, b) => a + b, 0);
+      const cost = rs.heads[r] - AI.spite * others;
+      if (cost < bestCost) { bestCost = cost; best = r; }
+    }
+    return best;
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+
+/* ================================================================= ENTRÉES */
+
+const canPick = () => S.phase === "pick" && !S.busy && !S.chosen[0];
+
+/* Un clic choisit la carte ; un second clic sur la même la pose. */
+function onCardClick(uid) {
+  if (!canPick()) return;
+  const card = S.players[0].hand.find((c) => c.uid === uid);
+  if (!card) return;
+  if (S.sel === uid) { onPlayClick(); return; }
+  S.sel = uid;
+  render();
+}
+
+function onPlayClick() {
+  if (!canPick()) return;
+  const card = S.players[0].hand.find((c) => c.uid === S.sel);
+  if (!card) return;
+  S.chosen[0] = card;
+  if (S.chosen.every(Boolean)) reveal();
+  else render();
+}
+
+/* Carte trop petite : la rangée que l'humain ramasse. */
+function onRowClick(r) {
+  if (S.phase !== "row" || !S.queue.length || S.queue[0].seat !== 0) return;
+  if (!Number.isInteger(r) || r < 0 || r >= S.rows.length) return;
+  S.phase = "place";
+  S.busy = true;
+  resolveTurn(r);
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function cardEl(c, extra) {
+  const b = mk("button", "card " + (c ? "h" + c.heads : "back") + (extra ? " " + extra : ""));
+  if (c) {
+    const heads = mk("span", "heads");
+    for (let i = 0; i < c.heads; i++) heads.appendChild(mk("i"));
+    b.appendChild(heads);
+    b.appendChild(mk("span", "num", String(c.n)));
+  }
+  b.disabled = true;
+  return b;
+}
+
+let rowEls = [];
+
+function buildBoard() {
+  const host = el("opponents");
+  host.innerHTML = "";
+  S.players.forEach((p, pi) => {
+    if (pi === 0) return;
+    const box = mk("div", "player");
+    const info = mk("div", "info");
+    const name = mk("div", "name");
+    name.appendChild(mk("span", null, p.name));
+    const tag = mk("span", "tag", "");
+    name.appendChild(tag);
+    info.appendChild(name);
+    const fan = mk("div", "fan");
+    info.appendChild(fan);
+    box.appendChild(info);
+    const played = mk("div", "played");
+    box.appendChild(played);
+    const bubble = mk("span", "bubble");
+    box.appendChild(bubble);
+    host.appendChild(box);
+    Object.assign(p, { _box: box, _tag: tag, _fan: fan, _played: played, _bubble: bubble });
+  });
+
+  const rows = el("rows");
+  rows.innerHTML = "";
+  rowEls = [];
+  for (let r = 0; r < ROWS; r++) {
+    const line = mk("div", "line");
+    line.addEventListener("click", () => onRowClick(r));
+    rows.appendChild(line);
+    rowEls.push(line);
+  }
+}
+
+let shownUids = new Set();
+
+/* Le sujet d'une phrase de statut : « Tu poses », « <b>Nora</b> pose ». */
+const who = (p, second, third) => (p.ai ? `<b>${p.name}</b> ${third}` : `Tu ${second}`);
+
+function statusHtml() {
+  const me = S.players[0];
+  switch (S.phase) {
+    case "pick": {
+      if (S.chosen[0]) return "Les autres choisissent…";
+      const card = me.hand.find((c) => c.uid === S.sel);
+      if (!card) return "Choisis la carte à poser.";
+      const r = targetRow(card);
+      if (r < 0) return `Ton ${card.n} est trop petit : tu ramasseras une rangée.`;
+      const line = S.rows[r];
+      const end = line[line.length - 1].n;
+      if (line.length >= ROW_MAX) return `Gare : ton ${card.n} serait la 6e carte (<b>${headsLabel(sumHeads(line))}</b>).`;
+      return `Ton ${card.n} irait après le ${end}, en ${line.length + 1}e carte.`;
+    }
+    case "place": {
+      const pl = S.placing;
+      if (!pl) return "Les cartes se posent dans l'ordre croissant.";
+      const p = S.players[pl.seat];
+      const line = S.rows[pl.row];
+      const end = line[line.length - 1].n;
+      const what = `<b>${headsLabel(sumHeads(line))}</b>`;
+      if (pl.low) return `${who(p, "ramasses", "ramasse")} la rangée du ${end} avec ${p.ai ? "son" : "ton"} ${pl.card.n} : ${what}.`;
+      if (pl.take) return `${who(p, "poses", "pose")} le ${pl.card.n} en 6e carte : ${what} !`;
+      return `${who(p, "poses", "pose")} le ${pl.card.n} après le ${end}.`;
+    }
+    case "row":
+      return `Ton ${S.queue[0].card.n} est trop petit : <b>choisis la rangée à ramasser</b>.`;
+    default: return "";
+  }
+}
+
+function renderRows(next) {
+  const me = S.players[0];
+  const sel = S.phase === "pick" && !S.chosen[0] ? me.hand.find((c) => c.uid === S.sel) : null;
+  const aim = sel ? targetRow(sel) : -1;
+  const pl = S.placing;
+  S.rows.forEach((row, r) => {
+    const line = rowEls[r];
+    line.innerHTML = "";
+    const heads = sumHeads(row);
+    const count = mk("div", "count" + (heads >= 5 ? " hot" : ""));
+    count.appendChild(mk("i"));
+    count.appendChild(mk("span", null, String(heads)));
+    line.appendChild(count);
+
+    // La carte qui arrive : celle qu'on pose, ou l'aperçu de celle que l'humain a choisie.
+    let incoming = null, cls = "";
+    if (pl && pl.row === r && !pl.low) { incoming = pl.card; cls = "incoming"; }
+    else if (sel && aim === r) { incoming = sel; cls = "ghost"; }
+    for (let i = 0; i < ROW_MAX + 1; i++) {
+      if (i < row.length) {
+        const c = row[i];
+        next.add(c.uid);
+        line.appendChild(cardEl(c, shownUids.has(c.uid) ? "" : "pop"));
+      } else if (incoming && i === row.length) {
+        if (cls === "incoming") next.add(incoming.uid);
+        line.appendChild(cardEl(incoming, cls));
+      } else {
+        line.appendChild(mk("div", i === ROW_MAX ? "slot six" : "slot", i === ROW_MAX ? "6" : undefined));
+      }
+    }
+    line.className = "line";
+    if (pl && pl.row === r && pl.take) line.classList.add("taking");
+    else if (pl && pl.row === r) line.classList.add("target");
+    else if (S.phase === "row") line.classList.add("pickable");
+    else if (sel && aim === r) line.classList.add(row.length >= ROW_MAX ? "danger" : "target");
+  });
+}
+
+function renderHand(next) {
+  const me = S.players[0];
+  const host = el("hand");
+  host.innerHTML = "";
+  host.style.setProperty("--n", me.hand.length);
+  const picking = canPick();
+  // La carte révélée reste montrée dans la main, soulevée, jusqu'à sa pose.
+  const mine = S.queue.find((q) => q.seat === 0);
+  const cards = mine ? [...me.hand, mine.card] : me.hand.slice();
+  for (const c of cards.sort((a, b) => a.n - b.n)) {
+    next.add(c.uid);
+    let cls = "";
+    if (picking) cls += " pickable";
+    if (picking && S.sel === c.uid) cls += " sel";
+    if (S.chosen[0] === c || (mine && mine.card === c)) cls += " chosen";
+    if (!shownUids.has(c.uid)) cls += " pop";
+    const b = cardEl(c, cls.trim());
+    if (picking) {
+      b.disabled = false;
+      b.addEventListener("click", () => onCardClick(c.uid));
+    }
+    host.appendChild(b);
+  }
+  const gain = sumHeads(me.pile);
+  el("myTag").innerHTML = headsLabel(me.score) + (gain ? ` <span class="gain">+${gain} cette manche</span>` : "");
+}
+
+/* Un seul bouton, toujours présent : la hauteur de la zone ne bouge pas d'un
+   tour à l'autre (sur téléphone, une zone vide se replie). */
+function renderActions() {
+  const host = el("actions");
+  host.innerHTML = "";
+  const card = canPick() ? S.players[0].hand.find((c) => c.uid === S.sel) : null;
+  const b = mk("button", "primary", card ? `Poser le ${card.n}` : "Poser");
+  b.disabled = !card;
+  b.addEventListener("click", onPlayClick);
+  host.appendChild(b);
+}
+
+function render() {
+  if (!S.players.length) return;
+  const next = new Set();
+  const placingSeat = S.placing ? S.placing.seat : S.phase === "row" ? S.queue[0].seat : -1;
+  // Adversaires
+  S.players.forEach((p, pi) => {
+    if (pi === 0 || !p._box) return;
+    p._box.classList.toggle("active", placingSeat === pi);
+    p._tag.textContent = headsLabel(p.score);
+    p._fan.innerHTML = "";
+    for (let i = 0; i < p.hand.length; i++) p._fan.appendChild(cardEl(null));
+    // La carte jouée : de dos une fois choisie, face visible une fois révélée.
+    p._played.innerHTML = "";
+    const q = S.queue.find((x) => x.seat === pi);
+    if (q) p._played.appendChild(cardEl(q.card));
+    else if (S.phase === "pick" && S.chosen[pi]) p._played.appendChild(cardEl(null));
+    const gain = sumHeads(p.pile);
+    p._bubble.textContent = gain ? `+${gain}` : "";
+    p._bubble.hidden = !gain;
+  });
+
+  renderRows(next);
+  renderHand(next);
+  shownUids = next;
+  renderActions();
+  el("me").classList.toggle("active", canPick() || S.phase === "row");
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
+  el("roundInfo").textContent = `Manche ${S.round} · tour ${Math.max(S.turn, 1)}/${DEAL}`;
+}
+
+/* ============================================================== Interface */
+/* Toujours quatre joueurs : toi et trois adversaires « sharp », partie en
+   66 têtes. newGame() reste générique — les tests et le banc d'essai y
+   asseyent d'autres tablées (2 à 10) par startGame(n). */
+const PLAYERS = 4;
+
+function startGame(nPlayers = PLAYERS) {
+  el("startOverlay").hidden = true;
+  newGame(nPlayers);
+}
+
+// Les règles montrent une carte de chaque valeur de têtes.
+for (const n of [7, 15, 30, 44, 55]) el("headsScale").appendChild(cardEl(mkCard(n)));
+
+el("btnStart").addEventListener("click", () => startGame());
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  if (el("btnNext").dataset.over) {
+    for (const p of S.players) { p.score = 0; p.rounds = []; p.last = 0; }
+    S.round = 1;
+  } else {
+    S.round++;
+  }
+  startRound();
+});
+</script>
+</body>
+</html>
