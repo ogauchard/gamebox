@@ -214,6 +214,39 @@
   .t:nth-child(3) { transform: translate(18px, -2px) rotate(6deg); }
   .t:nth-child(4) { transform: translate(42px, 2px) rotate(12deg); }
 
+  /* Turkish : on descend — As, Roi, 9 — et un 10 vient balayer le pli. */
+  .p-turk { background: radial-gradient(ellipse at 50% 20%, #2e1b1e 0%, #160f10 75%); }
+  .turk-fan { position: relative; width: 60px; height: 110px; }
+  .k {
+    --cw: 52px;
+    position: absolute; left: 50%; top: 12px;
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    margin-left: calc(var(--cw) * -.5);
+    border-radius: calc(var(--cw) * .11);
+    background: #fbf7ee; color: #1f2328;
+    box-shadow: 0 3px 10px rgba(0,0,0,.55);
+    overflow: hidden;
+  }
+  .k.red { color: #c8322b; }
+  .k.ten { box-shadow: inset 0 0 0 3px #d9a520, 0 3px 10px rgba(0,0,0,.55); }
+  .k s {
+    position: absolute; top: 5%; left: 8%;
+    display: flex; flex-direction: column; align-items: center;
+    text-decoration: none; font-weight: 900; line-height: .95;
+    font-size: calc(var(--cw) * .3);
+  }
+  .k s i { font-style: normal; font-size: calc(var(--cw) * .24); }
+  .k b {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: 22% 0 0 18%;
+    font-size: calc(var(--cw) * .6); font-weight: 400; line-height: 1;
+  }
+  .k:nth-child(1) { transform: translate(-48px, 6px) rotate(-12deg); filter: brightness(.6); }
+  .k:nth-child(2) { transform: translate(-22px, 2px) rotate(-5deg); filter: brightness(.6); }
+  .k:nth-child(3) { transform: translate(4px, 0) rotate(2deg); filter: brightness(.6); }
+  .k:nth-child(4) { transform: translate(36px, 5px) rotate(11deg); }
+
   footer { text-align: center; color: var(--dim); font-size: 13px; margin-top: 30px; }
   footer a { color: inherit; }
 
@@ -242,7 +275,7 @@
 <main>
   <header>
     <h1>GAMEBOX</h1>
-    <p>Cinq jeux, directement dans le navigateur.</p>
+    <p>Six jeux, directement dans le navigateur.</p>
   </header>
 
   <nav class="games">
@@ -328,6 +361,22 @@
       <div class="info">
         <h2>Trou du cul</h2>
         <p>Débarrasse-toi de tes cartes pour finir Président ; le dernier donne ses meilleures cartes. Contre 3 adversaires.</p>
+        <span class="play">Jouer →</span>
+      </div>
+    </a>
+
+    <a class="game" href="turkish.html">
+      <div class="preview p-turk" aria-hidden="true">
+        <div class="art turk-fan">
+          <div class="k"><s>A<i>♠</i></s><b>♠</b></div>
+          <div class="k red"><s>R<i>♥</i></s><b>♥</b></div>
+          <div class="k"><s>9<i>♣</i></s><b>♣</b></div>
+          <div class="k red ten"><s>10<i>♦</i></s><b>♦</b></div>
+        </div>
+      </div>
+      <div class="info">
+        <h2>Turkish</h2>
+        <p>On descend au lieu de monter, et le 10 balaie le pli : débarrasse-toi le premier de tes cartes. Contre 3 adversaires.</p>
         <span class="play">Jouer →</span>
       </div>
     </a>

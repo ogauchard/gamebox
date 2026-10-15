@@ -5,7 +5,7 @@ description: Ajoute un nouveau jeu à gamebox de bout en bout — page HTML auto
 
 # Ajouter un jeu à gamebox
 
-Cinq jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
+Six jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
 Le fil conducteur : **un fichier HTML autonome, des règles écrites noir sur blanc, des IA qui ne trichent pas, et une
 suite de tests qui joue des parties entières sous invariants.** Ne rien partager entre les jeux : copier un motif
 d'un autre fichier, oui ; l'importer, non.
@@ -112,7 +112,9 @@ test l'interdit désormais (voir plus bas).
 **Terminaison.** Avant de livrer, vérifier qu'une table de `sharp` identiques finit ses manches. Deux jeux du dépôt ont
 déjà bouclé sans fin : Skyjo (un bonus « ne pas finir » rendait l'attente toujours rentable — corrigé par une pression
 qui croît avec les tours) et Cinq Rois (trois IA se repassaient le même joker par la défausse — corrigé en exigeant
-qu'une prise bat strictement l'espérance de la pioche). Soit le jeu termine par construction (le dire dans CLAUDE.md
+qu'une prise bat strictement l'espérance de la pioche), et Turkish (quatre redoutables se renvoyaient un carré
+ramassé puis aussitôt rejoué — corrigé par une patience : passé un nombre de tours, la hauteur seule décide). Soit le
+jeu termine par construction (le dire dans CLAUDE.md
 et pourquoi), soit il a un garde-fou du type `TURN_CAP` que le banc ne doit jamais atteindre.
 
 ## 4. Les tests
@@ -150,7 +152,8 @@ s'il commence), puis trois modes :
 - par défaut : un `sharp` contre trois `simple` (la table du jeu), taux de victoire (référence 25 %) et score moyen
   par manche ;
 - `sweep` : compare des réglages de l'objet `AI` — juger sur le score moyen par manche, bien moins bruité que le taux
-  de victoire ;
+  de victoire, et afficher pour chaque réglage la part de manches bloquées entre quatre `sharp` : le réglage le plus
+  fort de Turkish faisait boucler une donne sur sept ;
 - `stall` : quatre `sharp`, la table que le joueur affronte vraiment ; doit rapporter zéro partie bloquée.
 
 Ce n'est pas un test : il ne va pas dans `run-all.js`. Noter les chiffres obtenus (nombre de parties, victoires,

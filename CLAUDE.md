@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Five **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
-except that the four card games load one shared stylesheet, [cartes.css](cartes.css), for their common layout (see
+Six **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
+except that the five card games load one shared stylesheet, [cartes.css](cartes.css), for their common layout (see
 *Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
@@ -17,20 +17,23 @@ except that the four card games load one shared stylesheet, [cartes.css](cartes.
 - [trou-du-cul.html](trou-du-cul.html) — the traditional climbing game (a.k.a. Président), rules from the French
   Wikipedia article plus fixed house rules (54 cards with wild jokers, a long game to 18 points, no options at all),
   DOM/CSS rendering.
+- [turkish.html](turkish.html) — Turkish, a shedding game where you play *down* instead of up, with a tarot deck
+  minus the trumps; rules from the « Le jeu de Turkish » blog and its author's answers, DOM/CSS rendering.
 - [cartes.css](cartes.css) — the card games' shared layout and components; each game keeps its tint, card faces and
   table contents inline.
-
-**The card games are deliberately simple to start**: always **4 players** (you and 3 computer opponents) and **one AI
-level**, the strongest ("Redoutable") — the owner removed the player-count, level and Trou-du-cul length choices.
-Only Uno keeps options (format, house rules). The engines stayed generic: `newGame(n)` still seats 2–6, and
-`startGame(n = PLAYERS)` — what the "Commencer" button calls — lets tests and benches seat other tables. The weaker
-policies Skyjo, Cinq Rois and Trou du cul still contain are **benchmark baselines only**, never dealt to a player; Uno
-had no bench, so its weak policy was deleted.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games' logic independent of each other. The **`nouveau-jeu` skill**
   ([.claude/skills/nouveau-jeu/](.claude/skills/nouveau-jeu/SKILL.md)) holds the full checklist for adding one.
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
   A new game also needs its card here. The games don't link back to it.
+
+**The card games are deliberately simple to start**: always **4 players** (you and 3 computer opponents) and **one AI
+level**, the strongest ("Redoutable") — the owner removed the player-count, level and Trou-du-cul length choices.
+Only Uno (format, house rules) and Turkish (number of deals, which the owner asked to keep as a choice) have options.
+The engines stayed generic: `newGame(n)` still seats 2–6, and `startGame(n = PLAYERS)` — what the "Commencer"
+button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du cul and
+Turkish still contain are **benchmark baselines only**, never dealt to a player; Uno had no bench, so its weak policy
+was deleted.
 
 ## Hosting
 
@@ -45,14 +48,15 @@ hash (`cartes.css?v=<hash>`), kept in step by `node tests/cartes.test.js --fix`.
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les six suites (~5400 assertions, le total varie — les cartes sont mélangées)
+node tests/run-all.js          # les sept suites (~5700 assertions, le total varie — les cartes sont mélangées)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
 node tests/trou-du-cul.test.js # règles du Trou du cul seules
+node tests/turkish.test.js     # règles du Turkish seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 node tests/cartes.test.js      # gabarit commun : liens vers cartes.css, empreinte, teintes
-node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 4 liens
+node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 5 liens
 ```
 
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
@@ -96,7 +100,9 @@ friends — cards are addressed by `uid`, not by DOM node, because `render()` re
 likewise through `onDrawClick`/`onDiscardPileClick`/`onHandClick(uid)`; those handlers only act for seat 0, so a
 targeted test that plays another seat calls `drawOne`/`takeDiscard` → `discardCard` → `afterDiscard` directly.
 Trou du cul through `onCardClick(uid)` + `onPlayClick`/`onPassClick`/`onGiveClick`, same seat-0 restriction (other
-seats: `doPlay`/`doPass`). `loadDomGame(file)` in the harness loads any of the four card games.
+seats: `doPlay`/`doPass`). Turkish through `onCardClick(zone, uid)` (`"hand"` or `"up"`) + `onPlayClick`,
+`onDownClick(i)` for a face-down card and `onPickupClick` then a hand-card click to show (other seats: `doPlay`/
+`doBlind`/`doPickup`). `loadDomGame(file)` in the harness loads any of the five card games.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -111,7 +117,7 @@ reaches the draw-pile reshuffle or a non-positive finisher total — those are t
 
 ## Shared layout — cartes.css
 
-The four card games — Skyjo, Uno, Cinq Rois, Trou du cul — look alike on purpose, on desktop as on phones; Asteroids
+The five card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish — look alike on purpose, on desktop as on phones; Asteroids
 and the landing page stay independent.
 [cartes.css](cartes.css) holds everything that used to be copied four times: base styles, header, buttons, opponent
 panels (`.player`, `.fan`), status, log, actions, the player's area, overlays and sheets, and the phone and short-screen
@@ -134,10 +140,12 @@ faces, the contents of its table, its hand. The DOM is the same skeleton everywh
 - **Phones** (`max-width: 560px`): the three opponents become a grid with one equal column each, overlays become
   bottom-anchored sheets.
 
-After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the four links,
+After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the five links,
 and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
-1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all four games fit with no scroll at every one
-of those sizes. Landscape phones fall outside the 560 px query and get the desktop layout.
+1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all five games fit with no scroll at every one
+of those sizes (Turkish's only exception: a 30-card hand on an iPhone SE scrolls a little). `fit.js` switches CSS
+animations off before measuring: headless Edge doesn't advance them in virtual time, and a card frozen at the start of
+its `pop` (24 px lower) reads as a false overflow. Landscape phones fall outside the 560 px query and get the desktop layout.
 
 ## Architecture — asteroids.html
 
@@ -570,3 +578,85 @@ The shared layout (see *Shared layout*), with the trick as the table: `#table` i
 order badge) and `--trick-card` sizes on its height in `cqh`, minus 52 px for the two text lines. An empty trick shows
 a dashed card outline (`#trickCards:empty::before`), like the other games' empty discard, rather than a hole. On
 phones `main` gets extra top padding for the opponents' bubbles.
+
+## Architecture — turkish.html
+
+### Rules as implemented
+
+From the « Le jeu de Turkish » blog (jeudeturkish.blogspot.com) and its author's answers in the comments, which
+settle most questions. A tarot deck minus the trumps: 56 cards, As > Roi > Dame > Cavalier > Valet > 9 … 2, and the
+**10 apart**. Ranks are stored 2–9, 11 Valet, 12 Cavalier, 13 Dame, 14 Roi, 15 As, and 10 for the 10: since a 10 never
+becomes the value to beat (`S.top`), the order is just the number. Each player gets 3 face-down (`p.down`), 3
+face-up on them (`p.up`) and 8 in hand.
+
+- **You play down**: equal or lower than the last value laid, as many copies as you like — all from the hand or all
+  from the face-up cards, never mixed. Colours don't count.
+- **Picking up**, allowed even when you could play: you **must show a hand card** (owner's choice), which stays in hand;
+  the pile joins the hand and you lead. With an empty hand you pick up directly. Showing the **7♦** reverses the
+  direction, like playing it — the only effect of the show.
+- **The 10 (balayette)** is legal at any time, alone or several: pile and 10s leave the game (`S.out`), you lead again;
+  on an empty pile it sweeps nothing but is still discarded. **Never as your last cards** (owner's choice): `canPlayCards`
+  refuses a 10 play that would empty your game, so facing a pile with only 10s you must pick up, and with only 10s to
+  lead `beginTurn()` passes the lead to the next player. A face-down 10 revealed as your very last card does sweep and
+  takes you out, as the blog says.
+- **The 7♦** reverses the direction each time it hits the table, until the next one.
+- **Face-up cards** are playable once you've played your first card of the deal (`p.started`); **face-down** only
+  once your face-up cards are all gone, one at a time, blind (`doBlind`). A blind card that doesn't fit counts as the
+  shown card: it goes to the hand with the pile.
+- The deal ends as soon as a player has no card left; losers count everything left (hand, face-up, face-down):
+  figures 10, the 10 twenty, everything else — the As included — 5. Lowest total after the chosen number of deals
+  (4, 8 or 12, chosen on the start screen at the owner's request) wins. The opener rotates: you, then the next seat.
+
+### Flow
+
+`S.phase`: `play` (your turn), `show` (choosing the card to show after "Ramasser"), `ai`, `over`. Three moves, each
+re-checked by the click handlers: `doPlay(seat, cards)`, `doBlind(seat, idx)`, `doPickup(seat, shown)`; `place()`
+handles laying (sweep, direction, going out), `take()` a pickup. After a sweep or a pickup the same seat leads.
+`TURN_CAP` (1500) ends a deal in place, everyone counting their cards; it is a guarantee only, see below.
+
+### Opponent AI
+
+`play(p, seat) -> { kind: "play", cards } | { kind: "blind" } | { kind: "pickup", show }`. Neither policy may read
+another hand or **any face-down card, its own included**; the test swaps them for counting `Proxy`s. `S.deck` (the
+reference for card conservation) is kept **sorted** so the deal order can't leak. `p.known` holds what everybody
+saw go into a hand (picked-up piles, shown cards) — public information.
+
+`simple` (the bench baseline) lays its highest legal value, all copies, face-up first; sweeps when stuck; then tries a
+face-down card; picks up last. `sharp` scores each play: shed cards (`AI.shed` each), lay high (`AI.unload` per rank
+step, counted **once per play**), empty the face-up cards (`AI.upBonus`); it goes out whenever one play empties its
+game, leads blind when its best lead is weak, sweeps with its 10s once it has ≤ `AI.tenEndgame` other cards, and when
+stuck always prefers a blind card to picking up (a failed blind card only adds a now-known card to the pickup).
+
+**The pitfall that bit here:** counting the rank bonus per copy made `sharp` lead four 7s rather than one As — and a
+table of four `sharp` then looped: a four-of-a-kind picked up was re-laid at once, went round, came back (with the 7♦
+flipping the direction each time). 119 deals in 800 hit `TURN_CAP`. Counting the rank once per play fixed most of it;
+**`AI.patience`** fixed the rest: past 150 turns in a deal, each card laid is worth only `AI.shedLate`, the rank
+alone decides, as for `simple`, which never loops. Run `stall` before shipping any change to the policy.
+
+Tried and dropped because the bench said they lose: attacking the next player by laying low (even when it is about to
+go out, with card counting to estimate its odds of answering), dumping costly cards when an opponent nears the end,
+sweeping instead of burning a low card, picking up a small pile to keep low cards, laying a single copy to keep the
+others (`AI.split`).
+
+```
+node tests/turkish-bench.js 2000        # 1 redoutable contre 3 tranquilles
+node tests/turkish-bench.js sweep 800   # compare des réglages de l'objet AI, et les donnes bloquées de chacun
+node tests/turkish-bench.js stall 400   # 4 redoutables : garde-fou jamais atteint
+```
+
+Reference points at the shipped settings: **30 % wins** over 2000 games of 4 deals (25 % baseline), **33.6 points per
+deal against 40.0**; four `sharp` players: 63 turns per deal, worst 186 in 1600 deals, `TURN_CAP` never reached. The
+sweep is noisy (±1 point per deal at 800 games): compare points per deal, and reject any setting that makes the table
+of four loop, however strong.
+
+### Rendering and layout
+
+The shared layout (see *Shared layout*), with the pile as the table: last play bright, earlier cards dimmed, at most 8
+shown; an empty pile shows a dashed outline, a closed one stays dimmed with "Balayette de …" / "Pli ramassé par …".
+The 10 has a gold border, the 7♦ a ⇄ mark. Each opponent shows a fan of hand backs and its three spots (`.tab`): the
+face-up card over the face-down one, whose edge shows below; at the end of a deal face-down cards turn over, since they
+count. `render()` rebuilds the hand every call, grouped by rank (10s last), `shownUids` limiting the `pop`.
+
+**Hands grow big here** — picking up a pile easily gives 20–30 cards — so the desktop hand card width follows `--n`
+(cards) and `--g` (rank groups), both set by `renderMe()`, to keep the whole hand on one row beside the spots
+(`#me` lifts the shared 1000 px cap for that). On phones the hand wraps with `--k` cards per row, growing with `--n`.

@@ -58,7 +58,9 @@ geler les adversaires, grossir la main, fin de manche réelle, règles, Asteroid
 d'un état à moitié posé que `render()` ou `showScores()` ne sait pas afficher.
 
 **Mesurer plutôt qu'estimer** : cumuler `--pose .claude/skills/capture/references/fit.js` avec la mise en scène. La
-console dit alors si `<main>` défile (`DÉBORDE de 66px` ou `tient`) et la hauteur de chacun de ses blocs. Pour une
+console dit alors si `<main>` défile (`DÉBORDE de 66px` ou `tient`) et la hauteur de chacun de ses blocs. Elle coupe les
+animations avant de mesurer : Edge headless ne les fait pas avancer en temps virtuel, et une carte figée au début de
+son apparition passerait pour un débordement. Pour une
 mise en page qui doit tenir sans défilement, balayer les tailles (portable court 1366x650, 1536x720, 1280x800,
 1920x950, téléphones 390x844, 375x667, 412x915) et lire les chiffres avant les images.
 
@@ -71,8 +73,9 @@ Deux réflexes :
 
 ## Que capturer
 
-- **Changement de CSS mobile** : `--phone` et `--phone 375x667`, et pour Uno, Cinq Rois et Trou du cul des mains
-  d'environ 5, 13 et 20 cartes, puisque la mise en page dépend de la taille de la main.
+- **Changement de CSS mobile** : `--phone` et `--phone 375x667`, et pour Uno, Cinq Rois, Trou du cul et Turkish des
+  mains d'environ 5, 13 et 20 cartes (30 pour Turkish, où l'on ramasse des plis entiers), puisque la mise en page
+  dépend de la taille de la main.
 - **Changement de rendu de bureau** : `--size 900x900`, une fenêtre plus large (`1400x900`) et surtout un portable
   court (`1366x650` : un écran de 768 px moins la barre du navigateur, cas très courant) ; Cinq Rois a déjà débordé à
   1000 px avec 14 cartes, et Skyjo débordait sur tous les écrans de bureau avant d'être mesuré.

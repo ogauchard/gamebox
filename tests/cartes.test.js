@@ -1,7 +1,7 @@
 /* Gabarit commun des jeux de cartes (cartes.css).
  *
  *   node tests/cartes.test.js         vérifie
- *   node tests/cartes.test.js --fix   met à jour l'empreinte dans les quatre liens
+ *   node tests/cartes.test.js --fix   met à jour l'empreinte dans les liens
  *
  * Chaque jeu de cartes charge cartes.css?v=<empreinte>, avant son propre
  * <style>. L'empreinte est celle du contenu de la feuille : GitHub Pages garde
@@ -17,7 +17,7 @@ const crypto = require("crypto");
 const { ROOT, checker } = require("./harness");
 
 const { ok, report } = checker();
-const GAMES = ["skyjo.html", "uno.html", "cinq-rois.html", "trou-du-cul.html"];
+const GAMES = ["skyjo.html", "uno.html", "cinq-rois.html", "trou-du-cul.html", "turkish.html"];
 const OTHERS = ["asteroids.html", "index.html"];
 // Les jetons de teinte que chaque page doit définir (voir l'en-tête de cartes.css).
 const TINT = ["--bg", "--panel", "--line", "--text", "--dim", "--bg-top", "--btn", "--btn-hover"];

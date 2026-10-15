@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Turkish</title>
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
+<style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les cartes, les cartes posées devant chacun, le pli et la main. */
+  :root {
+    --bg: #160f10;
+    --panel: #231719;
+    --line: #3d2a2d;
+    --text: #f4ecec;
+    --dim: #b39d9f;
+    --bg-top: #2e1b1e;
+    --btn: #301f22;
+    --btn-hover: #3f2a2e;
+    --red: #c8322b;
+    --black: #1f2328;
+    --gold: #d9a520;
+    /* Ratio hauteur/largeur d'une carte : 1.4. Le pli se dimensionne sur la
+       hauteur réelle de la table (voir #table). */
+    --hand-card: clamp(44px, min(10.5vh, 7vw), 78px);
+    --pile-card: clamp(50px, min(12vh, 15vw), 88px);   /* navigateurs sans cqh */
+    --mini-card: clamp(13px, min(2.6vh, 3.6vw), 20px);
+    --tab-card: clamp(20px, min(4.4vh, 4.6vw), 32px);  /* cartes posées devant un adversaire */
+  }
+
+  /* -------------------------------------------------------------- Cartes */
+  .card {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    border: 0; padding: 0;
+    border-radius: calc(var(--cw) * .11);
+    background: #fbf7ee;
+    color: var(--black);
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 3px 8px rgba(0,0,0,.45);
+    overflow: hidden;
+    cursor: default;
+    font: inherit;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .card:disabled { opacity: 1; }
+  .card.red { color: var(--red); }
+  .card .corner {
+    position: absolute; top: 5%; left: 7%;
+    display: flex; flex-direction: column; align-items: center;
+    line-height: .95;
+  }
+  .card .corner b { font-size: calc(var(--cw) * .3); font-weight: 900; letter-spacing: -.04em; }
+  .card .corner i { font-style: normal; font-size: calc(var(--cw) * .24); }
+  .card .pip {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 22% 0 0 18%;
+    font-size: calc(var(--cw) * .62); line-height: 1;
+  }
+  /* Les deux cartes à effet se repèrent d'un coup d'œil : le 10 (balayette)
+     porte un liseré doré, le 7 de carreau une flèche de changement de sens. */
+  .card.ten::after {
+    content: ""; position: absolute; inset: 0;
+    border: calc(var(--cw) * .055) solid var(--gold);
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .card .mark {
+    position: absolute; right: 7%; bottom: 4%;
+    font-size: calc(var(--cw) * .26); font-weight: 900; line-height: 1;
+  }
+  .card.back {
+    background: repeating-linear-gradient(45deg, #24345e 0 5px, #2c3f70 5px 10px);
+    box-shadow: inset 0 0 0 calc(var(--cw) * .07) #e9dfcb, 0 3px 8px rgba(0,0,0,.45);
+  }
+
+  /* ------------------------------------------------------------ Adversaires */
+  .player .row { display: flex; align-items: center; gap: 10px; }
+  .fan { --fan: .6; align-items: center; min-height: calc(var(--mini-card) * 1.4); }
+  .fan .more { margin-left: 6px; }
+
+  /* Les trois emplacements posés devant chacun : la carte visible recouvre la
+     cachée, dont le bord dépasse en dessous. */
+  .tab { display: flex; gap: 4px; --cw: var(--tab-card); }
+  .spot {
+    position: relative; flex: none;
+    width: var(--cw); height: calc(var(--cw) * 1.4 + var(--cw) * .14);
+  }
+  .spot .card { position: absolute; left: 0; top: 0; }
+  .spot .card.under { top: calc(var(--cw) * .14); }
+  .spot:empty { border: 1px dashed var(--line); border-radius: calc(var(--cw) * .11); height: calc(var(--cw) * 1.4); }
+  /* Petites, les cartes visibles d'un adversaire n'affichent que leur coin, agrandi. */
+  .player .tab .card .corner { top: 6%; left: 0; right: 0; }
+  .player .tab .card .corner b { font-size: calc(var(--cw) * .5); }
+  .player .tab .card .corner i { font-size: calc(var(--cw) * .38); }
+  .player .tab .card .pip, .player .tab .card .mark { display: none; }
+
+  /* ----------------------------------------------------------------- Table */
+  /* Le pli en cours, sa légende et l'état du jeu, empilés. 52px = légende +
+     ligne d'information + écarts. */
+  #table { flex-direction: column; gap: 8px; --cw: var(--pile-card); }
+  @supports (width: 1cqh) {
+    #table { --pile-card: clamp(38px, min((100cqh - 52px) / 1.4, 22cqw), 110px); }
+  }
+  #pileCards { display: flex; min-height: calc(var(--cw) * 1.4); padding-left: calc(var(--cw) * .5); }
+  #pileCards .card { margin-left: calc(var(--cw) * -.5); }
+  #pileCards .card.under { filter: brightness(.62); }
+  #pileCards.old { opacity: .38; }
+  /* Pli vide : un emplacement en pointillés plutôt qu'un trou. */
+  #pileCards:empty::before {
+    content: ""; flex: none;
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    margin-left: calc(var(--cw) * -.5);
+    border: 2px dashed var(--line); border-radius: calc(var(--cw) * .11);
+  }
+  #pileCaption { font-size: 13.5px; color: var(--dim); text-align: center; min-height: 20px; }
+  #pileCaption b { color: var(--text); }
+  #tableInfo { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; font-size: 12px; color: var(--dim); }
+  #dirBadge {
+    font-weight: 800; padding: 2px 10px; border-radius: 999px;
+    background: var(--btn); border: 1px solid var(--line); color: var(--text);
+  }
+  #dirBadge.rev { background: #7a2a33; border-color: #a8434f; color: #fff; }
+
+  /* ------------------------------------------------------------------ Main */
+  /* Les cartes posées devant soi et la main sur une même rangée quand la largeur
+     le permet : sans la limite de largeur commune, la main peut s'étaler. */
+  #me { max-width: none; }
+  #me .zone {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 10px 26px;
+  }
+  #tableau { --tab-card: clamp(36px, min(8vh, 5vw), 62px); padding: 14px 0 8px; }
+  #tableau .card.pickable, #tableau .card.blind { cursor: pointer; }
+  #tableau .card.blind { box-shadow: inset 0 0 0 calc(var(--cw) * .07) #e9dfcb, 0 0 0 3px var(--accent), 0 4px 10px rgba(0,0,0,.5); }
+  #tableau .card.blind:hover, #tableau .card.pickable:hover { transform: translateY(-5px); }
+  /* Une valeur = un groupe de cartes chevauchées. */
+  /* Au Turkish la main grossit vite, à force de ramasser : la largeur des cartes
+     suit le nombre de cartes (--n) et de groupes (--g), posés par le rendu, pour
+     que toute la main tienne sur une rangée. 300px : les cartes posées devant
+     soi (200px au plus), leur écart et les marges. */
+  #hand {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 14px 10px;
+    padding: 16px 0 8px;
+    --hand-card: clamp(34px, min(10.5vh, 7vw,
+      (100vw - 300px - var(--g, 8) * 10px) / (var(--g, 8) + .55 * (var(--n, 8) - var(--g, 8)))), 78px);
+    --cw: var(--hand-card);
+  }
+  .group { display: flex; padding-left: calc(var(--cw) * .45); }
+  .group .card { margin-left: calc(var(--cw) * -.45); }
+  #hand .card.pickable { cursor: pointer; }
+  /* Assombrie plutôt que transparente : dans un groupe chevauché, la
+     transparence laisserait voir la carte du dessous. */
+  #me .card.dead { filter: brightness(.55) saturate(.5); }
+  #me .card.sel { transform: translateY(-12px); box-shadow: 0 0 0 3px var(--accent), 0 10px 18px rgba(0,0,0,.55); }
+  #hand .card.pop { animation: pop .26s ease-out; }
+
+  /* -------------------------------------------------------------- Feuilles */
+  td.left { color: var(--dim); }
+
+  /* ------------------------------------------------- Téléphone (portrait) */
+  @media (max-width: 560px) {
+    #opponents .player { --mini-card: clamp(11px, 3.2vw, 15px); --tab-card: clamp(16px, 5.4vw, 24px); }
+    #opponents .player .row { gap: 6px; flex-wrap: wrap; }
+    #opponents .tab { gap: 2px; }
+    #opponents .fan { --fan: .72; }
+
+    #table { gap: 5px; }
+    @supports (width: 1cqh) {
+      #table { --pile-card: clamp(36px, min((100cqh - 52px) / 1.4, 22cqw), 96px); }
+    }
+    #pileCaption { font-size: 12.5px; min-height: 18px; }
+    #tableInfo { font-size: 11px; }
+
+    #me .zone { gap: 4px 0; }
+    #tableau { --tab-card: clamp(30px, 9vw, 42px); padding: 8px 0 0; }
+    #hand {
+      flex: 1 1 100%;
+      --k: clamp(6, calc(var(--n, 8) * .42 + 2), 8);
+      --hand-card: min((100vw - 20px) / var(--k), 76px);
+      gap: 12px 6px;
+      padding: 12px 6px 2px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TURKISH</h1>
+  <span class="meta" id="roundInfo">Donne 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div id="pileCards"></div>
+    <div id="pileCaption"></div>
+    <div id="tableInfo"><span id="dirBadge">⟳ sens horaire</span><span id="pileInfo"></span></div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions"></div>
+  <div id="me">
+    <div class="name"><span>Toi</span><span class="tag" id="myTag"></span></div>
+    <div class="zone"><div id="tableau" class="tab"></div><div id="hand"></div></div>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>Turkish</h2>
+    <p>Au Turkish, on ne monte pas pour faire le pli : on <b>descend</b>, pour ne pas le ramasser.
+       Débarrasse-toi le premier de toutes tes cartes, et attention aux 10 qui restent en main.</p>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur.</p>
+    <h3>Durée</h3>
+    <div class="choice" id="lengthChoice"></div>
+    <p class="hint">Jeu de tarot sans les atouts, balayette et 7 de carreau : le détail est dans les règles.</p>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Un jeu de tarot <b>sans les atouts</b> : 56 cartes, quatre couleurs de l'As au 2, avec un
+       Cavalier entre la Dame et le Valet. Le but : <b>se débarrasser le premier de toutes ses
+       cartes</b>. Les couleurs ne comptent pas.</p>
+    <h3>La donne</h3>
+    <p>Chacun reçoit 14 cartes : <b>3 cachées</b> posées devant lui, <b>3 visibles</b> posées
+       dessus, et 8 en main. La première donne, c'est toi qui ouvres ; ensuite, chacun son tour.</p>
+    <h3>L'ordre des cartes</h3>
+    <p>Du plus fort au plus faible : <b>As, Roi, Dame, Cavalier, Valet, 9, 8, 7, 6, 5, 4, 3, 2</b>.
+       Le 10 est à part.</p>
+    <h3>Le pli</h3>
+    <p>On ne monte pas, on <b>descend</b>. Celui qui ouvre pose une ou plusieurs cartes de même
+       valeur ; chacun à son tour pose une valeur <b>égale ou inférieure</b> à la dernière posée, en
+       autant d'exemplaires qu'il veut. Plusieurs cartes posées ensemble viennent toutes de la main ou
+       toutes des cartes visibles, jamais des deux à la fois.</p>
+    <ul>
+      <li><b>Ramasser</b> — qui ne peut pas descendre (ou ne le veut pas) ramasse le pli dans sa main
+          en <b>montrant une carte de sa main</b>, puis rejoue la ou les cartes de son choix. Sans
+          carte en main, on ramasse directement.</li>
+      <li><b>Balayette</b> — un <b>10</b> se joue à tout moment, seul ou avec d'autres 10 : le pli
+          est retiré du jeu, et on rejoue la carte de son choix. Sur un pli vide, il ne balaie rien
+          mais il est écarté.</li>
+      <li><b>Le 7 de carreau</b> — chaque fois qu'il est joué, le sens du jeu s'inverse, jusqu'au
+          prochain 7 de carreau. Montré pour ramasser, il l'inverse aussi.</li>
+    </ul>
+    <h3>Les cartes posées devant soi</h3>
+    <p>La première carte de la donne vient forcément de la main. Ensuite, les <b>visibles</b> se
+       jouent à tout moment. Les <b>cachées</b> ne se jouent qu'une fois ses trois visibles parties,
+       une à la fois et <b>sans les regarder</b> : une carte retournée qui ne passe pas est ramassée
+       avec le pli.</p>
+    <h3>Fin de donne</h3>
+    <p>La donne s'arrête dès qu'un joueur n'a plus aucune carte, sans finir le tour.
+       <b>On ne finit pas sur un 10</b> : ses derniers 10 ne se jouent pas. Face à un pli, il faut
+       ramasser ; s'il faut ouvrir, la main passe au suivant. Seul un 10 caché, retourné en dernière
+       carte, balaie et fait sortir.</p>
+    <h3>Les points</h3>
+    <p>Seuls les perdants comptent ce qui leur reste — main, visibles et cachées :
+       <b>Roi, Dame, Cavalier, Valet : 10 points</b>, <b>10 : 20 points</b>, les autres cartes, As
+       compris : 5 points. Après le nombre de donnes choisi, le plus petit total gagne.</p>
+    <p class="hint">Règle d'après le blog « Le jeu de Turkish » du Grand Mamamouchi.</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de donne / de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la donne</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Donne suivante</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   TURKISH — jeu de défausse où l'on descend au lieu de monter.
+   Un humain contre 3 adversaires gérés par l'ordinateur.
+
+   Règle d'après le blog « Le jeu de Turkish » (jeudeturkish.blogspot.com),
+   précisée par les réponses de son auteur. Lectures choisies (voir le panneau
+   des règles) : pour ramasser on montre obligatoirement une carte de la main ;
+   ses derniers 10 ne se jouent pas ; une carte cachée qui ne passe pas est
+   ramassée avec le pli ; l'ouverture tourne d'une donne à l'autre.
+   ========================================================================= */
+
+const SUITS = ["P", "C", "K", "T"];                  // pique, cœur, carreau, trèfle
+const SUIT_SYM = { P: "♠", C: "♥", K: "♦", T: "♣" };
+/* Rangs : 2 à 9, puis 11 Valet, 12 Cavalier, 13 Dame, 14 Roi, 15 As. Le 10
+   (rang 10) est la balayette, hors hiérarchie : il ne devient jamais la valeur
+   à descendre, si bien que l'ordre est simplement celui des nombres. */
+const TEN = 10;
+const RANKS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const RANK_SHORT = { 11: "V", 12: "C", 13: "D", 14: "R", 15: "A" };
+const RANK_NAME = { 11: "Valet", 12: "Cavalier", 13: "Dame", 14: "Roi", 15: "As" };
+const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
+const THINK_MS = 650;            // réflexion d'un adversaire
+const TURN_CAP = 1500;           // garde-fou : une donne qui n'en finit pas s'arrête là
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ----------------------------------------------------------------- Paquet */
+let uidSeq = 0;
+const mkCard = (suit, rank) => ({ uid: ++uidSeq, suit, rank });
+const isSevenD = (c) => c.rank === 7 && c.suit === "K";
+
+function buildDeck() {
+  const d = [];
+  for (const s of SUITS) for (const r of RANKS) d.push(mkCard(s, r));
+  return d;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const rankLabel = (r) => RANK_SHORT[r] || String(r);
+const cardLabel = (c) => rankLabel(c.rank) + SUIT_SYM[c.suit];
+/* Figures 10 points, 10 vingt points, le reste — As compris — 5 points. */
+const cardPoints = (c) => (c.rank === TEN ? 20 : c.rank >= 11 && c.rank <= 14 ? 10 : 5);
+
+/* « un 7 », « deux Dames », « trois As ». */
+function playName(rank, count) {
+  const name = RANK_NAME[rank] || String(rank);
+  if (count === 1) return `${rank === 13 ? "une" : "un"} ${name}`;
+  const num = ["", "", "deux", "trois", "quatre"][count] || String(count);
+  return `${num} ${rank >= 11 && rank <= 14 ? name + "s" : name}`;
+}
+
+/* ------------------------------------------------------------------- État */
+const S = {
+  players: [],        // { name, ai, policy, hand, up, down, started, known, score, rounds, last }
+  deck: [],           // les 56 cartes de la donne, triées : la référence de la conservation
+  current: 0,
+  dir: 1,             // 1 : sens des aiguilles d'une montre (sièges croissants) ; -1 : inversé
+  phase: "idle",      // idle | play | show | ai | over
+  pile: [],           // le pli en cours, dans l'ordre de pose
+  top: null,          // { rank, count, by } : la dernière pose, à égaler ou descendre ; null = ouverture
+  last: null,         // { by, kind: "sweep" | "pickup", cards } : le dernier pli fermé, montré en grisé
+  out: [],            // cartes balayées : hors jeu jusqu'à la fin de la donne
+  round: 1,
+  rounds: 4,          // nombre de donnes de la partie
+  starter: 0,
+  finisher: null,
+  roundTurns: 0,
+  sel: new Set(),     // uids sélectionnés par l'humain
+  selZone: null,      // "hand" | "up" : on ne mélange pas les deux
+  logs: [],
+  busy: false,
+  epoch: 0,           // change à chaque donne : un tour d'IA en vol d'une donne passée s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+const nplayers = () => S.players.length;
+const total = (p) => p.hand.length + p.up.length + p.down.length;
+const downAllowed = (p) => p.up.length === 0 && p.down.length > 0;
+const nextSeat = (from) => (from + S.dir + nplayers()) % nplayers();
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+/* « Tu poses » / « Nora pose » : jamais de il/elle, les noms n'ont pas de genre. */
+const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+
+/* --------------------------------------------------------------- Légalité */
+/* Une pose : une ou plusieurs cartes de même valeur, toutes de la main ou
+   toutes des visibles (celles-ci une fois sa première carte jouée). Un 10 se
+   pose à tout moment, mais jamais comme dernières cartes. Sinon la valeur doit
+   égaler ou descendre la dernière posée. */
+function canPlayCards(seat, cards) {
+  const p = S.players[seat];
+  if (!cards.length) return false;
+  const r = cards[0].rank;
+  if (!cards.every((c) => c.rank === r)) return false;
+  const fromHand = cards.every((c) => p.hand.includes(c));
+  const fromUp = p.started && cards.every((c) => p.up.includes(c));
+  if (!fromHand && !fromUp) return false;
+  if (r === TEN) return total(p) > cards.length;
+  return S.top === null || r <= S.top.rank;
+}
+
+/* Une proposition par valeur et par zone, avec toutes les copies jouables. */
+function legalSets(seat) {
+  const p = S.players[seat];
+  const out = [];
+  for (const zone of p.started ? ["hand", "up"] : ["hand"]) {
+    for (const r of RANKS) {
+      const cards = p[zone].filter((c) => c.rank === r);
+      for (let k = cards.length; k > 0; k--) {
+        if (canPlayCards(seat, cards.slice(0, k))) { out.push(cards.slice(0, k)); break; }
+      }
+    }
+  }
+  return out;
+}
+
+const canLead = (seat) => legalSets(seat).length > 0 || downAllowed(S.players[seat]);
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.players = [{ name: "Toi", ai: false, hand: [], up: [], down: [], score: 0, rounds: [] }];
+  for (let i = 0; i < nPlayers - 1; i++) {
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: "sharp", hand: [], up: [], down: [], score: 0, rounds: [] });
+  }
+  S.round = 1;
+  S.rounds = chosenRounds;
+  buildBoard();
+  startRound();
+}
+
+function startRound() {
+  S.epoch++;
+  const n = nplayers();
+  const deck = shuffle(buildDeck());
+  // Triée : l'ordre de la donne n'y transparaît pas.
+  S.deck = deck.slice().sort((a, b) => a.uid - b.uid);
+  const per = Math.floor(deck.length / n);         // 14 à quatre
+  for (const p of S.players) {
+    const cards = deck.splice(0, per);
+    p.down = cards.splice(0, 3);
+    p.up = cards.splice(0, 3);
+    p.hand = cards;
+    p.started = false;
+    p.known = new Set();       // cartes de sa main que tout le monde a vues (plis ramassés, carte montrée)
+    p.last = 0;
+  }
+  S.out = deck;                // à cinq ou six, le reste de la distribution, écarté
+  S.pile = [];
+  S.top = null;
+  S.last = null;
+  S.dir = 1;
+  S.finisher = null;
+  S.roundTurns = 0;
+  S.sel = new Set();
+  S.selZone = null;
+  S.logs = [];
+  S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
+  S.busy = false;
+  S.starter = (S.round - 1) % n;
+  S.current = S.starter;
+  log(S.starter === 0 ? "Tu ouvres la donne." : `${S.players[S.starter].name} ouvre la donne.`);
+  beginTurn();
+}
+
+/* ------------------------------------------------------------------ Tours */
+function beginTurn() {
+  if (S.phase === "over") return;
+  const seat = S.current;
+  const p = S.players[seat];
+  // Plus que des 10 et rien à ramasser : ils ne se jouent pas, la main passe.
+  if (!S.pile.length && !canLead(seat)) {
+    S.roundTurns++;
+    const to = nextSeat(seat);
+    log(`${says(p, "n'as", "n'a")} plus que des 10 : la main passe à ${to === 0 ? "toi" : S.players[to].name}.`);
+    if (S.roundTurns >= TURN_CAP) { endRound(); return; }
+    S.current = to;
+    beginTurn();
+    return;
+  }
+  if (p.ai) { S.phase = "ai"; render(); aiTurn(); return; }
+  S.phase = "play";
+  S.sel = new Set();
+  S.selZone = null;
+  render();
+}
+
+function doPlay(seat, cards) {
+  const p = S.players[seat];
+  const zone = p.hand.includes(cards[0]) ? "hand" : "up";
+  p[zone] = p[zone].filter((c) => !cards.includes(c));
+  for (const c of cards) p.known.delete(c.uid);
+  p.started = true;
+  place(seat, cards, false);
+}
+
+/* Une carte cachée, jouée sans la regarder. Elle passe si elle descend (ou
+   balaie) ; sinon elle compte comme la carte montrée et part avec le pli. */
+function doBlind(seat, idx = 0) {
+  const p = S.players[seat];
+  const c = p.down.splice(Math.min(idx, p.down.length - 1), 1)[0];
+  p.started = true;
+  if (c.rank === TEN || S.top === null || c.rank <= S.top.rank) { place(seat, [c], true); return; }
+  S.roundTurns++;
+  if (isSevenD(c)) S.dir = -S.dir;
+  const cards = [...S.pile, c];
+  take(seat, cards);
+  log(`${says(p, "retournes", "retourne")} ${cardLabel(c)}, qui ne passe pas : le pli (${cards.length} cartes) part dans `
+    + `${p.ai ? "sa" : "ta"} main${isSevenD(c) ? " et le sens s'inverse" : ""}.`);
+  if (S.roundTurns >= TURN_CAP) { endRound(); return; }
+  S.current = seat;
+  beginTurn();
+}
+
+/* Ramasser : on montre une carte de sa main (le 7 de carreau inverse alors le
+   sens), puis le pli rejoint la main et on rouvre. Sans carte en main, on
+   ramasse directement. */
+function doPickup(seat, shown) {
+  const p = S.players[seat];
+  if (!S.pile.length) return;
+  p.started = true;
+  S.roundTurns++;
+  if (shown && isSevenD(shown)) S.dir = -S.dir;
+  if (shown) p.known.add(shown.uid);
+  const cards = S.pile;
+  take(seat, cards);
+  log(`${says(p, "ramasses", "ramasse")} le pli (${cards.length} carte${cards.length > 1 ? "s" : ""})`
+    + (shown && isSevenD(shown) ? " en montrant le 7♦ : le sens s'inverse." : "."));
+  if (S.roundTurns >= TURN_CAP) { endRound(); return; }
+  S.current = seat;
+  beginTurn();
+}
+
+function take(seat, cards) {
+  const p = S.players[seat];
+  p.hand.push(...cards);
+  for (const c of cards) p.known.add(c.uid);
+  S.last = { by: seat, kind: "pickup", cards };
+  S.pile = [];
+  S.top = null;
+}
+
+function place(seat, cards, blind) {
+  const p = S.players[seat];
+  S.roundTurns++;
+  const reversed = cards.filter(isSevenD).length % 2 === 1;
+  if (reversed) S.dir = -S.dir;
+  const what = playName(cards[0].rank, cards.length) + (blind ? " (carte cachée)" : "");
+  if (cards[0].rank === TEN) {
+    // Balayette : le pli sort du jeu, le même joueur rouvre.
+    const swept = [...S.pile, ...cards];
+    S.out.push(...swept);
+    S.last = { by: seat, kind: "sweep", cards: swept };
+    S.pile = [];
+    S.top = null;
+    const n = swept.length - cards.length;
+    log(`${says(p, "fais", "fait")} balayette avec ${what} : `
+      + (n ? `${n} carte${n > 1 ? "s" : ""} écartée${n > 1 ? "s" : ""}.` : "rien à balayer."));
+    if (total(p) === 0) { finishRound(seat); return; }
+    S.current = seat;
+  } else {
+    S.pile.push(...cards);
+    S.top = { rank: cards[0].rank, count: cards.length, by: seat };
+    S.last = null;
+    log(`${says(p, "poses", "pose")} ${what}${reversed ? " : le sens s'inverse" : ""}.`);
+    if (total(p) === 0) { finishRound(seat); return; }
+    S.current = nextSeat(seat);
+  }
+  if (S.roundTurns >= TURN_CAP) { endRound(); return; }
+  beginTurn();
+}
+
+/* ------------------------------------------------------------ Fin de donne */
+function finishRound(seat) {
+  S.finisher = seat;
+  log(seat === 0 ? "Plus aucune carte : tu gagnes la donne !" : `Plus aucune carte pour ${S.players[seat].name} : fin de la donne.`);
+  endRound();
+}
+
+const handPoints = (p) => [...p.hand, ...p.up, ...p.down].reduce((t, c) => t + cardPoints(c), 0);
+
+/* Sans gagnant (garde-fou atteint), tout le monde compte ce qui lui reste. */
+function endRound() {
+  for (const p of S.players) {
+    p.last = S.players[S.finisher] === p ? 0 : handPoints(p);
+    p.score += p.last;
+    p.rounds.push(p.last);
+  }
+  S.phase = "over";
+  S.busy = false;
+  render();
+  showScores(S.round >= S.rounds);
+}
+
+function showScores(over) {
+  const best = Math.min(...S.players.map((p) => p.score));
+  let html = "<table><thead><tr><th>Joueur</th><th>Reste</th><th>Donne</th><th>Total</th></tr></thead><tbody>";
+  for (const [i, p] of S.players.entries()) {
+    const win = over && p.score === best;
+    const left = total(p);
+    html += `<tr${win ? ' class="win"' : ""}><td>${p.name}${win ? " 🏆" : ""}</td>`
+          + `<td class="left">${i === S.finisher ? "plus rien" : `${left} carte${left > 1 ? "s" : ""}`}</td>`
+          + `<td>+${p.last}</td><td>${p.score}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  if (over) {
+    const winners = S.players.filter((p) => p.score === best);
+    html += winners.length === 1 && !winners[0].ai
+      ? `<p class="next-round">🏆 <b>Tu l'emportes avec ${best} points !</b></p>`
+      : `<p class="next-round">🏆 <b>${winners.map((p) => p.name).join(" et ")}</b> ${winners.length > 1 ? "l'emportent" : "l'emporte"} avec ${best} points.</p>`;
+  } else {
+    const next = S.round % nplayers();
+    html += `<p class="next-round">Donne ${S.round + 1} sur ${S.rounds} : ${next === 0 ? "<b>tu</b> ouvres" : `<b>${S.players[next].name}</b> ouvre`}.</p>`;
+  }
+  el("scoreBody").innerHTML = html;
+  el("scoreTitle").textContent = over ? "Fin de la partie" : `Fin de la donne ${S.round}`;
+  el("btnNext").textContent = over ? "Rejouer" : "Donne suivante";
+  el("btnNext").dataset.over = over ? "1" : "";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose
+     play(p, seat) -> { kind: "play", cards } | { kind: "blind" } | { kind: "pickup", show }
+   Aucune ne consulte la main d'un autre joueur ni une carte cachée, pas même
+   les siennes : elles disposent de leur main et de leurs visibles, des cartes
+   visibles de chacun, du pli, des cartes balayées et de ce que chacun a ramassé
+   ou montré (p.known), tout cela public. */
+
+/* Déclarée en `function` : les tests la remplacent pour vérifier qu'aucune
+   politique ne triche. */
+function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
+
+/* La carte à montrer pour ramasser : jamais le 7 de carreau par mégarde. */
+const plainShow = (p) => p.hand.find((c) => !isSevenD(c)) || p.hand[0] || null;
+
+/* ---------------------------------------------------------------------------
+   Politique simple : pose la plus haute valeur possible (toutes ses copies,
+   les visibles d'abord), balaie quand elle ne peut plus descendre, puis tente
+   une carte cachée, et ramasse en dernier recours. Les adversaires jouent
+   toujours « sharp » ; celle-ci ne sert que de référence au banc d'essai.
+   --------------------------------------------------------------------------- */
+const simplePolicy = {
+  play(p, seat) {
+    const sets = legalSets(seat);
+    const plain = sets.filter((s) => s[0].rank !== TEN)
+      .sort((a, b) => b[0].rank - a[0].rank || p.up.includes(b[0]) - p.up.includes(a[0]));
+    if (plain.length) return { kind: "play", cards: plain[0] };
+    const tens = sets.find((s) => s[0].rank === TEN);
+    if (tens) return { kind: "play", cards: tens.slice(0, 1) };
+    if (downAllowed(p)) return { kind: "blind" };
+    return { kind: "pickup", show: plainShow(p) };
+  },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable ». Elle sort dès qu'une pose vide son jeu, et sinon
+   note chaque pose possible :
+     - se débarrasser des cartes hautes, les plus dures à placer (un As ne passe
+       que sur un As ou en ouverture), et garder les basses, qui passent partout ;
+     - se débarrasser de beaucoup de cartes à la fois ;
+     - vider ses visibles, pour pouvoir ouvrir avec ses cartes cachées, qu'on
+       place sans risque en ouverture.
+   Le nombre de cartes posées est ce qui la rend plus forte que la politique
+   simple, mais c'est aussi ce qui fait boucler une table de redoutables : un
+   carré ramassé est aussitôt rejoué, fait le tour, et revient. Passé
+   AI.patience tours dans la donne, la hauteur seule décide, comme pour la
+   politique simple, qui ne boucle jamais.
+   Elle garde ses 10 pour quand elle ne peut plus descendre, sauf en fin de donne,
+   où un 10 resté en main ne se joue plus. Ne pouvant pas descendre, une carte
+   cachée vaut toujours mieux que ramasser : si elle ne passe pas, elle rejoint
+   la main avec le pli, ce qui revient à ramasser, carte connue en prime.
+
+   Ce qui a été essayé au banc d'essai et retiré parce que ça faisait perdre :
+   attaquer le joueur suivant en jouant bas (même quand il va sortir, en
+   comptant les cartes pour estimer ses chances de répondre), vider en priorité
+   ce qui coûte des points quand un adversaire va sortir, balayer plutôt que
+   brûler une petite carte, ramasser un petit pli pour garder ses petites cartes,
+   poser une seule copie d'une valeur pour garder les autres (AI.split).
+   --------------------------------------------------------------------------- */
+const AI = {
+  shed: 1,          // valeur de chaque carte posée
+  unload: 0.6,      // prime de hauteur de la pose (garder les basses), par cran
+  copies: 0,        // part de cette prime comptée en plus pour chaque copie au-delà de la première
+  upBonus: 2,       // prime à vider ses visibles, par carte
+  blindLead: 3,     // une ouverture vaut moins que ça : on ouvre avec une carte cachée
+  tenEndgame: 2,    // il ne lui reste que ça de cartes autres que des 10 : elle balaie
+  split: false,     // envisager aussi une seule copie d'une valeur, pour garder les autres
+  finish: true,     // sortir dès qu'une pose vide tout son jeu
+  patience: 150,    // au-delà de tant de tours dans la donne…
+  shedLate: 0.1,    // … chaque carte posée ne vaut plus que ça : la hauteur décide
+};
+
+function evalPlay(p, cards) {
+  const k = cards.length;
+  // Une donne qui s'éternise : la hauteur seule décide, ce qui casse les boucles.
+  const shed = S.roundTurns > AI.patience ? AI.shedLate : AI.shed;
+  let v = shed * k + AI.unload * (cards[0].rank - 2) * (1 + AI.copies * (k - 1));
+  if (p.up.includes(cards[0])) v += AI.upBonus * k;
+  return v;
+}
+
+const sharpPolicy = {
+  play(p, seat) {
+    const sets = legalSets(seat);
+    const tens = sets.find((s) => s[0].rank === TEN);
+    const plainSets = sets.filter((s) => s[0].rank !== TEN);
+    const nTens = [...p.hand, ...p.up].filter((c) => c.rank === TEN).length;
+    // En fin de donne, un 10 gardé ne se joue plus : on balaie tant qu'on peut.
+    if (tens && total(p) - nTens <= AI.tenEndgame) return { kind: "play", cards: tens.slice(0, 1) };
+    // Une pose qui vide tout son jeu : on sort.
+    const out = sets.find((s) => s.length === total(p));
+    if (out && AI.finish) return { kind: "play", cards: out };
+    if (plainSets.length) {
+      // Toutes les copies, ou une seule quand on veut garder les autres.
+      const options = plainSets.flatMap((s) => (AI.split && s.length > 1 ? [s, s.slice(0, 1)] : [s]));
+      let best = null, bestV = -Infinity;
+      for (const cards of options) {
+        const v = evalPlay(p, cards);
+        if (v > bestV) { bestV = v; best = cards; }
+      }
+      if (!S.pile.length && downAllowed(p) && bestV < AI.blindLead) return { kind: "blind" };
+      return { kind: "play", cards: best };
+    }
+    if (tens) return { kind: "play", cards: tens.slice(0, 1) };
+    if (downAllowed(p)) return { kind: "blind" };
+    // Ramasser : montrer le 7 de carreau seulement si inverser le sens met
+    // derrière soi un joueur moins près de sortir.
+    const seven = p.hand.find(isSevenD);
+    if (seven) {
+      const n = nplayers();
+      const ahead = S.players[(seat + S.dir + n) % n], behind = S.players[(seat - S.dir + n) % n];
+      if (total(behind) > total(ahead)) return { kind: "pickup", show: seven };
+    }
+    return { kind: "pickup", show: plainShow(p) };
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+
+/* ------------------------------------------------------------ Tour d'une IA */
+async function aiTurn() {
+  const seat = S.current;
+  const p = S.players[seat];
+  const epoch = S.epoch;
+  S.busy = true;
+  await sleep(THINK_MS);
+  if (epoch !== S.epoch || S.phase !== "ai" || S.current !== seat) return;
+  const move = policyOf(p).play(p, seat);
+  S.busy = false;
+  if (move && move.kind === "play" && canPlayCards(seat, move.cards)) { doPlay(seat, move.cards); return; }
+  if (move && move.kind === "blind" && downAllowed(p)) { doBlind(seat, 0); return; }
+  if (move && move.kind === "pickup" && S.pile.length) {
+    doPickup(seat, p.hand.includes(move.show) ? move.show : p.hand[0] || null);
+    return;
+  }
+  // Coup refusé : le plus prudent qui reste.
+  const sets = legalSets(seat);
+  if (sets.length) doPlay(seat, sets[0]);
+  else if (downAllowed(p)) doBlind(seat, 0);
+  else doPickup(seat, p.hand[0] || null);
+}
+
+/* ================================================================= ENTRÉES */
+
+const myTurn = () => S.current === 0 && !S.busy;
+
+/* Un clic sur une carte de la main ou une visible : en temps normal, il compose
+   la pose (une valeur, une zone) ; pendant « show », il désigne la carte montrée. */
+function onCardClick(zone, uid) {
+  const me = S.players[0];
+  const card = me[zone].find((c) => c.uid === uid);
+  if (!card || !myTurn()) return;
+  if (S.phase === "show") {
+    if (zone === "hand") doPickup(0, card);
+    return;
+  }
+  if (S.phase !== "play" || !canPlayCards(0, [card])) return;
+  const selected = me[S.selZone || zone].filter((c) => S.sel.has(c.uid));
+  if (S.selZone !== zone || (selected.length && selected[0].rank !== card.rank)) {
+    S.sel = new Set([uid]);
+    S.selZone = zone;
+  } else if (S.sel.has(uid)) {
+    S.sel.delete(uid);
+    if (!S.sel.size) S.selZone = null;
+  } else {
+    S.sel.add(uid);
+  }
+  render();
+}
+
+function onDownClick(idx) {
+  if (!myTurn() || S.phase !== "play" || !downAllowed(S.players[0])) return;
+  S.sel = new Set();
+  doBlind(0, idx);
+}
+
+function onPlayClick() {
+  if (!myTurn() || S.phase !== "play" || !S.selZone) return;
+  const cards = S.players[0][S.selZone].filter((c) => S.sel.has(c.uid));
+  if (!canPlayCards(0, cards)) return;
+  S.sel = new Set();
+  S.selZone = null;
+  doPlay(0, cards);
+}
+
+function onPickupClick() {
+  if (!myTurn() || S.phase !== "play" || !S.pile.length) return;
+  S.sel = new Set();
+  S.selZone = null;
+  if (!S.players[0].hand.length) { doPickup(0, null); return; }
+  S.phase = "show";
+  render();
+}
+
+function onCancelShow() {
+  if (S.phase !== "show") return;
+  S.phase = "play";
+  render();
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function cardEl(c, extra) {
+  let cls = "card";
+  if (!c) cls += " back";
+  else {
+    if (c.suit === "C" || c.suit === "K") cls += " red";
+    if (c.rank === TEN) cls += " ten";
+  }
+  const b = mk("button", cls + (extra ? " " + extra : ""));
+  if (c) {
+    const corner = mk("span", "corner");
+    corner.appendChild(mk("b", null, rankLabel(c.rank)));
+    corner.appendChild(mk("i", null, SUIT_SYM[c.suit]));
+    b.appendChild(corner);
+    b.appendChild(mk("span", "pip", SUIT_SYM[c.suit]));
+    if (isSevenD(c)) b.appendChild(mk("span", "mark", "⇄"));
+  }
+  b.disabled = true;
+  return b;
+}
+
+/* Les trois emplacements devant un joueur : visible par-dessus la cachée. En fin
+   de donne, les cachées se retournent : elles comptent dans les points. */
+function tableauEls(host, p, opts = {}) {
+  host.innerHTML = "";
+  const reveal = S.phase === "over";
+  for (let i = 0; i < 3; i++) {
+    const spot = mk("div", "spot");
+    if (i < p.down.length) {
+      const back = cardEl(reveal ? p.down[i] : null, i < p.up.length ? "under" : opts.blind ? "blind" : "");
+      if (opts.blind && i >= p.up.length) {
+        back.disabled = false;
+        back.title = "Jouer cette carte cachée, sans la regarder";
+        back.addEventListener("click", () => onDownClick(i));
+      }
+      spot.appendChild(back);
+    }
+    if (i < p.up.length) {
+      const c = p.up[i];
+      const extra = opts.cls ? opts.cls(c) : "";
+      const face = cardEl(c, extra);
+      if (extra.includes("pickable")) {
+        face.disabled = false;
+        face.addEventListener("click", () => onCardClick("up", c.uid));
+      }
+      spot.appendChild(face);
+    }
+    host.appendChild(spot);
+  }
+}
+
+function buildBoard() {
+  const host = el("opponents");
+  host.innerHTML = "";
+  S.players.forEach((p, pi) => {
+    if (pi === 0) return;
+    const box = mk("div", "player");
+    const name = mk("div", "name");
+    name.appendChild(mk("span", null, p.name));
+    const tag = mk("span", "tag", "");
+    name.appendChild(tag);
+    box.appendChild(name);
+    const row = mk("div", "row");
+    const fan = mk("div", "fan");
+    const tab = mk("div", "tab");
+    row.appendChild(fan);
+    row.appendChild(tab);
+    box.appendChild(row);
+    host.appendChild(box);
+    Object.assign(p, { _box: box, _tag: tag, _fan: fan, _tab: tab });
+  });
+}
+
+let shownUids = new Set();
+
+function statusHtml() {
+  const p = S.players[S.current];
+  const me = S.players[0];
+  switch (S.phase) {
+    case "ai": return `<b>${p.name}</b> réfléchit…`;
+    case "show": return "Montre une carte de ta main pour ramasser.";
+    case "play": {
+      if (!S.pile.length) {
+        if (!me.started) return "À toi d'ouvrir, avec une carte de ta main.";
+        return downAllowed(me) && !legalSets(0).length
+          ? "À toi d'ouvrir : retourne une carte cachée."
+          : "À toi d'ouvrir.";
+      }
+      const what = `<b>${playName(S.top.rank, S.top.count)}</b>`;
+      const sets = legalSets(0);
+      if (sets.some((s) => s[0].rank !== TEN)) return `À égaler ou descendre : ${what}.`;
+      if (sets.length) return `Rien sous ${what} : balaie avec un 10 ou ramasse.`;
+      if (downAllowed(me)) return `Rien sous ${what} : carte cachée ou ramasse.`;
+      return `Rien sous ${what} : ramasse le pli.`;
+    }
+    default: return "";
+  }
+}
+
+function renderActions() {
+  const host = el("actions");
+  host.innerHTML = "";
+  const add = (label, cls, fn, enabled) => {
+    const b = mk("button", cls, label);
+    b.disabled = !enabled;
+    b.addEventListener("click", fn);
+    host.appendChild(b);
+  };
+  if (!myTurn()) return;
+  if (S.phase === "play") {
+    const cards = S.selZone ? S.players[0][S.selZone].filter((c) => S.sel.has(c.uid)) : [];
+    const ok = canPlayCards(0, cards);
+    add(ok && cards.length > 1 ? `Poser les ${cards.length}` : "Poser", "primary", onPlayClick, ok);
+    add("Ramasser", null, onPickupClick, S.pile.length > 0);
+  } else if (S.phase === "show") {
+    add("Annuler", null, onCancelShow, true);
+  }
+}
+
+function renderMe() {
+  const me = S.players[0];
+  const playing = S.phase === "play" && myTurn();
+  const showing = S.phase === "show" && myTurn();
+  const cls = (zone) => (c) => {
+    let k = "";
+    if (showing ? zone === "hand" : playing && canPlayCards(0, [c])) k += " pickable";
+    else if (playing || showing) k += " dead";
+    if (S.sel.has(c.uid)) k += " sel";
+    return k.trim();
+  };
+
+  tableauEls(el("tableau"), me, { cls: cls("up"), blind: playing && downAllowed(me) });
+
+  const host = el("hand");
+  host.innerHTML = "";
+  host.style.setProperty("--n", me.hand.length);
+  host.style.setProperty("--g", new Set(me.hand.map((c) => c.rank)).size || 1);
+  const next = new Set();
+  // Par valeur, de la plus basse à la plus haute ; les 10 à part, au bout.
+  const order = [...RANKS.filter((r) => r !== TEN), TEN];
+  const handCls = cls("hand");
+  for (const r of order) {
+    const group = me.hand.filter((c) => c.rank === r);
+    if (!group.length) continue;
+    const g = mk("div", "group");
+    for (const c of group.sort((a, b) => SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit))) {
+      next.add(c.uid);
+      let k = handCls(c);
+      if (!shownUids.has(c.uid)) k += " pop";
+      const b = cardEl(c, k.trim());
+      if (k.includes("pickable")) {
+        b.disabled = false;
+        b.addEventListener("click", () => onCardClick("hand", c.uid));
+      }
+      g.appendChild(b);
+    }
+    host.appendChild(g);
+  }
+  shownUids = next;
+
+  const left = total(me);
+  el("myTag").textContent = `${left} carte${left > 1 ? "s" : ""} · ${me.score} pt${me.score > 1 ? "s" : ""}`;
+}
+
+function render() {
+  if (!S.players.length) return;
+  // Adversaires
+  S.players.forEach((p, pi) => {
+    if (pi === 0 || !p._box) return;
+    p._box.classList.toggle("active", S.current === pi && S.phase === "ai");
+    const left = total(p);
+    p._tag.textContent = `${left} carte${left > 1 ? "s" : ""} · ${p.score} pt${p.score > 1 ? "s" : ""}`;
+    p._fan.innerHTML = "";
+    const shown = Math.min(p.hand.length, 7);
+    for (let i = 0; i < shown; i++) p._fan.appendChild(cardEl(null));
+    if (p.hand.length > shown) p._fan.appendChild(mk("span", "more", `+${p.hand.length - shown}`));
+    tableauEls(p._tab, p);
+  });
+
+  // Table : le pli en cours (la dernière pose en avant), ou le dernier fermé en grisé.
+  const pc = el("pileCards");
+  pc.innerHTML = "";
+  const cards = S.pile.length ? S.pile : S.last ? S.last.cards : [];
+  pc.classList.toggle("old", !S.pile.length);
+  const SHOW = 8;
+  const fresh = S.pile.length ? S.top.count : 0;
+  cards.slice(-SHOW).forEach((c, i, arr) => pc.appendChild(cardEl(c, i < arr.length - fresh ? "under" : "")));
+  const cap = el("pileCaption");
+  const who = (seat, cap1) => (seat === 0 ? (cap1 ? "Toi" : "toi") : S.players[seat].name);
+  if (S.pile.length) {
+    cap.innerHTML = `<b>${who(S.top.by, true)}</b> : ${playName(S.top.rank, S.top.count)}`;
+  } else if (S.last && S.phase !== "over") {
+    cap.innerHTML = S.last.kind === "sweep"
+      ? `Balayette de <b>${who(S.last.by)}</b>`
+      : `Pli ramassé par <b>${who(S.last.by)}</b>`;
+  } else {
+    cap.textContent = "";
+  }
+  const dir = el("dirBadge");
+  dir.textContent = S.dir === 1 ? "⟳ sens horaire" : "⟲ sens inverse";
+  dir.classList.toggle("rev", S.dir === -1);
+  el("pileInfo").textContent = (S.pile.length ? `pli : ${S.pile.length} carte${S.pile.length > 1 ? "s" : ""} · ` : "")
+    + `balayées : ${S.out.length}`;
+
+  el("me").classList.toggle("active", S.current === 0 && (S.phase === "play" || S.phase === "show"));
+  renderMe();
+  renderActions();
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
+  el("roundInfo").textContent = `Donne ${S.round}/${S.rounds}`;
+}
+
+/* ============================================================== Interface */
+/* Toujours quatre joueurs : toi et trois adversaires « sharp ». newGame()
+   reste générique — les tests et le banc d'essai y asseyent d'autres tablées
+   par startGame(n). Seule la durée se choisit. */
+const PLAYERS = 4;
+let chosenRounds = 4;
+
+function buildChoice(host, items, current, onPick) {
+  for (const it of items) {
+    const b = mk("button", it.id === current ? "sel" : null, it.label);
+    b.addEventListener("click", () => {
+      onPick(it.id);
+      [...host.children].forEach((c) => c.classList.toggle("sel", c === b));
+    });
+    host.appendChild(b);
+  }
+}
+
+buildChoice(el("lengthChoice"),
+  [4, 8, 12].map((n) => ({ id: n, label: `${n} donnes` })),
+  chosenRounds, (id) => { chosenRounds = id; });
+
+function startGame(nPlayers = PLAYERS) {
+  el("startOverlay").hidden = true;
+  newGame(nPlayers);
+}
+el("btnStart").addEventListener("click", () => startGame());
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  if (el("btnNext").dataset.over) {
+    for (const p of S.players) { p.score = 0; p.rounds = []; }
+    S.round = 1;
+  } else {
+    S.round++;
+  }
+  startRound();
+});
+</script>
+</body>
+</html>
