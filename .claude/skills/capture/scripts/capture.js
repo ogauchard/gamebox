@@ -2,10 +2,12 @@
  *
  *   node capture.js <page.html> [options]
  *
- *   --phone [LxH]   largeur de téléphone (390x844 par défaut) : la page est
- *                   chargée dans une iframe à cette taille, seul moyen de passer
- *                   sous la largeur minimale de fenêtre d'Edge (~492 px)
+ *   --phone [LxH]   largeur de téléphone (390x844 par défaut)
  *   --size LxH      fenêtre de bureau (900x900 par défaut)
+ *                   Dans les deux cas la page est chargée dans une iframe à cette
+ *                   taille exacte : c'est le seul moyen de passer sous la largeur
+ *                   minimale d'Edge (~492 px), et la seule vue dont les mesures
+ *                   prises en JS (innerHeight…) soient justes.
  *   --pose f.js     script injecté après celui de la page, pour la mettre dans
  *                   un état précis (il voit les const/function de premier niveau)
  *   --eval "code"   idem, en ligne ; --pose et --eval se cumulent
@@ -86,7 +88,7 @@ const BANNER = `<script>
 
 let html = fs.readFileSync(pagePath, "utf8");
 const headLine = html.slice(0, html.search(/<head[^>]*>/i)).split("\n").length;
-const shift = BANNER.split("\n").length;   // lignes ajoutées après <head>, à retrancher des numéros d'Edge
+const shift = BANNER.split("\n").length + 1;   // lignes ajoutées après <head> (bandeau + <base>), à retrancher des numéros d'Edge
 html = html.replace(/<head[^>]*>/i, (m) => `${m}\n${BANNER}`);
 if (opt.poses.length) {
   // Un script classique séparé : il voit les déclarations de premier niveau de
@@ -94,21 +96,29 @@ if (opt.poses.length) {
   const pose = opt.poses.join("\n;\n").replace(/<\/script/gi, "<\\/script");
   html = html.replace(/<\/body>(?![\s\S]*<\/body>)/i, `<script>\n${pose}\n</script>\n</body>`);
 }
-// Les pages ne chargent aucune ressource relative : la copie peut vivre hors du dépôt.
+// La copie vit hors du dépôt ; <base> fait pointer ses liens relatifs (feuille
+// de style commune…) vers le dossier de la page d'origine.
+html = html.replace(/<head[^>]*>/i, (m) => `${m}\n<base href="${pathToFileURL(path.dirname(pagePath) + path.sep).href}">`);
 const posed = path.join(work, path.basename(pagePath));
 fs.writeFileSync(posed, html);
 try { fs.unlinkSync(out); } catch {}   // qu'une ancienne capture ne passe pas pour la nouvelle
 
-let target = posed;
-let win = [w, h];
-if (opt.phone) {
-  const wrapper = path.join(work, "phone.html");
-  fs.writeFileSync(wrapper, `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+/* Toujours dans une iframe à la taille exacte, bureau compris : pendant le temps
+   virtuel, Edge fait tourner la page dans une fenêtre amputée de son cadre
+   (~24 px de large, ~92 de haut) et ne l'agrandit qu'au moment de la photo.
+   Le CSS se recalcule à temps, mais une mesure prise en JS (innerHeight,
+   getBoundingClientRect) serait fausse. L'iframe, elle, ne change pas de taille. */
+const wrapper = path.join(work, "frame.html");
+fs.writeFileSync(wrapper, `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;background:#3a3a3a;overflow:hidden}iframe{display:block;border:0;background:#fff}
 </style></head><body><iframe src="${pathToFileURL(posed).href}" width="${w}" height="${h}"></iframe></body></html>`);
-  target = wrapper;
-  win = [Math.max(w, 500), h];   // Edge refuse une fenêtre plus étroite : la marge à droite reste grise
-}
+const target = wrapper;
+/* La fenêtre est agrandie de ce cadre : l'iframe est ainsi visible en entier dès
+   le chargement. Sinon, les cartes retournées en 3D (calques composités) qui
+   tombent dans la bande amputée restent noires sur la photo. Les marges à droite
+   et en bas restent grises ; Edge refuse aussi une fenêtre de moins de ~500 px. */
+const FRAME = [24, 92];
+const win = [Math.max(w + FRAME[0], 500), h + FRAME[1]];
 
 const r = spawnSync(EDGE, [
   "--headless=old", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--disable-extensions",

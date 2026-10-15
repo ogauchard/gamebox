@@ -4,15 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Les Cinq Rois</title>
+<link rel="stylesheet" href="cartes.css?v=b19a8023">
 <style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les cartes des Cinq Rois, la table, la main rangée. */
   :root {
-    color-scheme: dark;
     --bg: #12111a;
     --panel: #1d1c29;
     --line: #353349;
     --text: #efedf6;
     --dim: #9d9ab3;
-    --accent: #ffce3a;
+    --bg-top: #252338;
+    --btn: #2a283b;
+    --btn-hover: #36334c;
     --meld: #4fbf6a;
     /* Les cinq couleurs du paquet, sur fond crème. */
     --s-E: #c98a00;
@@ -20,66 +24,13 @@
     --s-T: #2b8a45;
     --s-P: #23262d;
     --s-K: #2466b8;
-    /* Ratio hauteur/largeur d'une carte : 1.4 */
+    /* Ratio hauteur/largeur d'une carte : 1.4. Les piles se dimensionnent sur
+       la hauteur réelle de la table (voir #table). */
     --hand-card: clamp(48px, min(11vh, 7.5vw), 84px);
-    --pile-card: clamp(52px, min(12vh, 16vw), 90px);
+    --pile-card: clamp(52px, min(12vh, 16vw), 90px);   /* navigateurs sans cqh */
     --mini-card: clamp(16px, min(3.2vh, 4.4vw), 25px);
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    background: radial-gradient(ellipse at 50% 0%, #252338 0%, var(--bg) 62%);
-    color: var(--text);
-    font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-
-  /* ------------------------------------------------------------- Structure */
-  header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(0,0,0,.28);
-    flex: none;
-  }
-  header h1 {
-    font-size: 20px; letter-spacing: 3px; font-weight: 900;
-    color: var(--accent); white-space: nowrap;
-  }
   header h1 span { font-size: .9em; margin-right: 4px; }
-  header .spacer { flex: 1; }
-  header .meta { color: var(--dim); font-size: 13px; }
-
-  button {
-    font: inherit; color: inherit;
-    background: #2a283b; border: 1px solid var(--line);
-    border-radius: 8px; padding: 7px 13px; cursor: pointer;
-  }
-  button:hover:not(:disabled) { background: #36334c; }
-  button:disabled { opacity: .45; cursor: default; }
-  button.primary { background: var(--accent); color: #1c1a24; border-color: var(--accent); font-weight: 700; }
-  button.primary:hover { background: #ffd960; }
-
-  main {
-    flex: 1;
-    min-height: 0;
-    display: flex; flex-direction: column;
-    gap: 8px;
-    padding: 12px 16px;
-    overflow: auto;
-    align-items: center;
-  }
-  main > * { flex: none; }
-  /* Marges automatiques plutôt que justify-content: center, qui rognerait le
-     haut de la table si elle dépasse la fenêtre. */
-  main > :first-child { margin-top: auto; }
-  main > :last-child { margin-bottom: auto; }
-
-  #opponents { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
 
   /* -------------------------------------------------------------- Cartes */
   /* Fond crème, valeur et couleur dans le coin (c'est lui qu'on lit quand les
@@ -144,37 +95,18 @@
   .card.back .pip { padding: 0; font-size: calc(var(--cw) * .5); }
 
   /* ------------------------------------------------------------ Adversaires */
-  .player {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 8px 11px 10px;
-    min-width: 0;
-  }
-  .player.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .player .name {
-    display: flex; align-items: baseline; gap: 8px;
-    font-weight: 700; margin-bottom: 6px; font-size: 14px;
-    white-space: nowrap;
-  }
-  .player .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
   .badge {
     font-size: 11px; font-weight: 800; letter-spacing: .3px;
     color: #10220f; background: var(--meld);
     border-radius: 5px; padding: 1px 5px;
   }
-  .fan { display: flex; --cw: var(--mini-card); padding-left: calc(var(--mini-card) * .5); }
-  .fan .card { margin-left: calc(var(--mini-card) * -.5); }
-  .fan .more { align-self: center; margin-left: 7px; font-size: 12px; color: var(--dim); }
 
   /* ----------------------------------------------------------------- Table */
-  #table {
-    display: flex; align-items: center; justify-content: center; gap: 22px;
-    padding: 4px 0;
-    --cw: var(--pile-card);
+  /* 24px = libellé + écart sous la carte. */
+  #table { --cw: var(--pile-card); }
+  @supports (width: 1cqh) {
+    #table { --pile-card: clamp(40px, min((100cqh - 24px) / 1.4, 28cqw), 120px); }
   }
-  .pile { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-  .pile .label { font-size: 12px; color: var(--dim); letter-spacing: .3px; }
   .pile.clickable .card { cursor: pointer; box-shadow: 0 0 0 3px var(--accent), 0 4px 12px rgba(0,0,0,.5); }
   .pile.clickable .card:hover { transform: translateY(-4px); }
   #discardSlot { display: flex; }
@@ -194,20 +126,7 @@
   #wildBadge span { font-size: 17px; }
   #center .label { font-size: 11.5px; color: var(--dim); text-align: center; line-height: 1.2; }
 
-  #status { min-height: 22px; text-align: center; font-size: 15px; }
-  #status b { color: var(--accent); }
-  #log {
-    font-size: 12.5px; line-height: 1.35; color: var(--dim); text-align: center;
-    max-width: 720px; height: calc(12.5px * 1.35 * 3); overflow: hidden;
-  }
-
   /* ------------------------------------------------------------------ Main */
-  #me { width: 100%; max-width: 1000px; }
-  #me .name {
-    display: flex; align-items: baseline; gap: 8px;
-    justify-content: center; font-size: 14px; font-weight: 700;
-  }
-  #me .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
   /* La main est rangée par le jeu : chaque combinaison dans un plateau, cartes
      chevauchées ; les cartes isolées à part, côte à côte, car ce sont elles
      qu'on défausse. */
@@ -233,37 +152,14 @@
   #hand .card.drawn { box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgba(0,0,0,.5); }
   /* Défausser cette carte fait sortir : anneau vert, carte soulevée. */
   #hand .card.out { transform: translateY(-6px); box-shadow: 0 0 0 3px var(--meld), 0 8px 16px rgba(0,0,0,.55); }
-  @keyframes pop { from { transform: translateY(24px) scale(.85); opacity: 0; } }
   #hand .card.pop { animation: pop .26s ease-out; }
 
-  /* -------------------------------------------------------------- Overlays */
-  .overlay {
-    position: fixed; inset: 0;
-    background: rgba(8,7,13,.86);
-    display: flex; align-items: center; justify-content: center;
-    padding: 20px; z-index: 10;
-  }
-  .overlay[hidden] { display: none; }
-  .sheet {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 14px; padding: 22px 24px;
-    max-width: 600px; width: 100%;
-    max-height: 90vh; overflow: auto;
-  }
-  .sheet h2 { font-size: 22px; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
-  .sheet h3 { font-size: 15px; margin: 14px 0 4px; color: var(--accent); }
-  .sheet p { margin: 8px 0; }
-  .sheet ul { margin: 8px 0 8px 20px; }
-  .sheet li { margin: 5px 0; }
-  .sheet .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .sheet .hint { font-size: 12.5px; color: var(--dim); margin-top: 2px; }
-  .choice { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
-  .choice button.sel { background: var(--accent); color: #1c1a24; border-color: var(--accent); font-weight: 700; }
+  /* -------------------------------------------------------------- Feuilles */
+  .sheet { max-width: 600px; }
   .suits { letter-spacing: 2px; }
   .suits .s-E, .suits .s-C, .suits .s-T, .suits .s-P, .suits .s-K {
     color: var(--sc); background: #fbf6ea; border-radius: 4px; padding: 0 3px;
   }
-
   /* Décompte : la main de chacun, rangée comme elle a été comptée. */
   .score-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
   .score-row:last-child { border-bottom: 0; }
@@ -277,70 +173,17 @@
   .mini-hand .group.meld { padding: 3px 4px 3px calc(var(--cw) * .42 + 4px); }
   .mini-hand .group.dead { gap: 3px; padding: 3px 0; }
   .mini-hand .group.dead .card { box-shadow: 0 0 0 2px #e0584f; }
-  .next-round { color: var(--dim); font-size: 13.5px; margin-top: 12px; }
-  .next-round b { color: var(--accent); }
 
-  @media (max-width: 720px) {
-    main { padding: 8px; gap: 6px; }
-    #opponents { gap: 9px; }
-    #table { gap: 14px; }
-    .player { padding: 6px 8px 8px; }
-  }
-
-  /* ------------------------------------------------- Téléphone (portrait)
-     Même approche qu'Uno : adversaires en grille en haut, main complète en
-     bas, et la table occupe exactement la hauteur qui reste. */
+  /* ------------------------------------------------- Téléphone (portrait) */
   @media (max-width: 560px) {
-    header { padding: 7px 9px; gap: 7px; }
-    header h1 { font-size: 16px; letter-spacing: 1.5px; flex: none; }
-    header .meta { font-size: 10.5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     header .meta span { display: none; }          /* le nombre de cartes se lit sur le badge du joker */
-    header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
-
-    main {
-      padding: 7px 0 calc(6px + env(safe-area-inset-bottom));
-      gap: 6px;
-      align-items: stretch;
-      overflow-y: auto;
-    }
-
-    #opponents {
-      display: grid;
-      grid-auto-flow: column;
-      grid-auto-columns: minmax(0, 1fr);
-      gap: 6px;
-      padding: 0 8px;
-    }
-    #opponents .player { --mini-card: clamp(13px, 4.4vw, 20px); padding: 5px 8px 7px; }
-    #opponents .player .name { flex-wrap: wrap; gap: 0 5px; font-size: 12.5px; margin-bottom: 4px; }
-    #opponents .player .name .tag { order: 1; flex-basis: 100%; font-size: 10.5px; }
+    #opponents .player { --mini-card: clamp(13px, 4.4vw, 20px); }
     #opponents .player .name .badge { font-size: 9.5px; padding: 1px 4px; }
-    #opponents .fan { padding-left: calc(var(--mini-card) * .62); }
-    #opponents .fan .card { margin-left: calc(var(--mini-card) * -.62); }
-    #opponents .fan .more { margin-left: 5px; font-size: 11px; }
-    #opponents .player:only-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    #opponents .player:only-child .name { flex-wrap: nowrap; margin-bottom: 0; }
-    #opponents .player:only-child .name .tag { flex-basis: auto; }
 
-    /* Piles dimensionnées sur la hauteur réellement libre (voir uno.html). */
-    #table {
-      flex: 1 1 0;
-      min-height: 96px;
-      container-type: size;
-      gap: 16px; padding: 0;
-      --pile-card: clamp(44px, min(11vh, 20vw), 80px);
-    }
-    @supports (width: 1cqh) {
-      #table { --pile-card: clamp(40px, min((100cqh - 24px) / 1.4, 28cqw), 110px); }
-    }
     #center { min-width: 60px; }
     #wildBadge { font-size: 20px; padding: 2px 10px 3px; }
     #wildBadge span { font-size: 14px; }
     #center .label { font-size: 10.5px; }
-    .pile .label { font-size: 11px; }
-
-    #status { font-size: 13.5px; min-height: 19px; padding: 0 10px; overflow-wrap: anywhere; }
-    #log { font-size: 11px; height: calc(11px * 1.3 * 2); padding: 0 8px; }
 
     /* Taille des cartes selon le nombre en main (--n, posé par le rendu) :
        --k cartes isolées tiennent sur une rangée, espaces compris. Jusqu'à 6
@@ -349,7 +192,6 @@
        cartes isolées, moins dès qu'il y a des combinaisons, qui se
        chevauchent). Jamais de carte plus grande avec une main plus grosse :
        la main sauterait à chaque pioche. */
-    #me .name { font-size: 13px; }
     #hand {
       --k: clamp(4, var(--n, 7), 6);
       --hand-card: min((100vw - 20px - (var(--k) - 1) * 6px) / var(--k), 84px);
@@ -360,18 +202,7 @@
     #hand .card.pickable:hover { transform: none; }
     #hand .card.out:hover { transform: translateY(-6px); }
 
-    .sheet { padding: 18px 16px; }
-    .overlay { align-items: flex-end; padding: 0; }
-    .sheet { border-radius: 16px 16px 0 0; max-height: 88vh; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
     .mini-hand { --cw: 26px; gap: 6px; }
-  }
-  @media (max-width: 560px) and (max-height: 700px) {
-    #log { display: none; }
-    #me .name { font-size: 12px; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    #hand .card.pop { animation: none; }
-    .card { transition: none; }
   }
 </style>
 </head>
@@ -1215,9 +1046,10 @@ function render() {
   el("wildRank").textContent = rankLabel(S.wildRank);
 
   // Ma main — avant le statut, qui dépend des sorties possibles.
+  el("me").classList.toggle("active", S.current === 0 && S.phase !== "over");
   renderHand();
   el("status").innerHTML = statusHtml();
-  el("log").innerHTML = S.logs.join("<br>");
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
   el("roundInfo").innerHTML = `Manche ${S.round}/${ROUNDS}<span> · ${S.wildRank} cartes</span>`;
 }
 

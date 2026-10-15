@@ -4,80 +4,33 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Uno</title>
+<link rel="stylesheet" href="cartes.css?v=b19a8023">
 <style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les cartes d'Uno, la table et la main. */
   :root {
-    color-scheme: dark;
     --bg: #101318;
     --panel: #1a2029;
     --line: #303b49;
     --text: #eef2f7;
     --dim: #93a3b6;
-    --accent: #ffce3a;
+    --bg-top: #1d2530;
+    --btn: #232f3d;
+    --btn-hover: #2e3d50;
     /* Les quatre couleurs du jeu, utilisées partout : cartes, pastilles, halo. */
     --uno-R: #d8322f;
     --uno-J: #e5ae14;
     --uno-V: #35a04c;
     --uno-B: #2072c8;
-    /* Les cartes se dimensionnent sur la hauteur de fenêtre pour que la table
-       tienne sans défilement. Ratio hauteur/largeur d'une carte : 1.5 */
+    /* Ratio hauteur/largeur d'une carte : 1.5. Les piles se dimensionnent sur
+       la hauteur réelle de la table (voir #table). */
     --hand-card: clamp(46px, min(10.5vh, 15vw), 82px);
-    --pile-card: clamp(50px, min(11.5vh, 17vw), 88px);
+    --pile-card: clamp(50px, min(11.5vh, 17vw), 88px);   /* navigateurs sans cqh */
     --mini-card: clamp(17px, min(3.4vh, 4.6vw), 27px);
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    background: radial-gradient(ellipse at 50% 0%, #1d2530 0%, var(--bg) 62%);
-    color: var(--text);
-    font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-
-  /* ------------------------------------------------------------- Structure */
-  header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(0,0,0,.28);
-    flex: none;
-  }
-  header h1 {
-    font-size: 21px; letter-spacing: 4px; font-weight: 900;
-    color: var(--accent); font-style: italic;
-  }
-  header .spacer { flex: 1; }
-  header .meta { color: var(--dim); font-size: 13px; }
-
-  button {
-    font: inherit; color: inherit;
-    background: #232f3d; border: 1px solid var(--line);
-    border-radius: 8px; padding: 7px 13px; cursor: pointer;
-  }
-  button:hover:not(:disabled) { background: #2e3d50; }
-  button:disabled { opacity: .45; cursor: default; }
-  button.primary { background: var(--accent); color: #17202a; border-color: var(--accent); font-weight: 700; }
-  button.primary:hover { background: #ffd960; }
+  header h1 { font-style: italic; }
   button.danger { background: #7d2b26; border-color: #a3423b; }
-  button.danger:hover { background: #99352f; }
-
-  main {
-    flex: 1;
-    min-height: 0;
-    display: flex; flex-direction: column;
-    gap: 8px;
-    padding: 12px 16px;
-    overflow: auto;
-    align-items: center;
-  }
-  /* Sans ceci, les blocs se compriment quand la table dépasse la fenêtre et
-     leur contenu déborde par-dessus le voisin au lieu de faire défiler. */
-  main > * { flex: none; }
-
-  #opponents { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+  button.danger:hover:not(:disabled) { background: #99352f; }
 
   /* -------------------------------------------------------------- Cartes */
   /* Une carte est un bouton : fond de la couleur, liseré blanc, ovale incliné
@@ -150,42 +103,22 @@
   }
 
   /* ------------------------------------------------------------ Adversaires */
-  .player {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 8px 11px 10px;
-    min-width: 0;
-  }
-  .player.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .player.pickable { cursor: pointer; box-shadow: 0 0 0 3px var(--accent); }
-  .player .name {
-    display: flex; align-items: baseline; gap: 8px;
-    font-weight: 700; margin-bottom: 6px; font-size: 14px;
-    white-space: nowrap;
-  }
-  .player .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
   .player .name .uno {
     font-size: 11px; font-weight: 900; font-style: italic; letter-spacing: 1px;
-    color: #17202a; background: var(--accent);
+    color: var(--ink); background: var(--accent);
     border-radius: 5px; padding: 1px 5px;
   }
-  /* Éventail de dos : chevauchement négatif, la marge du premier est annulée. */
-  .fan { display: flex; --cw: var(--mini-card); padding-left: calc(var(--mini-card) * .5); }
-  .fan .card { margin-left: calc(var(--mini-card) * -.5); }
   /* À cette taille le « UNO » n'est plus qu'une bavure : l'ovale rouge suffit
      à faire lire un dos de carte. */
   .fan .card .pip { display: none; }
-  .fan .more { align-self: center; margin-left: 7px; font-size: 12px; color: var(--dim); }
 
   /* ----------------------------------------------------------------- Table */
-  #table {
-    display: flex; align-items: center; justify-content: center; gap: 20px;
-    padding: 4px 0;
-    --cw: var(--pile-card);
+  /* 24px = libellé + écart sous la carte. */
+  #table { --cw: var(--pile-card); }
+  @supports (width: 1cqh) {
+    #table { --pile-card: clamp(40px, min((100cqh - 24px) / 1.5, 32cqw), 120px); }
   }
-  .pile { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-  .pile .label { font-size: 12px; color: var(--dim); letter-spacing: .3px; }
   .pile.clickable .card { cursor: pointer; box-shadow: 0 0 0 3px var(--accent), 0 4px 12px rgba(0,0,0,.5); }
   .pile.clickable .card:hover { transform: translateY(-4px); }
   /* Halo de la couleur active, derrière la défausse : l'information la plus
@@ -205,23 +138,8 @@
     background: var(--glow, #333); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.45);
   }
 
-  #status { min-height: 22px; text-align: center; font-size: 15px; }
-  #status b { color: var(--accent); }
-  /* Hauteur figée sur 3 lignes : le journal ne doit ni pousser la table ni
-     déborder sur la main du joueur. */
-  #log {
-    font-size: 12.5px; line-height: 1.35; color: var(--dim); text-align: center;
-    max-width: 720px; height: calc(12.5px * 1.35 * 3); overflow: hidden;
-  }
-  #actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; min-height: 34px; }
-
   /* ------------------------------------------------------------------ Main */
-  #me { width: 100%; max-width: 900px; }
-  #me .name {
-    display: flex; align-items: baseline; gap: 8px;
-    justify-content: center; font-size: 14px; font-weight: 700;
-  }
-  #me .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
+  #me { max-width: 900px; }
   #hand {
     display: flex; gap: 6px;
     --cw: var(--hand-card);
@@ -245,36 +163,7 @@
      qu'on garde en main. */
   #hand .card.dead { opacity: .55; filter: saturate(.7); }
   #hand .card.drawn::after { border-color: var(--accent); }
-  @keyframes pop { from { transform: translateY(26px) scale(.8); opacity: 0; } }
   #hand .card.pop { animation: pop .26s ease-out; }
-
-  /* -------------------------------------------------------------- Overlays */
-  .overlay {
-    position: fixed; inset: 0;
-    background: rgba(6,9,13,.86);
-    display: flex; align-items: center; justify-content: center;
-    padding: 20px; z-index: 10;
-  }
-  .overlay[hidden] { display: none; }
-  .sheet {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 14px; padding: 22px 24px;
-    max-width: 560px; width: 100%;
-    max-height: 90vh; overflow: auto;
-  }
-  .sheet h2 { font-size: 22px; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
-  .sheet h3 { font-size: 15px; margin: 14px 0 4px; color: var(--accent); }
-  .sheet p { margin: 8px 0; }
-  .sheet ul { margin: 8px 0 8px 20px; }
-  .sheet li { margin: 5px 0; }
-  .sheet .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .sheet .hint { font-size: 12.5px; color: var(--dim); margin-top: 2px; }
-  .choice { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
-  .choice button.sel { background: var(--accent); color: #17202a; border-color: var(--accent); font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th, td { text-align: right; padding: 7px 9px; border-bottom: 1px solid var(--line); }
-  th:first-child, td:first-child { text-align: left; }
-  tr.win td { color: var(--accent); font-weight: 700; }
 
   /* Choix de couleur : quatre grandes cibles tactiles. */
   #colorGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
@@ -283,90 +172,24 @@
     font-size: 16px; font-weight: 800; color: #fff;
     text-shadow: 0 1px 3px rgba(0,0,0,.5);
   }
-  #colorGrid button:hover { filter: brightness(1.15); background: var(--c); }
-
-  /* Tablette et fenêtre étroite : on ne resserre que les espacements, les
-     tailles de cartes s'ajustant déjà via clamp(). */
-  @media (max-width: 720px) {
-    main { padding: 8px; gap: 6px; }
-    #opponents { gap: 9px; }
-    #table { gap: 12px; }
-    .player { padding: 6px 8px 8px; }
-  }
+  #colorGrid button:hover:not(:disabled) { filter: brightness(1.15); background: var(--c); }
 
   /* ------------------------------------------------- Téléphone (portrait)
-     Rien ne défile et rien ne reste vide : adversaires en grille en haut, main
-     complète en bas (elle passe à la ligne), et la table occupe exactement la
-     hauteur qui reste entre les deux. Le layout desktop n'est pas modifié. */
+     La main passe à la ligne au lieu de défiler : toutes les cartes restent
+     visibles et pleine taille. */
   @media (max-width: 560px) {
-    /* En-tête compact : les deux boutons doivent tenir sans être coupés, donc
-       ils ne rétrécissent pas ; c'est l'info de manche qui cède (ellipse). */
-    header { padding: 7px 9px; gap: 7px; }
-    header h1 { font-size: 17px; letter-spacing: 2px; flex: none; }
-    header .meta { font-size: 10.5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
-
-    main {
-      padding: 7px 0 calc(6px + env(safe-area-inset-bottom));
-      gap: 6px;
-      align-items: stretch;
-      overflow-y: auto;              /* repli pour une main démesurée sur un écran court */
-    }
-
-    /* Une colonne égale par adversaire : tous visibles d'un coup d'œil, sans
-       rail à faire défiler. Le décompte passe sous le nom pour tenir en largeur. */
-    #opponents {
-      display: grid;
-      grid-auto-flow: column;
-      grid-auto-columns: minmax(0, 1fr);
-      gap: 6px;
-      padding: 0 8px;
-    }
-    #opponents .player {
-      --mini-card: clamp(13px, 4.4vw, 20px);
-      padding: 5px 8px 7px;
-    }
-    #opponents .player .name { flex-wrap: wrap; gap: 0 5px; font-size: 12.5px; margin-bottom: 4px; }
-    #opponents .player .name .tag { order: 1; flex-basis: 100%; font-size: 10.5px; }
+    #opponents .player { --mini-card: clamp(13px, 4.4vw, 20px); }
     #opponents .player .name .uno { font-size: 9.5px; padding: 1px 4px; }
-    /* Éventail plus serré : huit dos doivent tenir dans un tiers d'écran. */
-    #opponents .fan { padding-left: calc(var(--mini-card) * .62); }
-    #opponents .fan .card { margin-left: calc(var(--mini-card) * -.62); }
-    #opponents .fan .more { margin-left: 5px; font-size: 11px; }
-    /* Seul adversaire : toute la largeur est à lui, nom et éventail sur une
-       seule ligne. */
-    #opponents .player:only-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    #opponents .player:only-child .name { flex-wrap: nowrap; margin-bottom: 0; }
-    #opponents .player:only-child .name .tag { flex-basis: auto; }
 
-    /* La table prend toute la hauteur libre, et les piles se dimensionnent sur
-       cette hauteur réelle (unités cqh) plutôt que sur la fenêtre : elles
-       grandissent quand la main est courte et cèdent la place quand elle
-       s'allonge. 24px = libellé + écart sous la carte. */
-    #table {
-      flex: 1 1 0;
-      min-height: 96px;
-      container-type: size;
-      gap: 14px; padding: 0;
-      --pile-card: clamp(44px, min(11vh, 20vw), 80px);   /* navigateurs sans cqh */
-    }
     @supports (width: 1cqh) {
       #table { --pile-card: clamp(40px, min((100cqh - 24px) / 1.5, 32cqw), 120px); }
     }
     #center { min-width: 52px; }
     #dir { font-size: 26px; }
     #colorName { font-size: 11.5px; padding: 2px 8px; }
-    .pile .label { font-size: 11px; }
 
-    #status { font-size: 13.5px; min-height: 19px; padding: 0 10px; overflow-wrap: anywhere; }
-    #log { font-size: 11px; height: calc(11px * 1.3 * 2); padding: 0 8px; }
-    #actions { min-height: 0; gap: 8px; padding: 0 8px; }
-    #actions button { padding: 9px 14px; }   /* cible tactile confortable */
-
-    /* Ma main : la vedette. Toutes les cartes restent visibles et pleine
-       taille, sur plusieurs rangées ; --k cartes par rangée, davantage à mesure
-       que la main grossit pour qu'elle ne mange pas la table. */
-    #me .name { font-size: 13px; }
+    /* --k cartes par rangée, davantage à mesure que la main grossit pour
+       qu'elle ne mange pas la table. */
     #hand {
       --k: 4;
       /* 100vw : la main occupe toute la largeur, main n'ayant pas de marge ici. */
@@ -387,23 +210,7 @@
        carte après le tap sur iOS. */
     #hand .card.playable:hover { transform: translateY(-7px); }
 
-    .sheet { padding: 18px 16px; }
-    /* Feuille collée en bas : atteignable au pouce sur les grands téléphones. */
-    .overlay { align-items: flex-end; padding: 0; }
-    .sheet { border-radius: 16px 16px 0 0; max-height: 88vh; padding-bottom: calc(18px + env(safe-area-inset-bottom)); }
     #colorGrid button { height: 62px; }
-  }
-
-  /* Écrans courts (ex. iPhone SE ~667) : le journal cède sa place à la table.
-     Les cartes n'ont pas besoin d'être réduites ici, elles suivent déjà la
-     place disponible. */
-  @media (max-width: 560px) and (max-height: 700px) {
-    #log { display: none; }
-    #me .name { font-size: 12px; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    #hand .card.pop { animation: none; }
-    .card { transition: none; }
   }
 </style>
 </head>
@@ -1451,13 +1258,14 @@ function render() {
   el("dir").textContent = S.dir === 1 ? "⟳" : "⟲";
 
   // Ma main
+  el("me").classList.toggle("active", S.current === 0 && S.phase !== "over");
   el("myTag").textContent =
     `${S.players[0].hand.length} carte${S.players[0].hand.length > 1 ? "s" : ""} · ${S.players[0].score} pt${S.players[0].score > 1 ? "s" : ""}`;
   renderHand();
   renderActions();
 
   el("status").innerHTML = statusHtml();
-  el("log").innerHTML = S.logs.join("<br>");
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
   el("roundInfo").textContent =
     (VAR.match ? `Manche ${S.round} · objectif ${TARGET} pts` : "Manche unique") +
     (S.pending > 0 ? ` · +${S.pending} en attente` : "");

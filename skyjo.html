@@ -4,91 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Skyjo</title>
+<link rel="stylesheet" href="cartes.css?v=b19a8023">
 <style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les grilles et les cartes de Skyjo, la taille des piles. */
   :root {
-    color-scheme: dark;
     --bg: #10171f;
     --panel: #18222e;
     --line: #2b3a4c;
     --text: #e8eef5;
     --dim: #8ba0b6;
-    --accent: #ffce3a;
-    /* Les cartes se dimensionnent sur la hauteur de fenêtre pour que la table
-       tienne sans défilement. Ratio hauteur/largeur d'une carte : 1.4 */
-    --card-w: clamp(26px, min(5vh, 11vw), 54px);    /* grilles des adversaires */
-    --my-card: clamp(40px, min(8vh, 19vw), 82px);   /* ma grille et les piles */
+    --bg-top: #1c2a3a;
+    --btn: #223142;
+    --btn-hover: #2c3f55;
+    /* Les grilles se dimensionnent sur la fenêtre pour que tout tienne sans
+       défilement ; les piles, sur la place qui reste (voir #table). Mesuré du
+       portable court (1366x650) au grand écran, et sur téléphone.
+       Ratio hauteur/largeur d'une carte : 1.4 */
+    --card-w: clamp(16px, min(3.4vh, 3.4vw), 40px);   /* grilles des adversaires */
+    --my-card: clamp(32px, min(7.6vh, 12vw), 84px);   /* ma grille */
+    --pile-card: clamp(40px, 9vh, 96px);              /* piles, navigateurs sans cqh */
     --gap: 5px;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    background: radial-gradient(ellipse at 50% 0%, #1c2a3a 0%, var(--bg) 60%);
-    color: var(--text);
-    font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    -webkit-user-select: none;
-    user-select: none;
-  }
 
-  /* ------------------------------------------------------------- Structure */
-  header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 10px 16px;
-    border-bottom: 1px solid var(--line);
-    background: rgba(0,0,0,.25);
-    flex: none;
-  }
-  header h1 {
-    font-size: 20px; letter-spacing: 3px; font-weight: 800;
-    color: var(--accent);
-  }
-  header .spacer { flex: 1; }
-  header .meta { color: var(--dim); font-size: 13px; }
-
-  button {
-    font: inherit; color: inherit;
-    background: #223142; border: 1px solid var(--line);
-    border-radius: 8px; padding: 7px 13px; cursor: pointer;
-  }
-  button:hover:not(:disabled) { background: #2c3f55; }
-  button:disabled { opacity: .45; cursor: default; }
-  button.primary { background: var(--accent); color: #17202a; border-color: var(--accent); font-weight: 700; }
-  button.primary:hover { background: #ffd960; }
-
-  main {
-    flex: 1;
-    min-height: 0;
-    display: flex; flex-direction: column;
-    gap: 10px;
-    padding: 12px 16px;
-    overflow: auto;
-    align-items: center;
-  }
-  /* Sans ceci, les blocs se compriment quand la table dépasse la fenêtre et
-     leur contenu déborde par-dessus le voisin au lieu de faire défiler. */
-  main > * { flex: none; }
-
-  #opponents {
-    display: flex; flex-wrap: wrap; gap: 18px; justify-content: center;
-  }
-
-  /* ---------------------------------------------------------------- Joueur */
-  .player {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 9px 11px 11px;
-  }
-  .player.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .player .name {
-    display: flex; align-items: baseline; gap: 8px;
-    font-weight: 700; margin-bottom: 7px; font-size: 14px;
-  }
-  .player .name .tag {
-    font-weight: 400; font-size: 12px; color: var(--dim);
-  }
+  /* ---------------------------------------------------------------- Grilles */
   .player .name .finisher { color: var(--accent); font-size: 12px; }
   .grid {
     display: grid;
@@ -96,7 +35,8 @@
     gap: var(--gap);
   }
   #me { --card-w: var(--my-card); --gap: 8px; }
-  #me .name { font-size: 16px; }
+  #me .name { margin-bottom: 6px; }
+  #me .grid { justify-content: center; }
 
   /* ---------------------------------------------------------------- Cartes */
   .card {
@@ -152,23 +92,17 @@
      le retournement, quand le dos et la face laissent voir le support. */
   .card.selectable:hover { transform: translateY(-5px); background: none; }
 
-  /* ----------------------------------------------------------------- Table */
-  #table {
-    display: flex; align-items: center; justify-content: center; gap: 26px;
-    padding: 4px 0;
+  /* ----------------------------------------------------------------- Piles */
+  /* 24px = libellé + écart sous la carte. */
+  @supports (width: 1cqh) {
+    #table { --pile-card: clamp(36px, min((100cqh - 24px) / 1.4, 22cqw), 110px); }
   }
-  .pile { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-  /* Sans cette règle, le display:flex ci-dessus l'emporte sur le display:none
-     que le navigateur applique à l'attribut hidden : la pile « En main »
-     resterait affichée en permanence. */
-  .pile[hidden] { display: none; }
-  .pile .label { font-size: 12px; color: var(--dim); letter-spacing: .5px; }
   .pile .slot {
-    width: var(--my-card);
-    height: calc(var(--my-card) * 1.4);
+    width: var(--pile-card);
+    height: calc(var(--pile-card) * 1.4);
     border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: calc(var(--my-card) * .42);
+    font-weight: 800; font-size: calc(var(--pile-card) * .42);
     transition: transform .15s;
   }
   .slot.empty { border: 2px dashed var(--line); color: var(--dim); font-size: 13px; font-weight: 400; }
@@ -180,132 +114,21 @@
   .pile.clickable .slot:hover { transform: translateY(-4px); }
   #held .slot { box-shadow: 0 0 14px rgba(255,206,58,.5); }
 
-  #status {
-    min-height: 22px; text-align: center; font-size: 15px;
-  }
-  #status b { color: var(--accent); }
-  /* Hauteur figée sur 3 lignes : le journal ne doit ni pousser la table
-     ni déborder sur la grille du joueur. */
-  #log {
-    font-size: 12.5px; line-height: 1.35; color: var(--dim); text-align: center;
-    max-width: 720px; height: calc(12.5px * 1.35 * 3);
-    overflow: hidden;
-  }
-
-  /* -------------------------------------------------------------- Overlays */
-  .overlay {
-    position: fixed; inset: 0;
-    background: rgba(6,10,15,.86);
-    display: flex; align-items: center; justify-content: center;
-    padding: 20px; z-index: 10;
-  }
-  .overlay[hidden] { display: none; }
-  .sheet {
-    background: var(--panel); border: 1px solid var(--line);
-    border-radius: 14px; padding: 24px 26px;
-    max-width: 560px; width: 100%;
-    max-height: 90vh; overflow: auto;
-  }
-  .sheet h2 { font-size: 22px; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
-  .sheet p { margin: 8px 0; }
-  .sheet ul { margin: 8px 0 8px 20px; }
-  .sheet li { margin: 5px 0; }
-  .sheet .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
-  .choice { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
-  .choice button.sel { background: var(--accent); color: #17202a; border-color: var(--accent); font-weight: 700; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th, td { text-align: right; padding: 7px 9px; border-bottom: 1px solid var(--line); }
-  th:first-child, td:first-child { text-align: left; }
-  tr.win td { color: var(--accent); font-weight: 700; }
   .doubled { color: #ff8a7a; }
 
-  /* Tablette et fenêtre étroite : on ne resserre que les espacements, les
-     tailles de cartes s'ajustant déjà via clamp(). */
-  @media (max-width: 720px) {
-    main { padding: 8px; gap: 6px; }
-    #opponents { gap: 10px; }
-    #table { gap: 12px; }
-    .player { padding: 7px 8px 9px; }
-  }
-
   /* ------------------------------------------------- Téléphone (portrait)
-     Refonte « pouce » : rail d'adversaires défilant en haut, puis piles,
-     statut et grille du joueur ancrés en bas — dans la zone atteignable au
-     pouce. Le layout desktop plus haut n'est pas modifié. */
+     Les grilles des adversaires se calent sur la largeur d'une colonne (trois
+     adversaires : un tiers d'écran pour 4 cartes), plafonnées par la hauteur. */
   @media (max-width: 560px) {
-    /* En-tête compact : les deux boutons doivent tenir sans être coupés, donc
-       ils ne rétrécissent pas ; c'est l'info de manche qui cède (ellipse). */
-    header { padding: 7px 9px; gap: 7px; }
-    header h1 { font-size: 16px; letter-spacing: 1.5px; flex: none; }
-    header .meta { font-size: 10.5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
-
-    /* Blocs pleine largeur ; le contenu utile est poussé vers le bas. */
-    main {
-      padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
-      gap: 8px;
-      align-items: stretch;
-      overflow-y: auto;            /* repli en défilement sur les écrans très courts */
+    #opponents .player { --card-w: clamp(14px, min(5.4vw, 3vh), 26px); --gap: 3px; }
+    #opponents .grid { justify-content: center; }
+    #opponents .player .name .finisher { font-size: 10.5px; }
+    @supports (width: 1cqh) {
+      #table { --pile-card: clamp(36px, min((100cqh - 22px) / 1.4, 26cqw), 96px); }
     }
-
-    /* Rail d'adversaires : défile à l'horizontale, ne repasse jamais à la
-       ligne ; le débordement laisse volontairement voir un bout du suivant. */
-    #opponents {
-      flex-wrap: nowrap;
-      justify-content: flex-start;
-      justify-content: safe center;   /* centré quand ils tiennent, calé à gauche s'il faut défiler */
-      align-items: flex-start;
-      gap: 8px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding-bottom: 5px;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: thin;
-      scrollbar-color: var(--line) transparent;
-    }
-    #opponents::-webkit-scrollbar { height: 5px; }
-    #opponents::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
-    #opponents .player {
-      flex: 0 0 auto;
-      --card-w: clamp(18px, min(4.6vh, 6.5vw), 28px);
-      --gap: 4px;
-      padding: 6px 7px 8px;
-    }
-    #opponents .player .name { font-size: 11.5px; margin-bottom: 5px; gap: 5px; }
-    #opponents .player .name .tag { font-size: 10px; }
-
-    /* Piles + statut + journal + ma grille, collés en bas de l'écran. */
-    #table {
-      margin-top: auto;
-      --my-card: clamp(38px, min(8vh, 14vw), 58px);
-      gap: 18px;
-      padding: 0;
-    }
-    .pile .label { font-size: 11px; }
-
-    #status { font-size: 14px; min-height: 20px; padding: 0 10px; overflow-wrap: anywhere; }
-    #log { font-size: 11px; height: calc(11px * 1.3 * 2); }
-
-    /* Ma grille : la vedette. Grandes cibles tactiles, centrée. */
-    #me {
-      --my-card: clamp(46px, min(10vh, 19vw), 72px);
-      --gap: 8px;
-      width: 100%;
-      max-width: 360px;
-      margin: 0 auto;
-      padding: 8px 10px 10px;
-    }
-    #me .name { font-size: 15px; margin-bottom: 6px; }
-    #me .grid { justify-content: center; }
-  }
-
-  /* Écrans courts (ex. iPhone SE ~667) : on gagne de la hauteur en masquant le
-     journal et en réduisant encore les cartes, pour éviter tout défilement. */
-  @media (max-width: 560px) and (max-height: 720px) {
-    #log { display: none; }
-    #opponents .player { --card-w: clamp(17px, min(4vh, 6vw), 24px); }
-    #table { --my-card: clamp(36px, min(7.5vh, 13vw), 52px); }
-    #me { --my-card: clamp(42px, min(8.5vh, 18vw), 62px); }
+    /* Ma grille : la vedette. Grandes cibles tactiles. */
+    #me { --my-card: clamp(42px, min(8.6vh, 19vw), 72px); }
+    #me .name { margin-bottom: 5px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .card .inner { transition: none; }
@@ -340,7 +163,7 @@
   </div>
   <div id="status"></div>
   <div id="log"></div>
-  <div id="me" class="player"></div>
+  <div id="me"></div>
 </main>
 
 <!-- Écran de démarrage -->
@@ -349,9 +172,9 @@
     <h2>SKYJO</h2>
     <p>Le but est d'avoir le total de points le plus bas. La partie s'arrête dès qu'un joueur
        atteint <b>100 points</b> ou plus : le joueur avec le total le plus bas l'emporte.</p>
-    <p>Nombre de joueurs :</p>
+    <h3>Nombre de joueurs</h3>
     <div class="choice" id="playerChoice"></div>
-    <p>Niveau des adversaires :</p>
+    <h3>Niveau des adversaires</h3>
     <div class="choice" id="levelChoice"></div>
     <div class="actions">
       <button class="primary" id="btnStart">Commencer</button>
@@ -1082,7 +905,7 @@ function render() {
 
   el("roundInfo").textContent = `Manche ${S.round}` +
     (S.finisher !== null && S.phase !== "over" ? " · dernier tour" : "");
-  el("log").innerHTML = S.logs.join("<br>");
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
 }
 
 function setStatus(html) { el("status").innerHTML = html; }

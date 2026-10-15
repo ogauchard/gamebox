@@ -1,0 +1,264 @@
+/* =========================================================================
+   cartes.css — gabarit commun des jeux de cartes de gamebox
+   (Skyjo, Uno, Les Cinq Rois, Trou du cul ; pas Asteroids ni l'accueil).
+
+   Ce fichier porte la mise en page et les composants partagés. Chaque page
+   garde en ligne sa teinte, ses faces de cartes et le contenu de sa table, et
+   le charge AVANT son propre <style>, qui peut donc préciser une règle d'ici.
+
+   Chaque page définit dans son :root :
+     --bg, --panel, --line, --text, --dim   la teinte du jeu
+     --bg-top                                le haut du dégradé de fond
+     --btn, --btn-hover                      le fond des boutons
+   et la taille de ses piles sur la hauteur réelle de #table (unités cqh) :
+   le rapport hauteur/largeur des cartes et le contenu de la table en dépendent.
+
+   Le lien est versionné, href="cartes.css?v=<empreinte>" : GitHub Pages fait
+   garder les fichiers 10 minutes en cache, et sans cela une page neuve pourrait
+   s'afficher avec l'ancienne feuille. tests/cartes.test.js vérifie que
+   l'empreinte suit le contenu.
+
+   Le gabarit, de haut en bas, au bureau comme au téléphone :
+     header       titre · manche · Règles · Nouvelle partie
+     #opponents   une vignette .player par adversaire
+     #table       prend toute la hauteur libre (container-type: size)
+     #status      une phrase ; #log : les deux dernières lignes du journal
+     #actions     boutons du jeu (Uno, Trou du cul), facultatif
+     #me          « Toi » + la main ou la grille, ancrée en bas
+   Rien ne défile et rien ne reste vide : les adversaires restent en haut, la
+   main en bas, et la table prend ce qui reste. Le défilement de <main> n'est
+   qu'un repli pour une fenêtre vraiment trop courte.
+   ========================================================================= */
+
+:root {
+  color-scheme: dark;
+  --accent: #ffce3a;
+  --accent-hover: #ffd960;
+  --ink: #1a1e26;              /* texte posé sur --accent */
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: radial-gradient(ellipse at 50% 0%, var(--bg-top) 0%, var(--bg) 62%);
+  color: var(--text);
+  font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* --------------------------------------------------------------- En-tête */
+header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0,0,0,.28);
+  flex: none;
+}
+header h1 {
+  font-size: 20px; letter-spacing: 3px; font-weight: 900;
+  color: var(--accent); white-space: nowrap;
+}
+header .spacer { flex: 1; }
+header .meta { color: var(--dim); font-size: 13px; }
+
+/* --------------------------------------------------------------- Boutons */
+button {
+  font: inherit; color: inherit;
+  background: var(--btn); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 13px; cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--btn-hover); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: var(--ink); border-color: var(--accent); font-weight: 700; }
+button.primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+/* ----------------------------------------------------------- Zone de jeu */
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex; flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  overflow: auto;
+}
+/* Sans ceci, les blocs se compriment quand la table dépasse la fenêtre et leur
+   contenu déborde par-dessus le voisin au lieu de faire défiler. #table seul
+   reprend flex: 1 (règle d'identifiant, plus forte). */
+main > * { flex: none; }
+
+/* ----------------------------------------------------------- Adversaires */
+#opponents { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
+.player {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 11px 10px;
+  min-width: 0;
+}
+.player.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.player .name {
+  display: flex; align-items: baseline; gap: 8px;
+  font-weight: 700; margin-bottom: 6px; font-size: 14px;
+  white-space: nowrap;
+}
+.player .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
+/* Éventail de dos : chevauchement négatif réglé par --fan (part de la largeur
+   d'une carte), la marge du premier est annulée par le padding. */
+.fan {
+  --fan: .5;
+  display: flex;
+  --cw: var(--mini-card);
+  padding-left: calc(var(--mini-card) * var(--fan));
+}
+.fan .card { margin-left: calc(var(--mini-card) * var(--fan) * -1); }
+.fan .more { align-self: center; margin-left: 7px; font-size: 12px; color: var(--dim); }
+
+/* ----------------------------------------------------------------- Table */
+/* Toute la hauteur libre entre les adversaires et la main. Chaque jeu y
+   dimensionne ses cartes en cqh (voir l'en-tête). */
+#table {
+  flex: 1 1 0;
+  min-height: 110px;
+  align-self: stretch;
+  container-type: size;
+  display: flex; align-items: center; justify-content: center; gap: 22px;
+}
+.pile { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+/* Sans cette règle, le display: flex ci-dessus l'emporte sur le display: none
+   que le navigateur applique à l'attribut hidden. */
+.pile[hidden] { display: none; }
+.pile .label { font-size: 12px; color: var(--dim); letter-spacing: .3px; }
+
+/* --------------------------------------------------- Statut et journal */
+#status { min-height: 22px; max-width: 900px; text-align: center; font-size: 15px; }
+#status b { color: var(--accent); }
+/* Hauteur figée sur deux lignes : le journal ne pousse jamais la table. Calé
+   en bas, il coupe la ligne la plus ancienne quand une phrase passe à la
+   ligne, jamais la plus récente — le rendu pose une <div> par ligne. */
+#log {
+  font-size: 12.5px; line-height: 1.35; color: var(--dim); text-align: center;
+  max-width: 720px; height: calc(12.5px * 1.35 * 2);
+  overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+}
+#actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; min-height: 36px; }
+#actions button { min-width: 96px; }
+
+/* --------------------------------------------------------------- Le joueur */
+#me { width: 100%; max-width: 1000px; }
+#me .name {
+  display: flex; align-items: baseline; justify-content: center; gap: 8px;
+  font-size: 14px; font-weight: 700;
+}
+#me .name .tag { font-weight: 400; font-size: 12px; color: var(--dim); }
+/* À ton tour, « Toi » passe à la couleur d'accent, comme l'anneau d'un adversaire. */
+#me.active .name > :first-child { color: var(--accent); }
+@keyframes pop { from { transform: translateY(24px) scale(.85); opacity: 0; } }
+
+/* -------------------------------------------------------------- Overlays */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.82);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; z-index: 10;
+}
+.overlay[hidden] { display: none; }
+.sheet {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 14px; padding: 22px 24px;
+  max-width: 580px; width: 100%;
+  max-height: 90vh; overflow: auto;
+}
+.sheet h2 { font-size: 22px; margin-bottom: 6px; color: var(--accent); letter-spacing: 1px; }
+.sheet h3 { font-size: 15px; margin: 14px 0 4px; color: var(--accent); }
+.sheet p { margin: 8px 0; }
+.sheet ul { margin: 8px 0 8px 20px; }
+.sheet li { margin: 5px 0; }
+.sheet .actions { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+.sheet .hint { font-size: 12.5px; color: var(--dim); margin-top: 2px; }
+.choice { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
+.choice button.sel { background: var(--accent); color: var(--ink); border-color: var(--accent); font-weight: 700; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+th, td { text-align: right; padding: 7px 9px; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+tr.win td { color: var(--accent); font-weight: 700; }
+.next-round { color: var(--dim); font-size: 13.5px; margin-top: 12px; }
+.next-round b { color: var(--accent); }
+
+/* ---------------------------------------------- Tablette, fenêtre étroite */
+@media (max-width: 720px) {
+  main { padding: 8px; gap: 6px; }
+  #opponents { gap: 9px; }
+  #table { gap: 14px; }
+  .player { padding: 6px 8px 8px; }
+}
+
+/* ----------------------------------------------------- Téléphone (portrait)
+   Adversaires en grille, une colonne égale chacun : tous visibles, sans rail à
+   faire défiler. Feuilles collées en bas, sous le pouce. */
+@media (max-width: 560px) {
+  /* Les deux boutons doivent tenir sans être coupés, donc ils ne rétrécissent
+     pas ; c'est l'info de manche qui cède (ellipse). */
+  header { padding: 7px 9px; gap: 7px; }
+  header h1 { font-size: 16px; letter-spacing: 1.5px; flex: none; }
+  header .meta { font-size: 10.5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header button { padding: 6px 9px; font-size: 12px; border-radius: 7px; flex: none; }
+
+  main {
+    padding: 7px 0 calc(6px + env(safe-area-inset-bottom));
+    gap: 6px;
+    align-items: stretch;
+  }
+
+  #opponents {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 0 8px;
+  }
+  #opponents .player { padding: 5px 8px 7px; }
+  /* Le décompte passe sous le nom pour tenir dans un tiers d'écran. */
+  #opponents .player .name { flex-wrap: wrap; gap: 0 5px; font-size: 12.5px; margin-bottom: 4px; }
+  #opponents .player .name .tag { order: 1; flex-basis: 100%; font-size: 10.5px; }
+  #opponents .fan { --fan: .62; }
+  #opponents .fan .more { margin-left: 5px; font-size: 11px; }
+  /* Seul adversaire : toute la largeur est à lui, nom et cartes sur une ligne. */
+  #opponents .player:only-child { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #opponents .player:only-child .name { flex-wrap: nowrap; margin-bottom: 0; }
+  #opponents .player:only-child .name .tag { flex-basis: auto; }
+
+  #table { gap: 14px; min-height: 96px; }
+  .pile .label { font-size: 11px; }
+
+  #status { font-size: 13.5px; min-height: 19px; padding: 0 10px; overflow-wrap: anywhere; }
+  #log { font-size: 11px; line-height: 1.3; height: calc(11px * 1.3 * 2); padding: 0 8px; }
+  #actions { min-height: 0; gap: 8px; padding: 0 8px; }
+  #actions button { padding: 10px 14px; flex: 1; max-width: 170px; }   /* cible tactile confortable */
+
+  #me .name { font-size: 13px; }
+
+  .overlay { align-items: flex-end; padding: 0; }
+  .sheet {
+    border-radius: 16px 16px 0 0; max-height: 88vh;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+  th, td { padding: 6px 5px; font-size: 13.5px; }
+}
+
+/* Écrans courts — iPhone SE (~667), portable de 768 px une fois la barre du
+   navigateur déduite : le journal cède sa place à la table. */
+@media (max-height: 700px) {
+  #log { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: none; }
+  .card.pop { animation: none; }
+}

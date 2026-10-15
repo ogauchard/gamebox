@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Five **independent** self-contained games that share no code. Each is one HTML file with its markup, CSS, and JS
-inline. No build step, no dependencies, no package manager, no framework. Open any file directly
+Five **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
+except that the four card games load one shared stylesheet, [cartes.css](cartes.css), for their common layout (see
+*Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
 - [asteroids.html](asteroids.html) — remake of the 1979 Atari arcade game, canvas + vector rendering.
@@ -17,8 +18,10 @@ inline. No build step, no dependencies, no package manager, no framework. Open a
 - [trou-du-cul.html](trou-du-cul.html) — the traditional climbing game (a.k.a. Président), rules from the French
   Wikipedia article plus fixed house rules (54 cards with wild jokers, no variant toggles), DOM/CSS rendering, human
   vs. 3–5 computer opponents.
+- [cartes.css](cartes.css) — the card games' shared layout and components; each game keeps its tint, card faces and
+  table contents inline.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
-  `tests/<game>.test.js`; keep the games themselves independent of each other. The **`nouveau-jeu` skill**
+  `tests/<game>.test.js`; keep the games' logic independent of each other. The **`nouveau-jeu` skill**
   ([.claude/skills/nouveau-jeu/](.claude/skills/nouveau-jeu/SKILL.md)) holds the full checklist for adding one.
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
   A new game also needs its card here. The games don't link back to it.
@@ -29,17 +32,21 @@ Published with **GitHub Pages** straight from `main`, repository root, no build 
 `https://ogauchard.github.io/gamebox/`. Every push to `main` goes live within a minute or so, so `main` is
 production. The empty [.nojekyll](.nojekyll) must stay: without it Pages runs Jekyll, which would render
 `CLAUDE.md` into a page. Keep every link relative (`uno.html`, not `/uno.html`) — the site lives under
-`/gamebox/`, not at the domain root.
+`/gamebox/`, not at the domain root. Pages serves everything with `Cache-Control: max-age=600`, so a page and the
+`cartes.css` it links can be up to 10 minutes apart in a browser after a push: that is why the link carries a content
+hash (`cartes.css?v=<hash>`), kept in step by `node tests/cartes.test.js --fix`.
 
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les cinq suites (~5200 assertions, le total varie — les cartes sont mélangées)
+node tests/run-all.js          # les six suites (~5400 assertions, le total varie — les cartes sont mélangées)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
 node tests/trou-du-cul.test.js # règles du Trou du cul seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
+node tests/cartes.test.js      # gabarit commun : liens vers cartes.css, empreinte, teintes
+node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 4 liens
 ```
 
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
@@ -95,6 +102,36 @@ ship/saucer collision can't preempt what you're measuring, and note that an empt
 Invariants worth keeping in the Skyjo suite: the 150-card multiset is conserved across piles, grids **and**
 `S.held`; removals only ever happen three-at-a-time; exactly `n-1` turns follow the finisher's. Random play never
 reaches the draw-pile reshuffle or a non-positive finisher total — those are tested directly.
+
+## Shared layout — cartes.css
+
+The four card games — Skyjo, Uno, Cinq Rois, Trou du cul — look alike on purpose, on desktop as on phones; Asteroids
+and the landing page stay independent.
+[cartes.css](cartes.css) holds everything that used to be copied four times: base styles, header, buttons, opponent
+panels (`.player`, `.fan`), status, log, actions, the player's area, overlays and sheets, and the phone and short-screen
+rules. Each game links it **before** its own `<style>`, which keeps only what is the game's own: its tint, its card
+faces, the contents of its table, its hand. The DOM is the same skeleton everywhere — `header`, then in `main`:
+`#opponents`, `#table`, `#status`, `#log`, optional `#actions`, `#me` (`.name` + the hand or grid).
+
+- **One layout at every width**: opponents on top, the hand at the bottom, and `#table` in between as
+  `flex: 1 1 0; container-type: size`, so it takes exactly the height left. Each game sizes its table cards in
+  `cqh`/`cqw` in its own `<style>` (ratio and table contents differ), under an `@supports (width: 1cqh)` guard with a
+  `vh` fallback — a custom property can't fail validation, so an unsupported unit would silently give the card no
+  width. Nothing scrolls; `main`'s scroll is only a fallback once `#table` hits its `min-height`.
+- **Tint**: every game defines `--bg`, `--panel`, `--line`, `--text`, `--dim`, `--bg-top` (top of the background
+  gradient), `--btn`, `--btn-hover` in its `:root`; overlays derive their scrim from `--bg`. Don't name a shared token
+  `--glow`: Uno already sets that one on its discard pile for the active-colour halo.
+- **Your turn**: `render()` toggles `#me.active` (the same test as an opponent's `.active` ring) and "Toi" turns accent.
+- **The log is two lines, bottom-aligned, one `<div>` per entry.** Games keep 3 entries; with `<br>`-joined text and
+  overflow clipped at the top-left, it was the *newest* line that got cut on phones. `(max-height: 700px)` hides it at
+  every width — iPhone SE, and a 768-px laptop screen once the browser bar is gone.
+- **Phones** (`max-width: 560px`): opponents become a grid with one equal column each (Trou du cul overrides it with
+  `--cols`), a lone opponent goes on one row, overlays become bottom-anchored sheets.
+
+After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the four links,
+and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
+1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all four games fit with no scroll at every one
+of those sizes. Landscape phones fall outside the 560 px query and get the desktop layout.
 
 ## Architecture — asteroids.html
 
@@ -175,13 +212,12 @@ because the 3D flip is a CSS transition on `.card.up` that a re-render would res
 
 ### Responsive layout
 
-Desktop stacks opponents (a centered wrapping row), the piles, the status line, and the player's grid top-to-bottom.
-Phones (`@media (max-width: 560px)`) switch to a **thumb-first** layout: opponents become a horizontally-scrolling rail
-pinned at the top, while piles + status + the player's grid are anchored to the bottom via `margin-top: auto`. Card
-sizes are `clamp()` over `min(vh, vw)` so the table fits without page scroll; a nested `(max-height: 720px)` query hides
-the log and shrinks cards further for short phones (iPhone SE). This is **pure CSS scoped to those media queries** — it
-touches neither the DOM structure nor `render()`, so the desktop layout is unchanged. Verify phone widths with the
-iframe screenshot trick from *Verifying changes*, and remember touch feel still needs a real device.
+The shared layout (see *Shared layout*), with the piles as the table. The grids are the hard part — three rows each,
+mine unframed under "Toi" like the other games' hands — so `--card-w` (opponents) and `--my-card` (mine) are `clamp()`
+over `min(vh, vw)`, fitted by measurement so nothing scrolls from a 1366×650 laptop viewport up to 1920×950 and on
+375–412-px phones. On phones an opponent's grid sizes on its column width (`5.4vw` for three), capped by height.
+Before this was measured, **desktop overflowed at every size** (132 px on a laptop, 13 px even at 1920×1000), and the
+phone layout was a horizontal rail that cut the third opponent off: re-run the `fit.js` sweep after any sizing change.
 
 ### Rules that are easy to break
 
@@ -315,25 +351,16 @@ opponents. Do not build player sentences with `il`/`elle` — the AI names carry
 
 ### Responsive layout
 
-Pure CSS under `@media (max-width: 560px)`, plus a nested `(max-height: 700px)` that only hides the log. Unlike
-Skyjo, nothing scrolls and nothing is left empty (an earlier rail + `margin-top: auto` version left ~40 % of the
-screen blank and hid half the hand):
+The shared layout (see *Shared layout*); an earlier rail + `margin-top: auto` version left ~40 % of a phone screen
+blank and hid half the hand. What is Uno's own:
 
-- **Opponents** are a grid with one equal column each, so all three stay visible; the card count wraps under the
-  name. A lone opponent (`:only-child`) goes on a single row instead.
-- **The hand wraps** onto several rows instead of scrolling — every card visible, full size, never overlapping.
-  Card width is computed from `--k` cards per row (`100vw`-based); `:has(> .card:nth-child(9|16|25))` raises `--k`
-  as the hand grows so it doesn't swallow the table. Row gap is 12 px because a playable card lifts 7 px and
-  carries a 3 px ring.
-- **`#table` is `flex: 1 1 0` with `container-type: size`**, and `--pile-card` uses `cqh`/`cqw`: the piles size
-  themselves to whatever height the hand leaves over (big with 5 cards, small with 20). An `@supports (width: 1cqh)`
-  guard keeps a `vh` fallback — a custom property can't fail validation, so an unsupported unit would otherwise
-  silently give the card no width. `main` still falls back to vertical scroll once `#table` hits `min-height`.
+- **On desktop the hand is one row** that scrolls sideways when it outgrows the window.
+- **On phones it wraps** onto several rows instead — every card visible, full size, never overlapping. Card width is
+  computed from `--k` cards per row (`100vw`-based); `:has(> .card:nth-child(9|16|25))` raises `--k` as the hand grows
+  so it doesn't swallow the table. Row gap is 12 px because a playable card lifts 7 px and carries a 3 px ring.
+- The piles size themselves on the table's height (`cqh`, ratio 1.5): big with 5 cards, small with 20.
 
-Overlays (couleur, règles, scores) switch from centred to bottom-anchored sheets. Verify phone widths with the
-iframe screenshot trick from *Verifying changes* — pose hands of ~5, 13 and 20 cards, since layout depends on hand
-size; touch feel still needs a real device. Landscape phones fall outside the 560 px query and get the desktop
-layout.
+Pose hands of ~5, 13 and 20 cards when checking it, since the phone layout depends on hand size.
 
 ## Architecture — cinq-rois.html
 
@@ -427,9 +454,8 @@ after each draw; `shownUids` limits the `pop` animation to new cards. Melds are 
 overlapped by 42 % (the corner index stays readable), dead cards sit apart and unoverlapped because they are what
 you click. The wild rank gets a gold inner border and a crown, the table shows it in `#wildBadge`.
 
-Desktop centres the column with `margin-top/bottom: auto` on the first and last children of `main` (not
-`justify-content: center`, which would clip the top when the table overflows). The phone layout copies Uno's:
-opponents grid, `#table` as a `cqh`-sized flex filler, wrapping hand. Hand card width comes from `--n`, the hand
+The shared layout (see *Shared layout*), with the piles and `#wildBadge` as the table. On phones the hand card width
+comes from `--n`, the hand
 size set inline by `renderHand()`, because CSS can't count cards spread across several meld groups: `--k =
 clamp(4, n, 6)` isolated cards per row, gaps included, so up to 6 cards sit on one row and the size never grows with
 the hand (it would jump on every draw). **`.group` must keep `flex-wrap: wrap`**: `#hand` is centred, so a group wider
@@ -526,6 +552,10 @@ so a revolution flips the hand), with the jokers as a last group whatever the or
 on a card selects the required count — its rank first, topped up with jokers; a click on a joker swaps it for a
 natural in the selection, or with nothing selected takes jokers alone. Leading, clicks toggle cards within one rank
 plus any jokers. Unplayable cards are darkened with `filter`, not `opacity`: inside an overlapped group,
-transparency shows the card underneath. The skipped opponent gets a "sauté" bubble. Phone layout as in Uno and
-Cinq Rois; the opponents grid gets `--cols` from `buildBoard()` (up to 3 per row, 2×2 for four opponents) because
-five opponents don't fit in one row.
+transparency shows the card underneath. The skipped opponent gets a "sauté" bubble.
+
+The shared layout (see *Shared layout*), with the trick as the table: `#table` is a column (trick cards, caption,
+order badge) and `--trick-card` sizes on its height in `cqh`, minus 52 px for the two text lines. An empty trick shows
+a dashed card outline (`#trickCards:empty::before`), like the other games' empty discard, rather than a hole. On
+phones the opponents grid gets `--cols` from `buildBoard()` (up to 3 per row, 2×2 for four opponents) because five
+opponents don't fit in one row, with a 12 px row gap and extra top padding for the bubbles.
