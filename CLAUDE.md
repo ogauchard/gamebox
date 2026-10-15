@@ -18,7 +18,8 @@ inline. No build step, no dependencies, no package manager, no framework. Open a
   Wikipedia article plus fixed house rules (54 cards with wild jokers, no variant toggles), DOM/CSS rendering, human
   vs. 3–5 computer opponents.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
-  `tests/<game>.test.js`; keep the games themselves independent of each other.
+  `tests/<game>.test.js`; keep the games themselves independent of each other. The **`nouveau-jeu` skill**
+  ([.claude/skills/nouveau-jeu/](.claude/skills/nouveau-jeu/SKILL.md)) holds the full checklist for adding one.
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
   A new game also needs its card here. The games don't link back to it.
 
@@ -44,23 +45,19 @@ node tests/asteroids.test.js   # logique d'Asteroids seule
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
 before Node was installed on this machine), call it by absolute path: `"/c/Program Files/nodejs/node.exe"`.
 
-**Rendering.** Headless **Edge** works on this machine (it was blocked on the previous one, so older notes claimed
-screenshots were impossible). Capture a page with:
+**Rendering.** Headless **Edge** works on this machine. Use the **`capture` skill**
+([.claude/skills/capture/](.claude/skills/capture/SKILL.md)) rather than calling Edge by hand:
 
 ```
-"/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
-  --headless=old --disable-gpu --hide-scrollbars --virtual-time-budget=2500 \
-  --window-size=900,900 --screenshot=out.png "file:///c:/ogd/gamebox/skyjo.html"
+node .claude/skills/capture/scripts/capture.js skyjo.html --phone --eval 'aiTurn = async () => {}; el("btnStart").click();' --out <scratchpad>/x.png
 ```
 
-Use `--headless=old` — the `new` mode ignores `--window-size` for the CSS viewport. `--virtual-time-budget` lets CSS
-transitions finish and iframes load before the capture. Edge also enforces a **minimum window width (~492 CSS px)**, so
-`--window-size` alone **cannot** emulate a phone: to test a real phone width, wrap the page in an iframe sized to the
-phone (`<iframe src="skyjo.html" width="390" height="844">`) and screenshot the wrapper — the iframe gets an
-independent 390-px layout viewport, so its `@media` queries render truthfully. To pose a game in a specific state,
-inject a second inline `<script>` before `</body>` that mutates state and calls `render()` (a later classic script can
-reach the page's top-level `const`/`function`). What screenshots still can't judge is **touch behaviour and real-device
-feel** — say so rather than implying a CSS change was fully verified.
+It handles what used to bite here — `--headless=old`, Edge's ~492-px minimum window (`--phone` wraps the page in an
+iframe so its `@media` queries are truthful), a throwaway profile — injects a posing script after the page's own,
+and **exits 3 with a red banner on the image when the page throws**, which is what catches a script that `node:vm`
+accepts and a browser refuses. Tested posing recipes (frozen AI, big hands, a real end of round) are in its
+`references/poses.md`. What screenshots still can't judge is **touch behaviour and real-device feel** — say so rather
+than implying a CSS change was fully verified.
 
 `tests/harness.js` extracts each page's inline `<script>` and runs it in a `node:vm` context against stubs. Three
 things to know before writing a new test:
