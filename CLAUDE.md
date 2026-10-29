@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Eight **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
-except that the six card games and the 5000 dice game load one shared stylesheet, [cartes.css](cartes.css), for their
+Nine **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
+except that the six card games and the two dice games load one shared stylesheet, [cartes.css](cartes.css), for their
 common layout (see *Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
@@ -24,7 +24,10 @@ common layout (see *Shared layout* below). No build step, no dependencies, no pa
 - [cinq-mille.html](cinq-mille.html) — *5000*, the French dice game (a Farkle cousin): five dice, rules from the French
   Wikipedia article plus fixed house rules (scoring, three ballots back to zero, gains in hundreds), exactly 5000.
   DOM/CSS rendering, dice drawn in CSS.
-- [cartes.css](cartes.css) — the card games' shared layout and components (5000 uses it too); each game keeps its
+- [killer.html](killer.html) — *Killer*, the French dice game of attacks and hit points: aim under 11 or over 24 with
+  five dice for an attack, last survivor wins. Base rules from the French Wikipedia article, 25 HP for everyone.
+  DOM/CSS rendering, dice drawn in CSS.
+- [cartes.css](cartes.css) — the card games' shared layout and components (both dice games use it too); each game keeps its
   tint, card faces and table contents inline.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games' logic independent of each other. The **`nouveau-jeu` skill**
@@ -32,12 +35,12 @@ common layout (see *Shared layout* below). No build step, no dependencies, no pa
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
   A new game also needs its card here. The games don't link back to it.
 
-**The card games (and 5000) are deliberately simple to start**: always **4 players** (you and 3 computer opponents)
+**The card games (and the dice games) are deliberately simple to start**: always **4 players** (you and 3 computer opponents)
 and **one AI level**, the strongest ("Redoutable") — the owner removed the player-count, level and Trou-du-cul length
 choices. Only Uno (format, house rules) and Turkish (number of deals, which the owner asked to keep as a choice) have
 options. The engines stayed generic: `newGame(n)` still seats 2–6, and `startGame(n = PLAYERS)` — what the
 "Commencer" button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du
-cul, Turkish, 6 qui prend and 5000 still contain are **benchmark baselines only**, never dealt to a player; Uno had no
+cul, Turkish, 6 qui prend, 5000 and Killer still contain are **benchmark baselines only**, never dealt to a player; Uno had no
 bench, so its weak policy was deleted.
 
 ## Hosting
@@ -53,7 +56,7 @@ hash (`cartes.css?v=<hash>`), kept in step by `node tests/cartes.test.js --fix`.
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les neuf suites (~7200 assertions, le total varie — cartes et dés sont tirés au hasard)
+node tests/run-all.js          # les dix suites (~7300 assertions, le total varie — cartes et dés sont tirés au hasard)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
@@ -61,9 +64,10 @@ node tests/trou-du-cul.test.js # règles du Trou du cul seules
 node tests/turkish.test.js     # règles du Turkish seules
 node tests/six-qui-prend.test.js # règles du 6 qui prend seules
 node tests/cinq-mille.test.js  # règles et barème du 5000 seuls
+node tests/killer.test.js      # règles du Killer seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 node tests/cartes.test.js      # gabarit commun : liens vers cartes.css, empreinte, teintes
-node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 7 liens
+node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 8 liens
 ```
 
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
@@ -114,7 +118,11 @@ plays it) and `onRowClick(r)` when your card is too low; other seats: fill `S.ch
 `reveal()`. 5000 through `onRollClick` (« Lancer », then « Relancer ») and `onBankClick` — the scoring dice are
 kept automatically, nothing to click on the dice; other seats: `doRoll(seat)`/`doBank(seat)`, or `keepDice()` then
 `throwDice()`. Dice come from `rollDie()`, a top-level function a targeted test replaces to impose the throws.
-`loadDomGame(file)` in the harness loads any of the six card games and 5000.
+Killer through `onRollClick` (« Lancer les dés », then « Relancer » the dice not chosen), `onDieClick(uid)` to choose
+the dice to keep, `onStopClick` and `onTargetClick(seat)` — the attack, the regeneration and a miss then play out
+alone (`await` a few ticks); other seats: `doThrow`/`doKeep(seat, uids)`/`doStop`/`doAttack(seat, target)`, with
+`rollDie()` replaced as for 5000. `loadDomGame(file)` in the harness loads any of the six card games and the two dice
+games.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -129,7 +137,8 @@ reaches the draw-pile reshuffle or a non-positive finisher total — those are t
 
 ## Shared layout — cartes.css
 
-The six card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend — and the 5000 dice game look alike on
+The six card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend — and the two dice games, 5000 and
+Killer, look alike on
 purpose, on desktop as on phones; Asteroids and the landing page stay independent.
 [cartes.css](cartes.css) holds everything that used to be copied four times: base styles, header, buttons, opponent
 panels (`.player`, `.fan`), status, log, actions, the player's area, overlays and sheets, and the phone and short-screen
@@ -152,9 +161,9 @@ faces, the contents of its table, its hand. The DOM is the same skeleton everywh
 - **Phones** (`max-width: 560px`): the three opponents become a grid with one equal column each, overlays become
   bottom-anchored sheets.
 
-After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the seven links,
+After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the eight links,
 and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
-1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all seven games fit with no scroll at every one
+1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all eight games fit with no scroll at every one
 of those sizes (Turkish's only exception: a 30-card hand on an iPhone SE scrolls a little). `fit.js` switches CSS
 animations off before measuring: headless Edge doesn't advance them in virtual time, and a card frozen at the start of
 its `pop` (24 px lower) reads as a false overflow. Landscape phones fall outside the 560 px query and get the desktop layout.
@@ -870,3 +879,111 @@ grid of pips, the 1 red; `.sel` lifts the kept dice, `.dead` greys a lost turn, 
 score, a gauge to 5000 (`.meter`), « à ouvrir » and one ✗ per ballot in a row, and a bubble with their last turn;
 `#me` is the same, without a hand. `#actions` always holds « Lancer/Relancer » and « Encaisser », so the table never
 resizes during a turn. The `fit.js` sweep fits at every size, the fullest tray (main pleine + three groups) included.
+
+## Architecture — killer.html
+
+### Rules as implemented
+
+The base rules of the French Wikipedia article « Killer (jeu de dés) », none of its additional rules (Terminator,
+Zombie, mythic and legendary throws, Get 11 / 24 — the owner's choice), with the readings chosen with the owner, all
+stated in the rules panel:
+
+- **Everyone starts with 25 HP** (`START_HP`, owner's choice): the article has each player throw for them, keeping
+  the highest dice, which averages about the same.
+- **Getting an attack**: five dice; after each throw at least one die is set aside and the rest thrown again, or the
+  player stops and the five dice count as they lie. `canKeep()`: at least one die of the current throw, and not all —
+  keeping them all is stopping. A single die thrown leaves no choice: `throwDice()` stops the aim itself. Hence at
+  most five throws.
+- `outcomeOf(total)`: under 11 an attack of 11 − total, over 24 one of total − 24 (1 to 6); exactly 11 or 24 a
+  **regeneration** (one die of HP, no cap above 25); **12 to 23 always loses** the distance to the nearer of 11 and 24
+  — the article's text and its two examples. Its « synthèse » makes 12–17 *gain* HP; the owner read that as a typo.
+- **Attacking**: the target is chosen first — among two or more opponents; a single one is attacked without asking,
+  and with none (alone and dying) the attack is lost. Five dice; those showing the attack's value are set aside and
+  the rest thrown again until a throw shows none; five set aside are all thrown again (`S.folded`). Damage = value ×
+  dice set aside, no cap. The article's "forget to name your target and the attack turns against you" can't happen.
+- **Dying**: below 0 HP (0 is fine) a player is *à l'agonie*; their next turn is a **last chance** (`S.lastChance`,
+  set by `beginTurn()`): a regeneration back to 0 or more brings them back (`p.revived`); anything else and they die
+  at the end of that turn — an attack then is a **suicide attack**, played before dying. Below −6 no regeneration is
+  enough. **Deaths happen only in `endTurn()`, for the player whose turn it was**: an attack never kills outright, so
+  a player knocked to −30 still plays their suicide attack. A dying player can be attacked; a dead one can't, and is
+  skipped.
+- **The end**: the game stops when at most one player is alive and nobody is dying. The dying always play their last
+  turn first, so the last two can take each other down: no winner (`S.winner = -1`), about one game in twenty.
+- The first player rotates from one game to the next. Once the human is dead the game goes on without them, and
+  `wait()` halves every delay.
+
+### Flow
+
+`S.phase`: `roll` (five dice to throw) → `keep` (a throw to sort: the human clicks dice into `S.sel`, the AI shows
+`S.plan` for `KEEP_MS`) → … → `stopAim()`, which sets `S.aim` and goes to `target`, or straight into `attack`, `regen`
+or `miss` — three async functions that play out with `wait()`, check `S.epoch` and their phase after every `await`,
+and call `endTurn()`. `beginTurn()` is the only place a turn starts; `nextTurn()` skips the dead and counts a round
+each time it passes `S.starter`, dead or not. `throwAttack(v)` is one attack throw: the previous throw's hits go aside
+first, so they stay lit on the table until the next throw.
+
+The suite checks every aim throw, every keep, every aim total against an independent scale and every attack throw;
+then, at `endTurn()`, that each player's HP changed by exactly what the turn meant (the die of a regeneration, the
+loss of a miss, value × hits on the target only), that nobody but the current player died and only if they had
+started the turn dying, and that the game ends exactly when it should.
+
+**Termination**: no `TURN_CAP`. Every turn has a chance of a miss or a hit, while a regeneration gives back 3.5 HP
+on average and only comes on 29 % of a sharp's turns: HP drain away. Four sharps take 26 rounds a game, nine in ten
+under 41, worst 70 in 500 — about 7.4 minutes on screen at the AI's pace (`stall` sums the delays), nine in ten
+under 11.
+
+### Opponent AI
+
+`keep(p, seat) -> { keep: uids | null }` (null: stop) and `target(p, seat, v) -> seat`, sanitised by `decide()` and
+`chooseTarget()`. **Nothing is hidden at Killer**, so the suite's anti-cheat check is 5000's purity check: during
+every policy call the state must not change and `Math.random` must not be called.
+
+- `simple` (bench baseline): the article's own strategy. On the first throw it aims low or high by comparing its 1s
+  and 6s (then 2s and 5s, then 3s and 4s); then it keeps every 1 (or 6), else its single lowest (highest) die, and
+  never stops early. It attacks the living opponent with the fewest HP.
+- `sharp` ("Redoutable") computes. `THROWS[n]` holds every throw of n dice as a multiset, with every (count, sum) it
+  can keep; `valueTable(U)` is a dynamic programme over (sum set aside, dice to throw) giving the value of each keep
+  played optimally after, `U[t]` being what ending on total t is worth (`utilities()`): own HP one for one; below 0,
+  `worth()` charges the death (`AI.death`) discounted by the chance to come back — `P_REGEN` (40.5 %, the best odds of
+  an exact 11 or 24, computed by the same programme) times the odds of a big enough die; an attack is worth what it
+  takes, on average over the dice it hits (`COUNT`, 1.36 dice on average), from the best target, times `AI.hit` while
+  more than one opponent is left. Target: the one the attack harms most, death included, so it finishes players near
+  0; on exact ties the strongest, then the next in turn order. Tables are cached by `U`, which doesn't change within
+  a turn.
+
+```
+node tests/killer-bench.js 2000                  # 1 redoutable contre 3 tranquilles
+node tests/killer-bench.js sweep 2000 "hit 0.5"  # réglages de l'objet AI (tous sans 4e argument)
+node tests/killer-bench.js face 2000             # chaque réglage contre le livré, 2 redoutables contre 2
+node tests/killer-bench.js stall 500             # 4 redoutables : durée des parties, en tours et en minutes
+```
+
+Reference points at the shipped settings, 2000 games against three `simple` (25 % baseline): **48.8 % wins** (48.4
+and 49.0 in two earlier runs), dead at round 14.3 against 11.6, 17 rounds a game, 5.8 % with no winner. Per 100 turns
+it makes 47 attacks, 29 regenerations and 25 misses, against `simple`'s 54, 13 and 33: it deals less damage a turn
+(1.84 against 2.03) and lives longer. **Sparing your own HP is the strength**: `hit` 0.5 makes 45.5 % and loses
+45.3 % to 50.8 % two against two; `hit 1` 41 %, with shorter games (21.6 rounds). `hit 0.15` may gain 2–3 points
+(51.6 %, and 48.8 % to 47.0 % two against two, within the noise) but makes games 20 % longer (30.5 rounds, 8.9
+minutes): not taken. `death` 15 or 60 and `back` 0 or 8 change nothing; an extra cost per HP under 8 or 12 (being
+low draws attacks) gained 1–2.6 points, within the noise, and was dropped. Judge at 2000 games, on both benches: 800
+games once gave the same setting 48.4 % and 56.3 %.
+
+**The pitfall that bit here was in the bench.** With `seats[i % 4] = "sharp"` and the first player rotating by
+`S.games++ % 4`, the sharp *started every game* — the first sweeps credited it with 48–56 % partly on that advantage.
+The sharp now rotates relative to the first player (`seats[(S.games + i) % 4]`); `face` alternates who starts the same
+way.
+
+### Rendering and layout
+
+The shared layout (see *Shared layout*) with dice for cards, the same CSS dice as 5000. The table (`#board`) is, top to
+bottom: the dice set aside (small; during an attack, the hits, with a « N touchés » chip once five have been thrown
+again), the current throw — clickable `.pick` dice for the human, `.sel` lifted, `.hit` ringed in red during an
+attack, `.dead` once it is over —, the **gauge** of totals 5 to 30 (`#gauge`, built once: attacks gold, darker toward
+the attack at 6, 11 and 24 green, misses red, deeper toward −6), and a line saying what the current total gives.
+The gauge circles the total you would stop on, and once dice are chosen it dims what the throw can no longer reach.
+`--die` sizes on the table in `cqh`/`cqw` (1.5 dice + 108 px high, 6 dice wide). Opponents show their HP, a gauge
+(green, gold under 13, red under 7, empty when dying), « à l'agonie », « ☠ mort », « revenu », and a bubble with their
+last turn; `.target` makes them pulse and clickable when you choose a target, `.aimed` rings the one being attacked
+(« Toi » turns red when it is you). `#actions` always holds « Lancer / Relancer » and « Arrêter sur N » — kept short
+so it never wraps on a phone, the outcome being written just above — and one button per target when choosing, so
+its height never moves. The `fit.js` sweep fits at every size, the fullest tray (five hits thrown again plus four
+more) included.

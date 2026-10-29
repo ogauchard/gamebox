@@ -8,7 +8,7 @@ const { spawnSync } = require("child_process");
 const path = require("path");
 
 let failed = 0;
-for (const file of ["asteroids.test.js", "skyjo.test.js", "uno.test.js", "cinq-rois.test.js", "trou-du-cul.test.js", "turkish.test.js", "six-qui-prend.test.js", "cinq-mille.test.js", "cartes.test.js"]) {
+for (const file of ["asteroids.test.js", "skyjo.test.js", "uno.test.js", "cinq-rois.test.js", "trou-du-cul.test.js", "turkish.test.js", "six-qui-prend.test.js", "cinq-mille.test.js", "killer.test.js", "cartes.test.js"]) {
   console.log(`\n──────── ${file} ────────`);
   const r = spawnSync(process.execPath, [path.join(__dirname, file)], { stdio: "inherit" });
   if (r.status !== 0) failed++;

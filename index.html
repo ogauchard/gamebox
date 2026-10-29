@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gamebox</title>
-<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish, 6 qui prend et le 5000, jouables directement dans le navigateur.">
+<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish, 6 qui prend, le 5000 et le Killer, jouables directement dans le navigateur.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
 <style>
   :root {
@@ -305,6 +305,23 @@
   .dd:nth-child(4) { transform: translate(56px, -20px) rotate(-16deg); }
   .dd:nth-child(5) { transform: translate(70px, 24px) rotate(24deg); }
 
+  /* Killer : une attaque aux 4 — trois 4 touchés, deux dés relancés pour rien,
+     et la cible perd 12. Mêmes dés que le 5000, placés autrement. */
+  .p-killer { background: radial-gradient(ellipse at 50% 20%, #3a121a 0%, #140a0c 75%); }
+  .killer-art { position: relative; width: 60px; height: 110px; --s: 1.15; }
+  .killer-art .dd.hit { box-shadow: 0 0 0 2px #e0473f, 0 3px 8px rgba(0,0,0,.5); }
+  .killer-art .dd.miss { filter: brightness(.55); }
+  .killer-art .dd:nth-child(1) { transform: translate(-60px, -22px); }
+  .killer-art .dd:nth-child(2) { transform: translate(-20px, -22px); }
+  .killer-art .dd:nth-child(3) { transform: translate(20px, -22px); }
+  .killer-art .dd:nth-child(4) { transform: translate(66px, -30px) rotate(-14deg); }
+  .killer-art .dd:nth-child(5) { transform: translate(64px, 14px) rotate(21deg); }
+  .killer-art .kl {
+    position: absolute; left: 50%; top: 66px; width: 120px; margin-left: -80px;
+    text-align: center; font: 900 24px/1 system-ui, sans-serif; color: #e0473f;
+    text-shadow: 0 2px 6px rgba(0,0,0,.6);
+  }
+
   footer { text-align: center; color: var(--dim); font-size: 13px; margin-top: 30px; }
   footer a { color: inherit; }
 
@@ -333,7 +350,7 @@
 <main>
   <header>
     <h1>GAMEBOX</h1>
-    <p>Huit jeux, directement dans le navigateur.</p>
+    <p>Neuf jeux, directement dans le navigateur.</p>
   </header>
 
   <nav class="games">
@@ -470,6 +487,23 @@
       <div class="info">
         <h2>5000</h2>
         <p>Le jeu de dés : garde ceux qui marquent, relance les autres, et encaisse avant de tout perdre. Contre 3 adversaires.</p>
+        <span class="play">Jouer →</span>
+      </div>
+    </a>
+    <a class="game" href="killer.html">
+      <div class="preview p-killer" aria-hidden="true">
+        <div class="art killer-art">
+          <div class="dd hit"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+          <div class="dd hit"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+          <div class="dd hit"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+          <div class="dd miss"><i class="tr"></i><i class="bl"></i></div>
+          <div class="dd miss"><i class="tl"></i><i class="tr"></i><i class="ml"></i><i class="mr"></i><i class="bl"></i><i class="br"></i></div>
+          <span class="kl">⚔ −12</span>
+        </div>
+      </div>
+      <div class="info">
+        <h2>Killer</h2>
+        <p>Le jeu de dés : vise sous 11 ou au-dessus de 24 pour obtenir une attaque, et frappe qui tu veux. Le dernier survivant gagne, contre 3 adversaires.</p>
         <span class="play">Jouer →</span>
       </div>
     </a>

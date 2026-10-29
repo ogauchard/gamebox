@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Killer</title>
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
+<style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les dés, la visée et l'attaque sur la table, la jauge des
+     totaux, les PV. */
+  :root {
+    --bg: #140a0c;
+    --panel: #221216;
+    --line: #45232a;
+    --text: #f6eced;
+    --dim: #b0959a;
+    --bg-top: #3a121a;
+    --btn: #2e171c;
+    --btn-hover: #3c1e25;
+    --ok: #7fd08a;
+    --ko: #f0907e;
+    --blood: #e0473f;
+    /* Les dés se dimensionnent sur la place réelle de la table (voir #board). */
+    --die: clamp(40px, min(10vh, 12vw), 84px);       /* navigateurs sans cqh */
+  }
+
+  /* ------------------------------------------------------------------- Dés */
+  /* Une grille de 3 × 3 : chaque point prend sa case. */
+  .die {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--d); height: var(--d);
+    border: 0;
+    padding: calc(var(--d) * .13);
+    border-radius: calc(var(--d) * .2);
+    background: linear-gradient(150deg, #fffdf7 0%, #ece3d2 100%);
+    box-shadow: inset 0 calc(var(--d) * -.05) 0 rgba(0,0,0,.12), 0 2px 0 rgba(0,0,0,.25), 0 4px 10px rgba(0,0,0,.45);
+    display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+    cursor: default;
+    transition: transform .15s, box-shadow .15s, filter .15s;
+  }
+  .die:disabled { opacity: 1; }
+  .die i {
+    width: 76%; height: 76%; place-self: center;
+    border-radius: 50%;
+    background: #2b2228;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,.55);
+  }
+  .die .tl { grid-area: 1 / 1; } .die .tr { grid-area: 1 / 3; }
+  .die .ml { grid-area: 2 / 1; } .die .c  { grid-area: 2 / 2; } .die .mr { grid-area: 2 / 3; }
+  .die .bl { grid-area: 3 / 1; } .die .br { grid-area: 3 / 3; }
+  .die.v1 i { width: 100%; height: 100%; background: #c8322b; }
+  .die.roll { animation: roll .45s ease-out; }
+  @keyframes roll {
+    0%   { transform: translateY(-26px) rotate(-160deg) scale(.7); opacity: 0; }
+    65%  { transform: translateY(3px) rotate(12deg); opacity: 1; }
+    100% { transform: none; }
+  }
+  .die.pick { cursor: pointer; }
+  .die.pick:hover:not(.sel) { transform: translateY(-4px); }
+  .slot {
+    flex: none; width: var(--d); height: var(--d);
+    border: 2px dashed rgba(255,255,255,.12);
+    border-radius: calc(var(--d) * .2);
+  }
+
+  /* ------------------------------------------------------------ Adversaires */
+  .player .meter { width: 132px; }
+  .player.dead { opacity: .42; }
+  /* À choisir comme cible : l'anneau d'accent bat. */
+  .player.target { cursor: pointer; border-color: var(--accent); animation: beckon 1.1s ease-in-out infinite; }
+  @keyframes beckon { 50% { box-shadow: 0 0 0 4px rgba(255,206,58,.3); } }
+  .player.aimed { border-color: var(--blood); box-shadow: 0 0 0 2px var(--blood) inset; }
+  .marks { display: flex; gap: 6px; align-items: center; min-height: 16px; margin-top: 4px; font-size: 11px; color: var(--dim); }
+  .marks .agony { color: var(--ko); font-weight: 800; }
+  .marks .back { border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
+  .bubble {
+    position: absolute; top: -8px; right: 8px;
+    font-size: 11px; font-weight: 800;
+    padding: 1px 7px; border-radius: 999px;
+    background: #2f5d36; color: #fff; border: 1px solid #44804d;
+    white-space: nowrap;
+  }
+  .bubble.atk { background: #6e5512; border-color: #a5811f; }
+  .bubble.ko { background: #8e2c38; border-color: #b4414f; }
+  .bubble[hidden] { display: none; }
+
+  /* Les PV : vert, puis jaune sous 13, rouge sous 7 ; vide à l'agonie. */
+  .meter { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: var(--w, 0%); background: var(--ok); border-radius: inherit; transition: width .4s; }
+  .meter.mid i { background: var(--accent); }
+  .meter.low i { background: var(--blood); }
+
+  /* ----------------------------------------------------------------- Table */
+  /* Les dés mis de côté (petits), le lancer en cours, la jauge des totaux et
+     une ligne de texte. Hauteur : mis de côté 0,48 dé + 20, lancer 1 dé + 12
+     (le dé choisi se soulève), jauge 20, texte 24, écarts 3 × 8 — soit
+     1,48 dé + 100px. Largeur : cinq dés et quatre écarts de 0,22 dé. */
+  #board {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    --mini: calc(var(--die) * .48);
+  }
+  @supports (width: 1cqh) {
+    #board { --die: clamp(34px, min((100cqh - 108px) / 1.5, (100cqw - 20px) / 6), 96px); }
+  }
+  #tray {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 6px 14px;
+    min-height: calc(var(--mini) + 20px);
+    max-width: 100cqw;
+  }
+  #tray .empty { align-self: center; font-size: 12px; color: var(--dim); opacity: .6; }
+  .kept { display: flex; flex-direction: column; align-items: center; gap: 4px; --d: var(--mini); }
+  .kept .dice { display: flex; gap: 3px; }
+  .kept .pts { font-size: 12px; font-weight: 800; color: var(--dim); line-height: 1; }
+  .carried {
+    align-self: center;
+    font-size: 12px; font-weight: 700; color: var(--blood);
+    border: 1px solid var(--blood); border-radius: 999px; padding: 2px 9px;
+  }
+  #dice {
+    display: flex; justify-content: center; align-items: flex-end;
+    gap: calc(var(--die) * .22);
+    padding-top: 12px;
+    --d: var(--die);
+  }
+  #dice .die.sel {
+    transform: translateY(-10px);
+    box-shadow: 0 0 0 3px var(--accent), 0 10px 16px rgba(0,0,0,.5);
+  }
+  #dice .die.hit { box-shadow: 0 0 0 3px var(--blood), 0 6px 14px rgba(0,0,0,.5); }
+  #dice .die.dead { filter: grayscale(.5) brightness(.6); }
+
+  /* La jauge des totaux, de 5 à 30 : attaques aux deux bouts (plus foncées
+     vers l'attaque aux 6), 11 et 24 en vert, les ratés entre deux (plus rouges
+     vers −6). Le total du moment est cerclé ; quand des dés sont choisis, ce
+     que la relance peut donner reste allumé. */
+  #gauge {
+    display: grid; grid-template-columns: repeat(26, 1fr); gap: 2px;
+    width: min(92vw, 440px); height: 20px;
+  }
+  @supports (width: 1cqw) {
+    #gauge { width: min(100cqw - 16px, var(--die) * 6.2, 520px); }
+  }
+  #gauge i {
+    font: 700 10px/20px system-ui, sans-serif; font-style: normal; text-align: center;
+    border-radius: 3px; color: rgba(255,255,255,.8);
+    transition: opacity .15s;
+  }
+  #gauge .atk { background: rgba(255,206,58, calc(.22 + var(--k) * .7)); color: var(--ink); }
+  #gauge .regen { background: #4fbf6c; color: #0b2a12; }
+  #gauge .miss { background: rgba(224,71,63, calc(.12 + var(--k) * .45)); }
+  #gauge .far { opacity: .22; }
+  #gauge .now { outline: 2px solid #fff; outline-offset: 1px; position: relative; z-index: 1; }
+  #gauge[data-off] { visibility: hidden; }
+  #total { min-height: 24px; font-size: 14px; color: var(--dim); text-align: center; }
+  #total b { color: var(--text); font-size: 18px; margin: 0 2px; }
+  #total b.ko { color: var(--ko); }
+  #total b.ok { color: var(--ok); }
+
+  /* --------------------------------------------------------------- Le joueur */
+  #me .meter { max-width: 360px; margin: 6px auto 0; }
+  #me .marks { justify-content: center; }
+  #me.dead .name > :first-child { text-decoration: line-through; color: var(--dim); }
+  #me.aimed .name > :first-child { color: var(--blood); }
+
+  /* -------------------------------------------------------------- Feuilles */
+  .sheet .scale { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 8px 0; font-size: 13.5px; align-items: center; }
+  .sheet .scale i { font-style: normal; font-weight: 800; padding: 1px 8px; border-radius: 5px; text-align: center; }
+  .sheet .scale .atk { background: rgba(255,206,58,.8); color: var(--ink); }
+  .sheet .scale .regen { background: #4fbf6c; color: #0b2a12; }
+  .sheet .scale .miss { background: rgba(224,71,63,.45); }
+
+  /* ------------------------------------------------- Téléphone (portrait) */
+  @media (max-width: 560px) {
+    main { padding-top: 12px; }                   /* place pour les bulles des adversaires */
+    #opponents .player .meter { width: auto; }
+    #opponents .marks { font-size: 10px; gap: 4px; }
+    .bubble { font-size: 9.5px; top: -9px; right: 4px; padding: 0 5px; }
+    #gauge i { font-size: 8.5px; }
+    @supports (width: 1cqh) {
+      #board { --die: clamp(34px, min((100cqh - 108px) / 1.5, (100cqw - 24px) / 6), 76px); }
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .die { transition: none; }
+    .die.roll { animation: none; }
+    .player.target { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KILLER</h1>
+  <span class="meta" id="roundInfo">Tour 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div id="board">
+      <div id="tray"></div>
+      <div id="dice"></div>
+      <div id="gauge"></div>
+      <div id="total"></div>
+    </div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions"></div>
+  <div id="me">
+    <div class="name"><span>Toi</span><span class="tag" id="myTag"></span></div>
+    <div class="meter" id="myMeter"><i></i></div>
+    <div class="marks" id="myMarks"></div>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>Killer</h2>
+    <p>Lance les cinq dés et vise <b>moins de 11</b> ou <b>plus de 24</b> : tu obtiens une attaque,
+       et tu frappes l'adversaire de ton choix. Tombé sous zéro, il te reste un tour pour te
+       régénérer… <b>Le dernier survivant gagne.</b></p>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur.</p>
+    <p class="hint">Tout le monde part avec 25 points de vie ; le détail est dans les règles.</p>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Cinq dés, 25 PV (points de vie) chacun. <b>Le dernier survivant gagne.</b> Un tour se joue en
+       deux temps : obtenir une attaque, puis attaquer.</p>
+    <h3>Obtenir une attaque</h3>
+    <ul>
+      <li>Tu lances les 5 dés. Après chaque lancer, tu mets de côté <b>au moins un dé</b> et tu
+          relances les autres — ou tu <b>t'arrêtes</b>, et le total des cinq dés compte tel quel. Au
+          plus cinq lancers : 5 dés, puis 4, 3, 2 et 1.</li>
+      <li>Le total des cinq dés décide :</li>
+    </ul>
+    <div class="scale">
+      <i class="atk">5 à 10</i><span>une <b>attaque</b> de 11 moins le total : 10 donne une attaque aux 1, 5 une attaque aux 6.</span>
+      <i class="regen">11 · 24</i><span>tout juste : <b>régénération</b>, tu lances un dé et tu gagnes autant de PV.</span>
+      <i class="miss">12 à 23</i><span><b>raté</b> : tu perds l'écart au plus proche de 11 ou 24 — 13 fait −2, 23 fait −1, 17 et 18 font −6.</span>
+      <i class="atk">25 à 30</i><span>une <b>attaque</b> du total moins 24 : 25 donne une attaque aux 1, 30 une attaque aux 6.</span>
+    </div>
+    <h3>Attaquer</h3>
+    <ul>
+      <li>Tu choisis l'adversaire à attaquer, puis tu lances les 5 dés : ceux qui montrent la
+          <b>valeur de ton attaque</b> sont mis de côté, et tu relances les autres, jusqu'à un lancer
+          qui n'en montre aucun. Les cinq de côté : ils repartent tous, et l'attaque continue.</li>
+      <li>L'adversaire perd la valeur de l'attaque <b>fois le nombre de dés</b> mis de côté :
+          attaque aux 4 et trois 4, c'est −12.</li>
+    </ul>
+    <h3>Mourir</h3>
+    <ul>
+      <li>Sous 0 PV, tu es <b>à l'agonie</b> (à 0 tout juste, non). Ton tour suivant est ta
+          <b>dernière chance</b> : une régénération qui te ramène à 0 ou plus, et tu reviens dans la
+          partie ; sinon tu meurs à la fin de ce tour.</li>
+      <li>Si tu obtiens une attaque pendant ce dernier tour, c'est une <b>attaque suicide</b> : tu
+          attaques, puis tu meurs.</li>
+      <li>Sous −6, aucune régénération ne suffit plus (un dé fait 6 au plus) : il ne reste que
+          l'attaque suicide.</li>
+      <li>Un mort ne joue plus et ne peut plus être attaqué ; un joueur à l'agonie, si.</li>
+    </ul>
+    <h3>La fin</h3>
+    <p>Quand il ne reste qu'un joueur en vie, il gagne — mais un joueur à l'agonie joue toujours son
+       dernier tour : il peut revenir, ou emporter le dernier vivant avec lui. Il arrive que
+       <b>personne</b> ne survive.</p>
+    <p>Le premier joueur change à chaque partie. Une fois mort, tu regardes la fin : l'ordinateur
+       joue alors plus vite.</p>
+    <p class="hint">D'après l'article « Killer (jeu de dés) » de Wikipédia, règles de base, sans les
+       règles additionnelles (Terminator, Zombie, jets mythiques et légendaires, Get 11 / 24). Lectures
+       retenues : 25 PV pour tous, quand l'article les fait tirer aux dés ; entre 12 et 23 on perd
+       toujours des PV, comme le disent le texte et ses exemples (sa « synthèse » en fait gagner
+       entre 12 et 17) ; on désigne toujours sa cible, si bien que l'attaque ne se retourne jamais
+       contre son auteur.</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la partie</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Rejouer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   Killer — le jeu de dés. Un humain contre 3 adversaires gérés par l'ordinateur.
+
+   D'après l'article « Killer (jeu de dés) » de Wikipédia, règles de base, avec
+   25 PV pour tous. Un tour : obtenir une attaque — cinq dés, au moins un mis
+   de côté à chaque lancer, on relance le reste ou on s'arrête ; un total sous
+   11 ou au-dessus de 24 donne une attaque de l'écart (1 à 6), 11 ou 24 tout
+   juste une régénération (un dé de PV), entre les deux on perd l'écart au plus
+   proche des deux. Puis attaquer : la cible choisie, cinq dés ; ceux qui
+   montrent la valeur de l'attaque restent de côté, on relance le reste jusqu'à
+   un lancer sans aucun (cinq de côté repartent tous) ; la cible perd la valeur
+   × le nombre de dés. Sous 0 PV, un dernier tour pour se régénérer à 0 ou plus,
+   sinon on meurt (une attaque obtenue est alors une attaque suicide). Le
+   dernier en vie gagne ; il arrive que personne ne survive.
+   ========================================================================= */
+
+const DICE = 5;
+const LOW = 11;                  // sous 11 : une attaque de l'écart ; 11 tout juste : régénération
+const HIGH = 24;                 // au-dessus de 24 : une attaque ; 24 tout juste : régénération
+const START_HP = 25;             // les mêmes PV pour tous (l'article les fait tirer aux dés)
+const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
+const THINK_MS = 550;            // avant un lancer de l'ordinateur, ou le choix de sa cible
+const ROLL_MS = 800;             // lecture d'un lancer
+const KEEP_MS = 700;             // les dés qu'il garde, montrés avant qu'il relance
+const HIT_MS = 750;              // un lancer d'attaque
+const RESULT_MS = 1400;          // la fin d'un tour, avant le suivant
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* Une fois mort, on regarde la fin : l'ordinateur joue deux fois plus vite. */
+const wait = (ms) => sleep(S.players[0] && S.players[0].dead ? ms / 2 : ms);
+
+/* --------------------------------------------------------------- Totaux */
+/* Ce que donne le total des cinq dés : { kind: "attack", v } (v de 1 à 6),
+   { kind: "regen" }, ou { kind: "miss", loss } (loss de 1 à 6). */
+function outcomeOf(t) {
+  if (t < LOW) return { kind: "attack", v: LOW - t };
+  if (t > HIGH) return { kind: "attack", v: t - HIGH };
+  if (t === LOW || t === HIGH) return { kind: "regen" };
+  return { kind: "miss", loss: Math.min(t - LOW, HIGH - t) };
+}
+
+const sum = (dice) => dice.reduce((a, d) => a + d.v, 0);
+const minus = (n) => (n < 0 ? `−${-n}` : `${n}`);
+const hpLabel = (n) => `${minus(n)} PV`;
+const diceLabel = (n) => `${n} dé${n > 1 ? "s" : ""}`;
+const outcomeLabel = (o) => (o.kind === "attack" ? `attaque aux ${o.v}` : o.kind === "regen" ? "régénération" : `−${o.loss} PV`);
+
+/* ------------------------------------------------------------------- État */
+const S = {
+  players: [],        // { name, ai, policy, hp, dead, died (tour de sa mort), order (rang de sa mort), revived, dealt, last, turns }
+  current: 0,         // le siège qui joue
+  starter: 0,         // qui a ouvert la partie : un tour de table de plus quand on y repasse
+  games: 0,           // parties lancées : le premier joueur tourne de l'une à l'autre
+  round: 1,           // tour de table
+  deaths: 0,          // morts de la partie : leur ordre classe les perdants
+  dice: [],           // le lancer en cours, { uid, v }
+  kept: [],           // dés mis de côté : ceux de la visée, ou les touches de l'attaque en cours
+  free: DICE,         // dés à lancer au prochain jet
+  folded: 0,          // touches de l'attaque déjà relancées par cinq (les cinq de côté repartent)
+  sel: new Set(),     // les uids que l'humain a choisi de garder dans le lancer en cours
+  plan: null,         // les uids que l'ordinateur va garder, montrés avant qu'il relance
+  aim: null,          // la visée finie : { total, dice, kind, v | loss }
+  target: -1,         // la cible de l'attaque en cours (-1 : personne à attaquer)
+  hits: 0,            // dés touchés par l'attaque en cours
+  dmg: null,          // ses dégâts, une fois l'attaque finie
+  gain: 0,            // le dé de la régénération en cours, 0 avant qu'il soit lancé
+  lastChance: false,  // le joueur en cours a commencé son tour à l'agonie
+  phase: "idle",      // idle | roll (le tour commence) | keep (un lancer à trier) | target | attack | regen | miss | over
+  winner: -1,         // -1 : partie en cours, ou personne n'a survécu
+  logs: [],
+  busy: false,        // l'ordinateur joue, ou un tour se conclut : l'humain attend
+  epoch: 0,           // change à chaque partie : un tour en vol d'une partie passée s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+const cur = () => S.players[S.current];
+let uidSeq = 0;
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* Tutoie l'humain, troisième personne pour les adversaires — jamais il/elle. */
+const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+
+/* --------------------------------------------------------------- Légalité */
+const canThrow = (seat) => S.current === seat && S.phase === "roll";
+const canStop = (seat) => S.current === seat && S.phase === "keep";
+
+/* Garder `uids` et relancer le reste : au moins un dé du lancer en cours, et
+   pas tous — tout garder, c'est s'arrêter. */
+function canKeep(seat, uids) {
+  if (!canStop(seat) || !Array.isArray(uids)) return false;
+  const set = new Set(uids);
+  return set.size === uids.length && set.size >= 1 && set.size < S.dice.length
+      && uids.every((u) => S.dice.some((d) => d.uid === u));
+}
+
+/* Qui `seat` peut attaquer : tout adversaire encore en jeu, à l'agonie compris. */
+const targets = (seat) => S.players.map((p, i) => i).filter((i) => i !== seat && !S.players[i].dead);
+const canTarget = (seat, j) => S.current === seat && S.phase === "target" && targets(seat).includes(j);
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.epoch++;
+  const mkPlayer = (name, ai) => ({ name, ai, policy: ai ? "sharp" : undefined, hp: START_HP, dead: false, died: 0, order: 0,
+                                    revived: 0, dealt: 0, last: null, turns: 0 });
+  S.players = [mkPlayer("Toi", false)];
+  for (let i = 0; i < nPlayers - 1; i++) S.players.push(mkPlayer(AI_NAMES[i], true));
+  S.starter = S.games++ % nPlayers;
+  S.current = S.starter;
+  S.round = 1;
+  S.deaths = 0;
+  S.winner = -1;
+  S.logs = [];
+  S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
+  S.busy = false;
+  buildBoard();
+  beginTurn();
+}
+
+/* ------------------------------------------------------------------ Tours */
+/* Le seul endroit où un tour commence : cinq dés à lancer, rien de côté. Qui
+   le commence sous 0 PV joue sa dernière chance. */
+function beginTurn() {
+  if (S.phase === "over") return;
+  const p = cur();
+  S.dice = [];
+  S.kept = [];
+  S.free = DICE;
+  S.folded = 0;
+  S.sel = new Set();
+  S.plan = null;
+  S.aim = null;
+  S.target = -1;
+  S.hits = 0;
+  S.dmg = null;
+  S.gain = 0;
+  S.lastChance = p.hp < 0;
+  S.phase = "roll";
+  S.busy = false;
+  p.turns++;
+  render();
+  if (p.ai) aiTurn();
+}
+
+/* Au suivant encore en jeu ; un tour de table de plus chaque fois qu'on
+   repasse par le premier joueur, mort ou pas. */
+function nextTurn() {
+  let i = S.current;
+  do {
+    i = (i + 1) % S.players.length;
+    if (i === S.starter) S.round++;
+  } while (S.players[i].dead);
+  S.current = i;
+  beginTurn();
+}
+
+/* Déclarée en `function` : les tests la remplacent pour imposer les dés. */
+function rollDie() { return 1 + Math.floor(Math.random() * 6); }
+
+const newDice = (n) => Array.from({ length: n }, () => ({ uid: ++uidSeq, v: rollDie() }));
+
+/* Lance les dés libres de la visée. Un seul dé lancé ne laisse rien à
+   choisir : il faut le garder, la visée s'arrête. */
+function throwDice() {
+  S.dice = newDice(S.free);
+  S.sel = new Set();
+  S.plan = null;
+  S.phase = "keep";
+  if (S.dice.length === 1) stopAim();
+}
+
+function doThrow(seat) {
+  if (!canThrow(seat)) return false;
+  throwDice();
+  return true;
+}
+
+/* Met de côté les dés choisis et relance les autres. */
+function doKeep(seat, uids) {
+  if (!canKeep(seat, uids)) return false;
+  const keep = new Set(uids);
+  S.kept.push(...S.dice.filter((d) => keep.has(d.uid)));
+  S.free = S.dice.length - keep.size;
+  throwDice();
+  return true;
+}
+
+function doStop(seat) {
+  if (!canStop(seat)) return false;
+  stopAim();
+  return true;
+}
+
+/* La visée est finie : le total des cinq dés décide de la suite du tour. Une
+   attaque attend le choix de la cible, sauf s'il n'y en a qu'une (ou aucune :
+   seul en jeu, à l'agonie). */
+function stopAim() {
+  const dice = [...S.kept, ...S.dice];
+  const total = sum(dice);
+  S.aim = { total, dice, ...outcomeOf(total) };
+  S.kept = [];
+  S.dice = [];
+  S.free = 0;
+  S.sel = new Set();
+  S.plan = null;
+  if (S.aim.kind === "regen") regenerate();
+  else if (S.aim.kind === "miss") miss();
+  else {
+    const t = targets(S.current);
+    if (t.length > 1) S.phase = "target";
+    else attack(t.length ? t[0] : -1);
+  }
+}
+
+function doAttack(seat, j) {
+  if (!canTarget(seat, j)) return false;
+  attack(j);
+  return true;
+}
+
+/* Un lancer d'attaque. Les touches du lancer précédent passent de côté ;
+   cinq de côté repartent tous. Renvoie les dés touchés par ce lancer. */
+function throwAttack(v) {
+  S.kept.push(...S.dice.filter((d) => d.v === v));
+  if (S.kept.length === DICE) { S.folded += DICE; S.kept = []; }
+  S.free = DICE - S.kept.length;
+  S.dice = newDice(S.free);
+  const hits = S.dice.filter((d) => d.v === v).length;
+  S.hits += hits;
+  return hits;
+}
+
+/* L'attaque, jusqu'au lancer qui ne touche rien ; la cible perd la valeur ×
+   les dés touchés. Sans cible, elle se perd. */
+async function attack(j) {
+  const p = cur(), v = S.aim.v, epoch = S.epoch;
+  const gone = () => epoch !== S.epoch || S.phase !== "attack";
+  S.phase = "attack";
+  S.target = j;
+  S.busy = true;
+  S.kept = [];
+  S.free = DICE;
+  render();
+  await wait(THINK_MS);
+  if (gone()) return;
+  if (j < 0) {
+    S.dmg = 0;
+    p.last = { kind: "attack", dmg: 0, target: -1 };
+    log(`${says(p, "as", "a")} une attaque aux ${v}, mais plus personne à attaquer.`);
+  } else {
+    while (throwAttack(v)) {
+      render();
+      await wait(HIT_MS);
+      if (gone()) return;
+    }
+    const t = S.players[j];
+    S.dmg = v * S.hits;
+    t.hp -= S.dmg;
+    p.dealt += S.dmg;
+    p.last = { kind: "attack", dmg: S.dmg, target: j };
+    const subject = p.ai ? `${p.name} ${t.ai ? `attaque ${t.name}` : "t'attaque"}` : `Tu attaques ${t.name}`;
+    const after = t.hp < 0 && S.dmg ? ` — ${t.ai ? `${t.name} est` : "tu es"} à l'agonie (${minus(t.hp)})` : ` (${minus(t.hp)})`;
+    log(`${subject} aux ${v} : ${S.hits ? `${diceLabel(S.hits)}, −${S.dmg}` : `aucun ${v}`}${after}.`);
+  }
+  render();
+  await wait(RESULT_MS);
+  if (gone()) return;
+  endTurn();
+}
+
+/* 11 ou 24 tout juste : un dé, autant de PV. */
+async function regenerate() {
+  const p = cur(), epoch = S.epoch;
+  const gone = () => epoch !== S.epoch || S.phase !== "regen";
+  S.phase = "regen";
+  S.busy = true;
+  render();
+  await wait(THINK_MS);
+  if (gone()) return;
+  S.dice = newDice(1);
+  S.gain = S.dice[0].v;
+  p.hp += S.gain;
+  p.last = { kind: "regen", gain: S.gain };
+  const back = S.lastChance && p.hp >= 0;
+  if (back) p.revived++;
+  log(`${says(p, "fais", "fait")} ${S.aim.total} : régénération, +${S.gain} (${minus(p.hp)})`
+      + (back ? ` — ${p.ai ? "revient" : "tu reviens"} d'entre les morts !` : S.lastChance ? " : pas assez." : "."));
+  render();
+  await wait(RESULT_MS);
+  if (gone()) return;
+  endTurn();
+}
+
+/* Un total entre 12 et 23 : on perd l'écart au plus proche de 11 ou 24. */
+async function miss() {
+  const p = cur(), epoch = S.epoch, loss = S.aim.loss;
+  S.phase = "miss";
+  S.busy = true;
+  const was = p.hp;
+  p.hp -= loss;
+  p.last = { kind: "miss", loss };
+  log(`${says(p, "fais", "fait")} ${S.aim.total} : raté, −${loss} (${minus(p.hp)})`
+      + (was >= 0 && p.hp < 0 ? ` — ${p.ai ? "à l'agonie" : "te voilà à l'agonie"}.` : "."));
+  render();
+  await wait(RESULT_MS);
+  if (epoch !== S.epoch || S.phase !== "miss") return;
+  endTurn();
+}
+
+/* Fin d'un tour : qui l'a commencé à l'agonie et n'est pas revenu à 0 meurt.
+   La partie finit quand il ne reste qu'un vivant, ou aucun, et plus personne
+   à l'agonie pour jouer son dernier tour. */
+function endTurn() {
+  const p = cur();
+  if (S.lastChance && p.hp < 0) {
+    p.dead = true;
+    p.died = S.round;
+    p.order = ++S.deaths;
+    log(`${says(p, "meurs", "meurt")}.`);
+  }
+  const live = S.players.filter((q) => !q.dead);
+  if (live.length <= 1 && !live.some((q) => q.hp < 0)) {
+    endGame(live.length ? S.players.indexOf(live[0]) : -1);
+    return;
+  }
+  nextTurn();
+}
+
+/* Le tour d'un siège tenu par l'ordinateur : lancer, montrer les dés qu'il
+   garde, relancer ou s'arrêter, puis choisir sa cible. La régénération, le
+   raté et l'attaque se déroulent ensuite d'eux-mêmes. */
+async function aiTurn() {
+  const epoch = S.epoch, seat = S.current;
+  const gone = () => epoch !== S.epoch || S.current !== seat || S.phase === "over";
+  S.busy = true;
+  render();
+  await wait(THINK_MS);
+  if (gone()) return;
+  throwDice();
+  while (S.phase === "keep") {
+    render();
+    await wait(ROLL_MS);
+    if (gone()) return;
+    const keep = decide(seat);
+    if (!keep) { doStop(seat); break; }
+    S.plan = keep;
+    render();
+    await wait(KEEP_MS);
+    if (gone()) return;
+    doKeep(seat, keep);
+  }
+  if (S.phase !== "target") return;
+  render();
+  await wait(THINK_MS);
+  if (gone()) return;
+  doAttack(seat, chooseTarget(seat));
+}
+
+/* Les décisions d'un siège de l'ordinateur, vérifiées : des dés à garder
+   (null : s'arrêter), une cible permise. */
+function decide(seat) {
+  const p = S.players[seat];
+  const d = policyOf(p).keep(p, seat);
+  return d && d.keep && canKeep(seat, d.keep) ? d.keep : null;
+}
+
+function chooseTarget(seat) {
+  const p = S.players[seat];
+  const j = policyOf(p).target(p, seat, S.aim.v);
+  return canTarget(seat, j) ? j : targets(seat)[0];
+}
+
+/* ------------------------------------------------------------ Fin de partie */
+function endGame(seat) {
+  S.phase = "over";
+  S.winner = seat;
+  S.busy = false;
+  render();
+  showScores();
+}
+
+/* Le gagnant d'abord, puis les morts du dernier au premier. */
+function standings() {
+  const rank = (i) => (i === S.winner ? Infinity : S.players[i].order);
+  return S.players.map((p, i) => i).sort((a, b) => rank(b) - rank(a));
+}
+
+function showScores() {
+  let html = "<table><thead><tr><th>Joueur</th><th>Dégâts infligés</th><th>Fin</th></tr></thead><tbody>";
+  for (const i of standings()) {
+    const p = S.players[i];
+    const win = i === S.winner;
+    html += `<tr${win ? ' class="win"' : ""}><td>${p.name}${win ? " 🏆" : ""}</td><td>${p.dealt}</td>`
+          + `<td>${win ? hpLabel(p.hp) : `mort au tour ${p.died}`}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  const w = S.players[S.winner];
+  const turns = w ? `${w.turns} tour${w.turns > 1 ? "s" : ""}` : "";
+  html += !w ? `<p class="next-round">☠ <b>Personne</b> ne survit : pas de gagnant.</p>`
+        : w.ai ? `<p class="next-round">🏆 <b>${w.name}</b> l'emporte, dernier survivant, en ${turns}.</p>`
+        : `<p class="next-round">🏆 <b>Tu l'emportes</b>, dernier survivant, en ${turns} !</p>`;
+  el("scoreBody").innerHTML = html;
+  el("scoreTitle").textContent = "Fin de la partie";
+  el("btnNext").textContent = "Rejouer";
+  el("btnNext").dataset.over = "1";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose :
+     keep(p, seat) -> { keep: [uids] } pour garder ces dés et relancer le
+                      reste, ou { keep: null } pour s'arrêter
+     target(p, seat, v) -> le siège à attaquer avec une attaque aux v
+   Il n'y a rien de caché au Killer : les dés et les PV de chacun sont
+   publics. Une politique ne fait que décider — elle ne touche pas à l'état
+   et ne lance pas de dé. */
+
+/* Déclarée en `function` : les tests la remplacent pour vérifier qu'aucune
+   politique ne modifie la partie. */
+function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
+
+/* Les adversaires dans l'ordre où ils jouent après `seat` : départage les
+   égalités sans hasard. */
+const after = (seat) => targets(seat).sort((a, b) => (a - seat + S.players.length) % S.players.length
+                                                     - (b - seat + S.players.length) % S.players.length);
+
+/* ---------------------------------------------------------------------------
+   Politique simple : la stratégie que donne l'article. Au premier lancer, elle
+   choisit de viser bas ou haut en comparant les 1 et les 6 (puis les 2 et les
+   5, puis les 3 et les 4) ; ensuite elle garde ses 1 (ou ses 6), à défaut son
+   dé le plus bas (ou le plus haut), et relance le reste jusqu'au bout. Elle
+   attaque l'adversaire vivant qui a le moins de PV. Les adversaires jouent
+   toujours « sharp » ; celle-ci ne sert que de référence au banc d'essai.
+   --------------------------------------------------------------------------- */
+const simplePolicy = {
+  keep() {
+    const dice = S.dice, n = (v) => dice.filter((d) => d.v === v).length;
+    let low = true;
+    if (S.kept.length) low = sum(S.kept) / S.kept.length < 3.5;
+    else for (const [a, b] of [[1, 6], [2, 5], [3, 4]]) if (n(a) !== n(b)) { low = n(a) > n(b); break; }
+    let pick = dice.filter((d) => d.v === (low ? 1 : 6));
+    if (!pick.length) pick = [dice.reduce((a, b) => ((low ? b.v < a.v : b.v > a.v) ? b : a))];
+    return { keep: pick.length < dice.length ? pick.map((d) => d.uid) : null };
+  },
+  target(p, seat) {
+    const list = after(seat), hp = (j) => S.players[j].hp;
+    const alive = list.filter((j) => hp(j) >= 0);
+    return (alive.length ? alive : list).reduce((a, b) => (hp(b) < hp(a) ? b : a));
+  },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable ». Elle calcule : tous les lancers de 1 à 5 dés sont
+   connus d'avance (THROWS), et une programmation dynamique sur (dés mis de
+   côté, dés à lancer) donne ce que vaut chaque façon de garder ou de
+   s'arrêter, la suite jouée au mieux. Ce que vaut chaque total final vient
+   d'une estimation de la position (worth) :
+   - ses PV comptent un pour un ; sous 0, c'est l'agonie : la mort, sauf la
+     chance de se régénérer au tour suivant (P_REGEN, la meilleure chance de
+     faire 11 ou 24, fois celle d'un dé assez fort) ;
+   - une attaque vaut ce qu'elle ôte, en moyenne, à la meilleure cible — sur
+     tous les nombres de dés touchés (COUNT) —, fois AI.hit tant qu'il reste
+     plusieurs adversaires : affaiblir l'un sert aussi les deux autres ;
+   - à sa dernière chance, il ne reste qu'à se sauver ou à frapper avant de
+     mourir.
+   La cible : celle à qui l'attaque ôte le plus — la mort comprise, ce qui
+   achève volontiers un joueur proche de 0 ; à égalité parfaite, la plus forte.
+   Réglages mesurés au banc d'essai : plus une attaque compte (AI.hit), plus
+   les parties raccourcissent et plus elle perd, contre la politique simple
+   comme entre redoutables. Ménager ses PV paie.
+   --------------------------------------------------------------------------- */
+const AI = {
+  hit: 0.3,        // une attaque vaut ces PV-là par PV ôté, tant qu'il reste plusieurs adversaires
+  death: 30,       // mourir coûte autant de PV
+  back: 2,         // revenir d'entre les morts vaut ces PV-là (on revient à peu de chose)
+};
+
+/* Tous les lancers de n dés, regroupés par faces : leur probabilité (p), leur
+   total (sum), et les façons d'en garder une partie, à plat : [k, somme, …]
+   (au moins un dé, pas tous). */
+const THROWS = [null];
+{
+  const fact = [1, 1, 2, 6, 24, 120];
+  for (let n = 1; n <= DICE; n++) {
+    const list = [], faces = [];
+    const rec = (from) => {
+      if (faces.length === n) {
+        const c = [0, 0, 0, 0, 0, 0, 0];
+        for (const f of faces) c[f]++;
+        let perms = fact[n];
+        for (let f = 1; f <= 6; f++) perms /= fact[c[f]];
+        const seen = new Set(), opts = [];
+        const sub = (f, k, s) => {
+          if (f > 6) {
+            if (k >= 1 && k < n && !seen.has(k * 100 + s)) { seen.add(k * 100 + s); opts.push(k, s); }
+            return;
+          }
+          for (let m = 0; m <= c[f]; m++) sub(f + 1, k + m, s + m * f);
+        };
+        sub(1, 0, 0);
+        list.push({ p: perms / 6 ** n, sum: faces.reduce((a, b) => a + b, 0), opts: Int8Array.from(opts) });
+        return;
+      }
+      for (let f = from; f <= 6; f++) { faces.push(f); rec(f); faces.pop(); }
+    };
+    rec(1);
+    THROWS.push(list);
+  }
+}
+
+/* Valeur de chaque état de la visée, à la case s * 6 + n : lancer n dés quand
+   ceux de côté font s, puis jouer au mieux. U[t] : ce que vaut finir sur le
+   total t. */
+function valueTable(U) {
+  const E = new Float64Array(31 * 6);
+  for (let n = 1; n <= DICE; n++) {
+    const kept = DICE - n;
+    for (let s = kept; s <= 6 * kept; s++) {
+      let e = 0;
+      for (const t of THROWS[n]) {
+        let best = U[s + t.sum];
+        const o = t.opts;
+        for (let i = 0; i < o.length; i += 2) {
+          const v = E[(s + o[i + 1]) * 6 + n - o[i]];
+          if (v > best) best = v;
+        }
+        e += t.p * best;
+      }
+      E[s * 6 + n] = e;
+    }
+  }
+  return E;
+}
+
+/* La meilleure chance de faire 11 ou 24 tout juste. */
+const P_REGEN = valueTable(Array.from({ length: 31 }, (_, t) => (t === LOW || t === HIGH ? 1 : 0)))[DICE];
+
+/* Les dés touchés par une attaque, quelle que soit sa valeur : COUNT[c] est
+   la probabilité d'en toucher c (au-delà de 40, négligeable). */
+const COUNT = (() => {
+  const CMAX = 40, C = [[1], [1, 1], [1, 2, 1], [1, 3, 3, 1], [1, 4, 6, 4, 1], [1, 5, 10, 10, 5, 1]];
+  const f = Array.from({ length: DICE + 1 }, () => new Float64Array(CMAX + 1));
+  for (let c = 0; c <= CMAX; c++) {
+    for (let k = 1; k <= DICE; k++) {
+      let s = 0;
+      for (let j = 0; j <= Math.min(k, c); j++) {
+        const pj = C[k][j] * (1 / 6) ** j * (5 / 6) ** (k - j);
+        if (!j) { if (!c) s += pj; } else s += pj * f[k - j || DICE][c - j];
+      }
+      f[k][c] = s;
+    }
+  }
+  return f[DICE];
+})();
+
+/* Ce que vaut une position à h PV : h, ou à l'agonie la mort, sauf la chance
+   de se régénérer à 0 ou plus au tour suivant. */
+function worth(h) {
+  if (h >= 0) return h;
+  const save = P_REGEN * Math.max(0, 7 + h) / 6;
+  return save * AI.back - (1 - save) * AI.death;
+}
+
+/* Ce qu'une attaque aux v ôte, en moyenne, à un joueur à h PV. */
+function harm(h, v) {
+  let e = 0;
+  for (let c = 1; c < COUNT.length; c++) e += COUNT[c] * (worth(h) - worth(h - v * c));
+  return e;
+}
+
+/* Ce que vaut, pour `seat`, finir sa visée sur chaque total de 5 à 30. */
+function utilities(p, seat) {
+  const last = S.lastChance;
+  const self = (h) => (last && h < 0 ? -AI.death : worth(h));
+  const opp = targets(seat);
+  const w = opp.length > 1 ? AI.hit : 1;
+  const stay = self(p.hp);
+  let regen = 0;
+  for (let d = 1; d <= 6; d++) regen += self(p.hp + d) / 6;
+  const U = new Float64Array(31);
+  for (let t = DICE; t <= 6 * DICE; t++) {
+    const o = outcomeOf(t);
+    U[t] = o.kind === "regen" ? regen
+         : o.kind === "miss" ? self(p.hp - o.loss)
+         : stay + w * Math.max(0, ...opp.map((j) => harm(S.players[j].hp, o.v)));
+  }
+  return U;
+}
+
+/* Les tables déjà calculées : la visée ne change pas de valeurs pendant un tour. */
+const TABLES = new Map();
+function tableFor(U) {
+  const key = Array.from(U, (u) => u.toFixed(4)).join(",");
+  let E = TABLES.get(key);
+  if (!E) {
+    if (TABLES.size > 2000) TABLES.clear();
+    E = valueTable(U);
+    TABLES.set(key, E);
+  }
+  return E;
+}
+
+const sharpPolicy = {
+  keep(p, seat) {
+    const U = utilities(p, seat), E = tableFor(U);
+    const s = sum(S.kept), dice = S.dice, n = dice.length;
+    let best = U[s + sum(dice)], keep = null;
+    for (let m = 1; m < (1 << n) - 1; m++) {
+      const pick = dice.filter((_, i) => m >> i & 1);
+      const v = E[(s + sum(pick)) * 6 + n - pick.length];
+      if (v > best + 1e-9) { best = v; keep = pick.map((d) => d.uid); }
+    }
+    return { keep };
+  },
+  target(p, seat, v) {
+    let best = -1, bestVal = -Infinity;
+    for (const j of after(seat)) {
+      const val = harm(S.players[j].hp, v);
+      if (val > bestVal + 1e-9 || (val > bestVal - 1e-9 && S.players[j].hp > S.players[best].hp)) { best = j; bestVal = val; }
+    }
+    return best;
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+
+/* ================================================================= ENTRÉES */
+
+const myTurn = () => S.current === 0 && !S.players[0].ai && !S.busy && (S.phase === "roll" || S.phase === "keep" || S.phase === "target");
+
+/* « Lancer » au début du tour, « Relancer » ensuite : les dés choisis restent
+   de côté, les autres repartent. */
+function onRollClick() {
+  if (!myTurn()) return;
+  if (S.phase === "roll") doThrow(0);
+  else if (!doKeep(0, [...S.sel])) return;
+  render();
+}
+
+function onStopClick() {
+  if (!myTurn() || !doStop(0)) return;
+  render();
+}
+
+function onDieClick(uid) {
+  if (!myTurn() || S.phase !== "keep" || !S.dice.some((d) => d.uid === uid)) return;
+  if (S.sel.has(uid)) S.sel.delete(uid);
+  else S.sel.add(uid);
+  render();
+}
+
+function onTargetClick(j) {
+  if (!myTurn() || !doAttack(0, j)) return;
+  render();
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/* Les points de chaque face, dans la grille de 3 × 3. */
+const PIPS = [null, ["c"], ["tr", "bl"], ["tr", "c", "bl"], ["tl", "tr", "bl", "br"],
+              ["tl", "tr", "c", "bl", "br"], ["tl", "tr", "ml", "mr", "bl", "br"]];
+
+function dieEl(v, extra) {
+  const b = mk("button", "die v" + v + (extra ? " " + extra : ""));
+  for (const pos of PIPS[v]) b.appendChild(mk("i", pos));
+  b.disabled = true;
+  return b;
+}
+
+function buildBoard() {
+  const host = el("opponents");
+  host.innerHTML = "";
+  S.players.forEach((p, pi) => {
+    if (pi === 0) return;
+    const box = mk("div", "player");
+    const name = mk("div", "name");
+    name.appendChild(mk("span", null, p.name));
+    const tag = mk("span", "tag", "");
+    name.appendChild(tag);
+    box.appendChild(name);
+    const meter = mk("div", "meter");
+    meter.appendChild(mk("i"));
+    box.appendChild(meter);
+    const marks = mk("div", "marks");
+    box.appendChild(marks);
+    const bubble = mk("span", "bubble");
+    box.appendChild(bubble);
+    box.addEventListener("click", () => onTargetClick(pi));
+    host.appendChild(box);
+    Object.assign(p, { _box: box, _tag: tag, _meter: meter, _marks: marks, _bubble: bubble });
+  });
+}
+
+/* La jauge de 5 à 30 : une case par total, construite une fois. */
+const GAUGE = [];
+for (let t = DICE; t <= 6 * DICE; t++) {
+  const o = outcomeOf(t);
+  const c = mk("i", o.kind === "attack" ? "atk" : o.kind);
+  c.style.setProperty("--k", ((o.v || o.loss || 0) / 6).toFixed(3));
+  el("gauge").appendChild(c);
+  GAUGE.push(c);
+}
+
+function renderMeter(meter, p) {
+  meter.classList.toggle("mid", p.hp < 13 && p.hp >= 7);
+  meter.classList.toggle("low", p.hp < 7);
+  meter.style.setProperty("--w", `${Math.max(0, Math.min(100, p.hp / START_HP * 100))}%`);
+}
+
+/* « à l'agonie », « ☠ mort », et les retours d'entre les morts. */
+function renderMarks(host, p) {
+  host.innerHTML = "";
+  if (p.dead) host.appendChild(mk("span", "agony", "☠ mort"));
+  else if (p.hp < 0) host.appendChild(mk("span", "agony", "à l'agonie"));
+  if (p.revived) host.appendChild(mk("span", "back", p.revived > 1 ? `revenu ×${p.revived}` : "revenu"));
+}
+
+let shownUids = new Set();
+
+/* Le sujet d'une phrase de statut : « Tu gardes », « <b>Nora</b> garde ». */
+const who = (p, second, third) => (p.ai ? `<b>${p.name}</b> ${third}` : `Tu ${second}`);
+
+/* Le total qu'on aurait en s'arrêtant, et ce qu'une relance peut donner
+   quand des dés sont choisis : { now, lo, hi } (lo/hi absents sinon). */
+function aimRange() {
+  if (S.phase === "keep") {
+    const pick = S.plan || [...S.sel];
+    const s = sum(S.kept), now = s + sum(S.dice);
+    const kept = S.dice.filter((d) => pick.includes(d.uid)), n = S.dice.length - kept.length;
+    if (!kept.length || !n) return { now };
+    const k = s + sum(kept);
+    return { now, lo: k + n, hi: k + 6 * n };
+  }
+  return S.aim ? { now: S.aim.total } : {};
+}
+
+function statusHtml() {
+  const p = cur();
+  if (!p) return "";
+  switch (S.phase) {
+    case "over": {
+      const w = S.players[S.winner];
+      return !w ? "☠ Personne ne survit : pas de gagnant."
+           : w.ai ? `🏆 <b>${w.name}</b>, dernier survivant, gagne.` : "🏆 Dernier survivant : <b>tu gagnes !</b>";
+    }
+    case "roll":
+      if (S.lastChance) {
+        const need = -p.hp;
+        if (p.ai) {
+          return need <= 6 ? `<b>${p.name}</b>, à l'agonie, joue sa dernière chance : il lui faut une régénération et un dé d'au moins <b>${need}</b>.`
+                           : `<b>${p.name}</b>, à ${minus(p.hp)}, ne peut plus se sauver : un dernier tour, pour une attaque suicide.`;
+        }
+        return need <= 6 ? `Dernière chance ! À ${minus(p.hp)}, il te faut une régénération (11 ou 24) et un dé d'au moins <b>${need}</b> — sinon tu meurs à la fin du tour.`
+                         : `À ${minus(p.hp)}, plus aucune régénération ne te sauve : ton dernier tour, pour une <b>attaque suicide</b>.`;
+      }
+      return p.ai ? `<b>${p.name}</b> lance les dés…` : "À toi : lance les dés, et vise <b>moins de 11</b> ou <b>plus de 24</b>.";
+    case "keep": {
+      if (p.ai) {
+        if (!S.plan) return `<b>${p.name}</b> réfléchit…`;
+        const kept = S.dice.filter((d) => S.plan.includes(d.uid));
+        return `<b>${p.name}</b> garde ${kept.map((d) => d.v).join(" ")} et relance ${diceLabel(S.dice.length - kept.length)}.`;
+      }
+      if (!S.sel.size) return "Touche les dés à garder — un au moins —, puis relance les autres. Ou arrête-toi.";
+      if (S.sel.size === S.dice.length) return "Laisse au moins un dé à relancer, ou arrête-toi.";
+      return `Relance ${S.dice.length - S.sel.size === 1 ? "le dernier dé" : `les ${S.dice.length - S.sel.size} autres dés`}, ou arrête-toi.`;
+    }
+    case "target":
+      return p.ai ? `<b>${p.name}</b> a une attaque aux <b>${S.aim.v}</b> et choisit sa cible…`
+                  : `Attaque aux <b>${S.aim.v}</b> ! Choisis qui attaquer.`;
+    case "attack": {
+      const v = S.aim.v, t = S.players[S.target];
+      if (!t) return `${who(p, "as", "a")} une attaque aux <b>${v}</b>, mais plus personne à attaquer.`;
+      const suicide = S.lastChance ? "Attaque suicide ! " : "";
+      const head = `${suicide}${p.ai ? `<b>${p.name}</b> ${t.ai ? `attaque <b>${t.name}</b>` : "<b>t'attaque</b>"}` : `Tu attaques <b>${t.name}</b>`} aux <b>${v}</b>`;
+      if (S.dmg === null) return `${head}…`;
+      return S.dmg ? `${head} : <b>−${S.dmg}</b>.` : `${head} : aucun ${v}, rien.`;
+    }
+    case "regen":
+      if (!S.gain) return `${S.aim.total} tout juste : ${who(p, "te régénères", "se régénère")}…`;
+      return `${who(p, "te régénères", "se régénère")} : <b>+${S.gain}</b> PV`
+           + (S.lastChance ? (p.hp >= 0 ? ", et revien" + (p.ai ? "t" : "s") + " d'entre les morts !" : ` : pas assez, ${p.ai ? "c'est la mort" : "tu meurs"}.`) : ".");
+    case "miss":
+      return `Raté ! ${who(p, "perds", "perd")} <b>${S.aim.loss}</b> PV`
+           + (S.lastChance ? ` et ${p.ai ? "meurt" : "meurs"}.` : p.hp < 0 ? `, ${p.ai ? "à l'agonie" : "te voilà à l'agonie"}.` : ".");
+    default: return "";
+  }
+}
+
+function renderTable(next) {
+  const p = cur();
+  const mine = myTurn() && S.phase === "keep";
+  // Ce qui est de côté : les dés de la visée, ou les touches de l'attaque.
+  const tray = el("tray");
+  tray.innerHTML = "";
+  const side = S.phase === "regen" && S.aim ? S.aim.dice : S.kept;
+  if (S.folded) tray.appendChild(mk("span", "carried", `${S.folded} touchés`));
+  if (side.length) {
+    const box = mk("div", "kept");
+    const row = mk("div", "dice");
+    for (const d of side) row.appendChild(dieEl(d.v));
+    box.appendChild(row);
+    box.appendChild(mk("span", "pts", S.phase === "attack" ? `× ${S.aim.v}` : S.phase === "regen" ? `${S.aim.total}` : `${sum(side)}`));
+    tray.appendChild(box);
+  }
+  if (!S.folded && !side.length) {
+    tray.appendChild(mk("span", "empty", S.phase === "attack" ? "les dés qui touchent se mettent ici"
+                                       : S.phase === "roll" || S.phase === "keep" ? "les dés gardés se mettent ici" : ""));
+  }
+
+  // Le lancer en cours, ou les cinq dés de la visée finie.
+  const host = el("dice");
+  host.innerHTML = "";
+  const shown = S.phase === "target" || S.phase === "miss" || (S.phase === "attack" && !S.dice.length && S.aim) ? S.aim.dice : S.dice;
+  if (shown.length) {
+    for (const d of shown) {
+      next.add(d.uid);
+      let cls = "";
+      if (S.phase === "keep" && (S.sel.has(d.uid) || (S.plan && S.plan.includes(d.uid)))) cls += " sel";
+      if (mine) cls += " pick";
+      if (S.phase === "attack" && S.dice.length && d.v === S.aim.v) cls += " hit";
+      if (S.phase === "miss" || (S.phase === "attack" && S.dmg !== null && S.dice.length)) cls += " dead";
+      if (!shownUids.has(d.uid)) cls += " roll";
+      const b = dieEl(d.v, cls.trim());
+      if (mine) {
+        b.disabled = false;
+        b.addEventListener("click", () => onDieClick(d.uid));
+      }
+      host.appendChild(b);
+    }
+  } else {
+    const n = S.phase === "roll" ? DICE : S.phase === "regen" ? 1 : S.phase === "attack" ? S.free : 0;
+    for (let i = 0; i < n; i++) host.appendChild(mk("div", "slot"));
+  }
+
+  // La jauge : le total du moment cerclé, ce que la relance peut donner allumé.
+  const r = aimRange();
+  const gauge = el("gauge");
+  if (S.phase === "over" || !p) gauge.dataset.off = "1";
+  else delete gauge.dataset.off;
+  GAUGE.forEach((c, i) => {
+    const t = i + DICE;
+    c.classList.toggle("now", t === r.now);
+    c.classList.toggle("far", r.lo !== undefined && (t < r.lo || t > r.hi));
+    c.textContent = t === r.now || t === LOW || t === HIGH ? t : "";
+  });
+
+  const line = el("total");
+  if (S.phase === "over" || !p) line.innerHTML = "";
+  else if (S.phase === "roll") line.innerHTML = "Total des cinq dés : sous <b>11</b> ou au-dessus de <b>24</b>";
+  else if (S.phase === "attack") {
+    line.innerHTML = `Attaque aux <b>${S.aim.v}</b> · ${diceLabel(S.hits)} touché${S.hits > 1 ? "s" : ""}`
+                   + (S.dmg !== null ? ` · <b class="ko">−${S.dmg}</b>` : "");
+  } else if (S.phase === "regen") {
+    line.innerHTML = `Total <b>${S.aim.total}</b> · régénération` + (S.gain ? ` <b class="ok">+${S.gain}</b>` : "");
+  } else if (r.now !== undefined) {
+    const o = outcomeOf(r.now);
+    const cls = o.kind === "miss" ? ' class="ko"' : o.kind === "regen" ? ' class="ok"' : "";
+    line.innerHTML = `Total <b>${r.now}</b> · <span${cls}>${outcomeLabel(o)}</span>`
+                   + (r.lo !== undefined ? ` · en relançant : ${r.lo} à ${r.hi}` : "");
+  } else line.innerHTML = "";
+}
+
+/* Deux boutons toujours présents, pour que la hauteur ne bouge pas d'un tour
+   à l'autre ; à l'heure de choisir la cible, un bouton par adversaire. */
+function renderActions() {
+  const host = el("actions");
+  host.innerHTML = "";
+  const mine = myTurn();
+  if (mine && S.phase === "target") {
+    for (const j of targets(0)) {
+      const q = S.players[j];
+      const b = mk("button", "primary", `${q.name} · ${hpLabel(q.hp)}`);
+      b.addEventListener("click", () => onTargetClick(j));
+      host.appendChild(b);
+    }
+    return;
+  }
+  const keep = mine && S.phase === "keep";
+  const left = keep ? S.dice.length - S.sel.size : 0;
+  const canRoll = (mine && S.phase === "roll") || (keep && S.sel.size >= 1 && left >= 1);
+  const roll = mk("button", canRoll ? "primary" : "", keep && S.sel.size && left ? `Relancer ${diceLabel(left)}` : keep ? "Relancer" : "Lancer les dés");
+  roll.disabled = !canRoll;
+  roll.addEventListener("click", onRollClick);
+  host.appendChild(roll);
+
+  // Ce que donne ce total est écrit juste au-dessus : le bouton tient sur une ligne, même sur téléphone.
+  const stop = mk("button", "", keep ? `Arrêter sur ${sum(S.kept) + sum(S.dice)}` : "Arrêter");
+  stop.disabled = !keep;
+  stop.addEventListener("click", onStopClick);
+  host.appendChild(stop);
+}
+
+function render() {
+  if (!S.players.length) return;
+  const next = new Set();
+  const choosing = myTurn() && S.phase === "target";
+  S.players.forEach((p, pi) => {
+    if (pi === 0 || !p._box) return;
+    p._box.classList.toggle("active", S.current === pi && S.phase !== "over");
+    p._box.classList.toggle("dead", p.dead);
+    p._box.classList.toggle("target", choosing && !p.dead);
+    p._box.classList.toggle("aimed", S.phase === "attack" && S.target === pi);
+    p._tag.textContent = p.dead ? "mort" : hpLabel(p.hp);
+    renderMeter(p._meter, p);
+    renderMarks(p._marks, p);
+    const l = p.last;
+    p._bubble.hidden = !l || p.dead;
+    if (l) {
+      p._bubble.className = "bubble" + (l.kind === "attack" ? " atk" : l.kind === "miss" ? " ko" : "");
+      p._bubble.textContent = l.kind === "regen" ? `+${l.gain} PV` : l.kind === "miss" ? `−${l.loss} PV`
+                            : l.target < 0 ? "⚔ personne" : `⚔ ${S.players[l.target].ai ? S.players[l.target].name : "toi"} −${l.dmg}`;
+    }
+  });
+  const me = S.players[0];
+  el("myTag").textContent = me.dead ? "mort" : hpLabel(me.hp);
+  renderMeter(el("myMeter"), me);
+  renderMarks(el("myMarks"), me);
+  el("me").classList.toggle("dead", me.dead);
+  el("me").classList.toggle("aimed", S.phase === "attack" && S.target === 0);
+
+  renderTable(next);
+  shownUids = next;
+  renderActions();
+  el("me").classList.toggle("active", S.current === 0 && S.phase !== "over");
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
+  const alive = S.players.filter((p) => !p.dead).length;
+  el("roundInfo").textContent = `Tour ${S.round} · ${alive} en jeu`;
+}
+
+/* ============================================================== Interface */
+/* Toujours quatre joueurs : toi et trois adversaires « sharp ». newGame()
+   reste générique — les tests et le banc d'essai y asseyent d'autres tablées
+   (2 à 6) par startGame(n). */
+const PLAYERS = 4;
+
+function startGame(nPlayers = PLAYERS) {
+  el("startOverlay").hidden = true;
+  el("scoreOverlay").hidden = true;
+  newGame(nPlayers);
+}
+
+el("btnStart").addEventListener("click", () => startGame());
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  newGame(S.players.length);
+});
+</script>
+</body>
+</html>

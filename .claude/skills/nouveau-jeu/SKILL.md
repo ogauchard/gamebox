@@ -5,7 +5,7 @@ description: Ajoute un nouveau jeu à gamebox de bout en bout — page HTML auto
 
 # Ajouter un jeu à gamebox
 
-Huit jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
+Neuf jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
 Le fil conducteur : **un fichier HTML autonome, des règles écrites noir sur blanc, des IA qui ne trichent pas, et une
 suite de tests qui joue des parties entières sous invariants.** Ne rien partager entre les jeux : copier un motif
 d'un autre fichier, oui ; l'importer, non.
@@ -160,6 +160,11 @@ s'il commence), puis trois modes :
 Se méfier d'un réglage qui ne brille que contre `simple`. Au 6 qui prend, une IA qui modélisait ses adversaires
 exactement comme la politique simple (`noise 0`) gagnait davantage contre elle, et perdait entre redoutables : avant
 de retenir un réglage du modèle adverse, le faire jouer contre le réglage livré à une table de `sharp`.
+
+**Faire tourner le `sharp` par rapport au premier joueur**, pas par rapport au siège 0 : le premier joueur change à
+chaque partie (`S.starter = S.games++ % n`), et `seats[i % 4] = "sharp"` le fait alors commencer *à chaque partie*
+dès que `S.games` part d'un multiple de 4 — un avantage qui gonfle tous les chiffres. Le Killer l'a vu en écrivant
+son banc : `seats[(S.games + i) % 4] = "sharp"` le place tour à tour à chaque rang du tour de table.
 
 Ce n'est pas un test : il ne va pas dans `run-all.js`. Noter les chiffres obtenus (nombre de parties, victoires,
 score moyen) : ils vont dans CLAUDE.md et dans le message de commit.

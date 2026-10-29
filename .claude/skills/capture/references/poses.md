@@ -124,3 +124,40 @@ garnies et cartes révélées dans les vignettes. L'état exact change à chaque
 el("btnStart").click();
 Object.assign(S.players[0], { ai: true, policy: "simple" });
 ```
+
+## Killer : ta visée, une attaque en cours
+
+Mêmes noms que le 5000 ; les dés sortent de `rollDie()`. Ta visée, deux 1 gardés puis un dé choisi dans le lancer
+suivant (la jauge éteint ce que la relance ne peut plus donner) :
+
+```js
+aiTurn = async () => {};
+el("btnStart").click();
+S.current = 0; S.phase = "idle"; beginTurn();
+const seq = [1, 1, 4, 6, 2, 1, 5, 3];
+rollDie = () => (seq.length ? seq.shift() : 3);
+onRollClick();
+onDieClick(S.dice[0].uid); onDieClick(S.dice[1].uid);
+onRollClick();
+onDieClick(S.dice[0].uid);
+```
+
+Une attaque est asynchrone (elle attend entre ses lancers) : pour la figer, poser la phase et appeler `throwAttack(v)`
+soi-même. Ici l'attaque aux 6 de Nora contre toi, les cinq dés repartis puis quatre touches de côté — le plateau le
+plus rempli :
+
+```js
+aiTurn = async () => {};
+el("btnStart").click();
+S.current = 1; S.phase = "idle"; beginTurn();
+const seq = [1, 1, 1, 1, 1, 6, 6, 6, 6, 6, 6, 6, 6, 6, 1, 2];
+rollDie = () => (seq.length ? seq.shift() : 3);
+throwDice(); stopAim();
+S.phase = "attack"; S.target = 0; S.busy = true; S.kept = []; S.dice = []; S.free = 5; S.hits = 0;
+throwAttack(6); throwAttack(6); throwAttack(6);
+render();
+```
+
+Le choix de la cible : un lancer de 8 puis `onStopClick()`. Fin de partie réelle : `Object.assign(S.players[0], { ai:
+true, policy: "sharp" }); if (S.current === 0) aiTurn();` après le clic, `--budget 1500000` (une partie entre quatre
+redoutables dure environ 7 minutes de temps virtuel, 11 pour neuf sur dix).
