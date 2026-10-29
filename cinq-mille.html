@@ -657,9 +657,10 @@ const simplePolicy = {
      rien ; elle tente alors le coup jusqu'au bout.
    Les ballots n'entrent pas dans le calcul : elle ne décide qu'après un lancer
    qui marque, et passé le premier lancer le tour ne peut plus en être un.
-   Réglages mesurés au banc d'essai : un bonus de victoire sans menace (AI.win)
-   fait viser 5000 de trop loin et perd, contre la politique simple comme entre
-   redoutables.
+   Réglages mesurés au banc d'essai : sans le terme de menace (AI.threat 0),
+   elle ne bat plus la politique simple ; un gros bonus de victoire sans menace
+   (AI.win 4000) fait viser 5000 de trop loin et perd, contre la politique
+   simple comme entre redoutables ; au-delà de 3000, la menace ne rapporte plus.
    --------------------------------------------------------------------------- */
 const AI = {
   win: 0,          // atteindre 5000 vaut ces points de plus qu'un tour ordinaire, menace ou pas

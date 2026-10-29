@@ -845,7 +845,8 @@ pleine). It throws a 600 main pleine again at 3000, after two ballots too; at 45
 left it banks, unless an opponent sits at 4900 — then it goes for the 500 missing.
 
 **The pitfall that bit here** (while the game still ended at *at least* 5000): the first version gave every winning
-bank a flat bonus (`AI.win` 1500). That made it chase 5000 from too far, and it lost on both benches. But with no
+bank a flat bonus (`AI.win` 1500). That made it chase 5000 from too far, and it lost on both benches (as measured
+then, with the bench bias described below; under the current rules `win` 1500 draws and only 4000 loses). But with no
 bonus at all, a points-only programme would throw a winning main pleine again (a 1400 full when 300 were missing
 was worth more as points if thrown again). Hence the stop: a win is taken as soon as it is there, and the programme
 knows it, so `win` can be 0. With the exact end, nothing can be kept past 5000 anyway, but the stop stays, and both
@@ -858,16 +859,28 @@ node tests/cinq-mille-bench.js face 2000                       # chaque réglage
 node tests/cinq-mille-bench.js stall 400                       # 4 redoutables : durée des parties
 ```
 
-Reference points at the shipped settings and the current rules, 2000 games against three `simple` (25 % baseline):
-**27.8 % and 30.6 % wins** in two runs, 231–233 points banked a turn against 229–230, 0.01 resets to zero a game,
-17.6 rounds. The rules have left it little to decide: with every scoring die kept, its points a turn are `simple`'s,
-and with ballots on the first throw only, the three-ballot term that made most of its 33.5 % (when any failed throw
-was a ballot) is gone. What is left is the end of the game: `threat 0` falls to 27.8 % and loses 45.9 % two
-against two. When it could still choose its dice it won 50.8 % — keeping a lone 1, or one 5 of two to land on a
-hundred, was most of its strength. Judge at 2000 games (±2 points; 600 games, ±4, sent this tuning the wrong way
-twice) and on **both** benches: `win 1500` makes 31.4 % against `simple` but loses 45.4 % to the shipped AI; every
-other variant lands at 23–29 % and 41–49 %. Under the first rules (the end at *at least* 5000), `win 1500` made
-44.7 % and 44.9 %.
+Reference points at the shipped settings and the current rules, 2000 games against three `simple` (25 % baseline),
+the sharp's place in the turn order rotating: **28.1 %, 27.1 % and 27.8 % wins** in three runs, 229–233 points
+banked a turn against 228–229, 0.01 resets to zero a game, 17.7 rounds. The rules have left it little to decide:
+with every scoring die kept, its points a turn are `simple`'s, and with ballots on the first throw only, the
+three-ballot term is gone. What is left is the end of the game, and that is all its edge: `threat 0` falls to
+23.1 % — below the baseline — and 48.5 % two against two, `threat 1000` to 25.1 %, while 5000 and 8000 make 27.5
+and 28.0 % and draw with the shipped AI (51.0 %, 50.0 %): 3000 sits on that plateau. `win 4000` loses on both
+benches (21.4 %, 43.6 %); `win` 500 and 1500 change nothing (26.6–26.9 %, 50.1–50.8 %). Judge at 2000 games
+(±2 points) and on **both** benches.
+
+**The bench used to seat the sharp in the first player's chair at every game**: `seats[i % 4] = "sharp"` while the
+game rotates its first player by `S.games++ % 4`, so the two moved in step whenever `S.games` started on a multiple
+of 4 — always in the default and `face` modes, and in `sweep` at 2000 games. Starting is worth 2–3 points (2000
+games of four identical players, wins by place in the turn order: 27.9 / 25.9 / 23.9 / 22.2 % for `simple`, 26.8 /
+26.8 / 23.9 / 22.6 % for `sharp`). It now rotates relative to the first player (`seats[(S.games + i) % 4]`), and
+`face` alternates which side starts. Every figure measured before carried the bias: 27.8 and 30.6 % for the shipped
+AI; `win 1500` at 31.4 % and "losing 45.4 % to the shipped AI" (it draws); `threat 0` at 27.8 % and "losing
+45.9 %". `sweep` at 600 games was worse off: 750 games per setting moved the sharp from first to third place every
+other setting, a 4-point swing between settings — likely part of why 600 games "sent this tuning the wrong way
+twice". Older figures, all with the bias and no longer reproducible: with any failed throw a ballot it won 33.5 %;
+when it could still choose its dice, 50.8 % (keeping a lone 1, or one 5 of two to land on a hundred, was most of its
+strength); under the first rules (the end at *at least* 5000), `win 1500` made 44.7 % and 44.9 %.
 
 ### Rendering and layout
 

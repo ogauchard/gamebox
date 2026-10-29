@@ -163,8 +163,10 @@ de retenir un réglage du modèle adverse, le faire jouer contre le réglage liv
 
 **Faire tourner le `sharp` par rapport au premier joueur**, pas par rapport au siège 0 : le premier joueur change à
 chaque partie (`S.starter = S.games++ % n`), et `seats[i % 4] = "sharp"` le fait alors commencer *à chaque partie*
-dès que `S.games` part d'un multiple de 4 — un avantage qui gonfle tous les chiffres. Le Killer l'a vu en écrivant
-son banc : `seats[(S.games + i) % 4] = "sharp"` le place tour à tour à chaque rang du tour de table.
+dès que `S.games` part d'un multiple de 4 — 2 à 3 points de victoires offerts. Le Killer l'a vu en écrivant son
+banc, et le 5000 en souffrait depuis le début : `win 1500` y passait pour perdant contre le réglage livré, il fait jeu
+égal. `seats[(S.games + i) % 4] = "sharp"` le place tour à tour à chaque rang du tour de table ; en deux contre deux,
+faire aussi alterner le camp qui commence.
 
 Ce n'est pas un test : il ne va pas dans `run-all.js`. Noter les chiffres obtenus (nombre de parties, victoires,
 score moyen) : ils vont dans CLAUDE.md et dans le message de commit.

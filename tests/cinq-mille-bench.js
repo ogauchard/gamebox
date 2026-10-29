@@ -64,11 +64,15 @@ function record(result) {
   }
 }
 
+/* Le redoutable change de rang dans le tour de table d'une partie à l'autre,
+   placé par rapport au premier joueur (S.games % 4 pour la partie qui vient) :
+   placé par `i % 4`, il commençait à chaque partie dès que S.games partait
+   d'un multiple de 4, et commencer vaut 2 à 3 points de victoires. */
 async function table(N) {
   stats = {};
   for (let i = 0; i < N; i++) {
     const seats = ["simple", "simple", "simple", "simple"];
-    seats[i % 4] = "sharp";
+    seats[(S.games + i) % 4] = "sharp";
     record(await playGame(seats));
   }
   const sh = stats.sharp, si = stats.simple;
@@ -128,8 +132,9 @@ async function sweep(N) {
 }
 
 /* Chaque réglage contre le réglage livré, deux redoutables de chaque, places
-   alternées : un réglage qui ne brille que contre la politique simple se voit
-   ici. La variante règle l'objet AI le temps de sa décision, qui est synchrone. */
+   alternées et premier joueur tour à tour de chaque camp : un réglage qui ne
+   brille que contre la politique simple se voit ici. La variante règle
+   l'objet AI le temps de sa décision, qui est synchrone. */
 async function face(N) {
   const AI = g("AI"), sharp = g("sharpPolicy");
   console.log(`\n=== Contre le réglage livré, 2 contre 2 (${N} parties par configuration) ===`);
@@ -143,7 +148,9 @@ async function face(N) {
     };
     stats = {};
     for (let i = 0; i < N; i++) {
-      record(await playGame(i % 2 ? ["variant", "sharp", "variant", "sharp"] : ["sharp", "variant", "sharp", "variant"]));
+      const seats = [];
+      for (let s = 0; s < 4; s++) seats[(S.games + s) % 4] = (s + i) % 2 ? "variant" : "sharp";
+      record(await playGame(seats));
     }
     const v = stats.variant, s = stats.sharp;
     console.log(`${cfg.name.padEnd(12)} victoires ${(100 * v.wins / N).toFixed(1).padStart(5)} % (50 % attendus)`
