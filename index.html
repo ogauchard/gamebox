@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gamebox</title>
-<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish et 6 qui prend, jouables directement dans le navigateur.">
+<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish, 6 qui prend et le 5000, jouables directement dans le navigateur.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
 <style>
   :root {
@@ -281,6 +281,30 @@
   .q:nth-child(5) { margin-left: 14px; }
   .q:nth-child(6) { margin-left: 62px; top: 16px; transform: rotate(14deg); box-shadow: 0 0 0 2px #c8322b, 0 4px 12px rgba(0,0,0,.6); }
 
+  /* 5000 : un brelan de 5 mis de côté, un 1 et un 6 qui roulent encore. Même
+     principe qu'Uno : une boîte étroite, les dés placés par rapport à son centre. */
+  .p-dice { background: radial-gradient(ellipse at 50% 20%, #2f1a33 0%, #170f18 75%); }
+  .dice-art { position: relative; width: 60px; height: 110px; --s: 1.15; }
+  .dd {
+    position: absolute; left: 50%; top: 38px;
+    width: 34px; height: 34px; margin-left: -17px;
+    padding: 4px; border-radius: 7px;
+    background: linear-gradient(150deg, #fffdf7, #ece3d2);
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,.12), 0 3px 8px rgba(0,0,0,.5);
+    display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  }
+  .dd i { width: 76%; height: 76%; place-self: center; border-radius: 50%; background: #2b2228; }
+  .dd .tl { grid-area: 1 / 1; } .dd .tr { grid-area: 1 / 3; }
+  .dd .ml { grid-area: 2 / 1; } .dd .c  { grid-area: 2 / 2; } .dd .mr { grid-area: 2 / 3; }
+  .dd .bl { grid-area: 3 / 1; } .dd .br { grid-area: 3 / 3; }
+  .dd.one i { width: 100%; height: 100%; background: #c8322b; }
+  .dd.kept { box-shadow: 0 0 0 2px #ffce3a, 0 3px 8px rgba(0,0,0,.5); }
+  .dd:nth-child(1) { transform: translate(-74px, -10px); }
+  .dd:nth-child(2) { transform: translate(-34px, -10px); }
+  .dd:nth-child(3) { transform: translate(6px, -10px); }
+  .dd:nth-child(4) { transform: translate(56px, -20px) rotate(-16deg); }
+  .dd:nth-child(5) { transform: translate(70px, 24px) rotate(24deg); }
+
   footer { text-align: center; color: var(--dim); font-size: 13px; margin-top: 30px; }
   footer a { color: inherit; }
 
@@ -309,7 +333,7 @@
 <main>
   <header>
     <h1>GAMEBOX</h1>
-    <p>Sept jeux, directement dans le navigateur.</p>
+    <p>Huit jeux, directement dans le navigateur.</p>
   </header>
 
   <nav class="games">
@@ -429,6 +453,23 @@
       <div class="info">
         <h2>6 qui prend !</h2>
         <p>Tout le monde pose en même temps ; qui pose la sixième carte d'une rangée ramasse ses têtes de bœuf. Contre 3 adversaires.</p>
+        <span class="play">Jouer →</span>
+      </div>
+    </a>
+
+    <a class="game" href="cinq-mille.html">
+      <div class="preview p-dice" aria-hidden="true">
+        <div class="art dice-art">
+          <div class="dd kept"><i class="tl"></i><i class="tr"></i><i class="c"></i><i class="bl"></i><i class="br"></i></div>
+          <div class="dd kept"><i class="tl"></i><i class="tr"></i><i class="c"></i><i class="bl"></i><i class="br"></i></div>
+          <div class="dd kept"><i class="tl"></i><i class="tr"></i><i class="c"></i><i class="bl"></i><i class="br"></i></div>
+          <div class="dd one"><i class="c"></i></div>
+          <div class="dd"><i class="tl"></i><i class="tr"></i><i class="ml"></i><i class="mr"></i><i class="bl"></i><i class="br"></i></div>
+        </div>
+      </div>
+      <div class="info">
+        <h2>5000</h2>
+        <p>Le jeu de dés : garde ceux qui marquent, relance les autres, et encaisse avant de tout perdre. Contre 3 adversaires.</p>
         <span class="play">Jouer →</span>
       </div>
     </a>

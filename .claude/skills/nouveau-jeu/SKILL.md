@@ -5,7 +5,7 @@ description: Ajoute un nouveau jeu à gamebox de bout en bout — page HTML auto
 
 # Ajouter un jeu à gamebox
 
-Sept jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
+Huit jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
 Le fil conducteur : **un fichier HTML autonome, des règles écrites noir sur blanc, des IA qui ne trichent pas, et une
 suite de tests qui joue des parties entières sous invariants.** Ne rien partager entre les jeux : copier un motif
 d'un autre fichier, oui ; l'importer, non.
@@ -134,7 +134,8 @@ et pourquoi), soit il a un garde-fou du type `TURN_CAP` que le banc ne doit jama
 3. **Anti-triche** : envelopper `policyOf` pour que, pendant chaque appel de politique, les mains des autres joueurs
    (et la pioche si elle n'est pas publique) soient des `Proxy` qui comptent tout accès par indice ou par itération ;
    `length` reste libre. Copier le bloc de `tests/trou-du-cul.test.js` (chercher `const _policyOf = policyOf`) et
-   asserter que le compteur vaut 0.
+   asserter que le compteur vaut 0. Un jeu sans rien de caché (le 5000 : dés et scores publics) vérifie à la place que
+   la politique ne modifie pas l'état et ne tire aucun hasard — `tests/cinq-mille.test.js`, chercher `snapshot`.
 4. **Noms de premier niveau** : `ok(globalClashes("x.html").length === 0, …)`.
 5. Ajouter le fichier à la liste de `tests/run-all.js`, et un jeu de cartes à la liste `GAMES` de
    `tests/cartes.test.js` (lien vers la feuille commune, empreinte, teinte).

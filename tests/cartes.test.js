@@ -17,7 +17,7 @@ const crypto = require("crypto");
 const { ROOT, checker } = require("./harness");
 
 const { ok, report } = checker();
-const GAMES = ["skyjo.html", "uno.html", "cinq-rois.html", "trou-du-cul.html", "turkish.html", "six-qui-prend.html"];
+const GAMES = ["skyjo.html", "uno.html", "cinq-rois.html", "trou-du-cul.html", "turkish.html", "six-qui-prend.html", "cinq-mille.html"];
 const OTHERS = ["asteroids.html", "index.html"];
 // Les jetons de teinte que chaque page doit définir (voir l'en-tête de cartes.css).
 const TINT = ["--bg", "--panel", "--line", "--text", "--dim", "--bg-top", "--btn", "--btn-hover"];

@@ -94,6 +94,26 @@ press("Enter");            // le prochain tour de boucle consomme la pression et
 
 `Math.random` n'est pas fixé : deux captures ne se ressemblent jamais exactement.
 
+## 5000 : des dés imposés
+
+`btnStart`, `startGame()`, `aiTurn()`, `render()` comme les jeux de cartes ; le siège 0 commence la première partie.
+Les dés sortent de `rollDie()`, qu'on remplace pour poser un lancer précis. Tous les dés qui marquent sont gardés
+d'office (`keepDice()` les met de côté) — ici un 1 gardé, puis un brelan de 1 sur les quatre dés relancés :
+
+```js
+aiTurn = async () => {};
+el("btnStart").click();
+const seq = [1, 2, 3, 4, 6, 1, 1, 1, 4];
+rollDie = () => seq.shift();
+throwDice(); keepDice(); throwDice();
+render();
+```
+
+Pour un plateau de dés gardés bien rempli (le cas le plus haut de la table) : un full (main pleine) puis trois dés
+gardés un à un — `throwDice(); keepDice();` quatre fois, avec dans `seq` un full puis trois lancers qui ne font
+marquer qu'un 1 ou un 5. Un tour perdu (ballot, lancer raté, dépassement) reste affiché 1,5 s : `--budget 700` pour le saisir.
+Fin de partie : la recette « Fin de manche réelle » ci-dessus, `--budget 900000`.
+
 ## 6 qui prend : une manche en cours
 
 Laisser l'ordinateur jouer la place du joueur quelques tours : 16 s de temps virtuel mènent vers le 4e tour, rangées

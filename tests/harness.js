@@ -78,7 +78,7 @@ class FakeEl {
 }
 
 /* ------------------------------------------------ Jeux de cartes (DOM) */
-/* Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish et 6 qui prend se chargent de la même façon.
+/* Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish, 6 qui prend et le 5000 (dés) se chargent de la même façon.
    L'horloge du bac à sable déclenche immédiatement : les temporisations
    d'animation de l'IA s'effondrent et une partie entière tient en quelques
    millisecondes. setImmediate plutôt que setTimeout(fn, 0) — Node bride ce
@@ -115,6 +115,7 @@ const loadCinqRois = () => loadDomGame("cinq-rois.html");
 const loadTrouDuCul = () => loadDomGame("trou-du-cul.html");
 const loadTurkish = () => loadDomGame("turkish.html");
 const loadSixQuiPrend = () => loadDomGame("six-qui-prend.html");
+const loadCinqMille = () => loadDomGame("cinq-mille.html");
 
 /* -------------------------------------------------------------- Asteroids */
 /* On retient le rappel de requestAnimationFrame pour le rejouer avec des
@@ -230,4 +231,4 @@ function checker() {
   return { ok, okOnce, report, state };
 }
 
-module.exports = { ROOT, FakeEl, loadSkyjo, loadUno, loadCinqRois, loadTrouDuCul, loadTurkish, loadSixQuiPrend, loadAsteroids, checker, globalClashes };
+module.exports = { ROOT, FakeEl, loadSkyjo, loadUno, loadCinqRois, loadTrouDuCul, loadTurkish, loadSixQuiPrend, loadCinqMille, loadAsteroids, checker, globalClashes };

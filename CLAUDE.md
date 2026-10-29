@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Seven **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
-except that the six card games load one shared stylesheet, [cartes.css](cartes.css), for their common layout (see
-*Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
+Eight **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
+except that the six card games and the 5000 dice game load one shared stylesheet, [cartes.css](cartes.css), for their
+common layout (see *Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
 - [asteroids.html](asteroids.html) — remake of the 1979 Atari arcade game, canvas + vector rendering.
@@ -21,21 +21,24 @@ except that the six card games load one shared stylesheet, [cartes.css](cartes.c
   minus the trumps; rules from the « Le jeu de Turkish » blog and its author's answers, DOM/CSS rendering.
 - [six-qui-prend.html](six-qui-prend.html) — *6 qui prend !* (Wolfgang Kramer's 6 nimmt!), official rules: everyone
   plays a card at once, the sixth card of a row takes it, game to 66 heads. DOM/CSS rendering.
-- [cartes.css](cartes.css) — the card games' shared layout and components; each game keeps its tint, card faces and
-  table contents inline.
+- [cinq-mille.html](cinq-mille.html) — *5000*, the French dice game (a Farkle cousin): five dice, rules from the French
+  Wikipedia article plus fixed house rules (scoring, three ballots back to zero, gains in hundreds), exactly 5000.
+  DOM/CSS rendering, dice drawn in CSS.
+- [cartes.css](cartes.css) — the card games' shared layout and components (5000 uses it too); each game keeps its
+  tint, card faces and table contents inline.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games' logic independent of each other. The **`nouveau-jeu` skill**
   ([.claude/skills/nouveau-jeu/](.claude/skills/nouveau-jeu/SKILL.md)) holds the full checklist for adding one.
 - [index.html](index.html) — landing page linking the games, one card each with a small pure-CSS/SVG preview.
   A new game also needs its card here. The games don't link back to it.
 
-**The card games are deliberately simple to start**: always **4 players** (you and 3 computer opponents) and **one AI
-level**, the strongest ("Redoutable") — the owner removed the player-count, level and Trou-du-cul length choices.
-Only Uno (format, house rules) and Turkish (number of deals, which the owner asked to keep as a choice) have options.
-The engines stayed generic: `newGame(n)` still seats 2–6, and `startGame(n = PLAYERS)` — what the "Commencer"
-button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du cul,
-Turkish and 6 qui prend still contain are **benchmark baselines only**, never dealt to a player; Uno had no bench, so its weak policy
-was deleted.
+**The card games (and 5000) are deliberately simple to start**: always **4 players** (you and 3 computer opponents)
+and **one AI level**, the strongest ("Redoutable") — the owner removed the player-count, level and Trou-du-cul length
+choices. Only Uno (format, house rules) and Turkish (number of deals, which the owner asked to keep as a choice) have
+options. The engines stayed generic: `newGame(n)` still seats 2–6, and `startGame(n = PLAYERS)` — what the
+"Commencer" button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du
+cul, Turkish, 6 qui prend and 5000 still contain are **benchmark baselines only**, never dealt to a player; Uno had no
+bench, so its weak policy was deleted.
 
 ## Hosting
 
@@ -50,16 +53,17 @@ hash (`cartes.css?v=<hash>`), kept in step by `node tests/cartes.test.js --fix`.
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les huit suites (~6400 assertions, le total varie — les cartes sont mélangées)
+node tests/run-all.js          # les neuf suites (~7200 assertions, le total varie — cartes et dés sont tirés au hasard)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
 node tests/trou-du-cul.test.js # règles du Trou du cul seules
 node tests/turkish.test.js     # règles du Turkish seules
 node tests/six-qui-prend.test.js # règles du 6 qui prend seules
+node tests/cinq-mille.test.js  # règles et barème du 5000 seuls
 node tests/asteroids.test.js   # logique d'Asteroids seule
 node tests/cartes.test.js      # gabarit commun : liens vers cartes.css, empreinte, teintes
-node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 6 liens
+node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 7 liens
 ```
 
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
@@ -107,7 +111,10 @@ seats: `doPlay`/`doPass`). Turkish through `onCardClick(zone, uid)` (`"hand"` or
 `onDownClick(i)` for a face-down card and `onPickupClick` then a hand-card click to show (other seats: `doPlay`/
 `doBlind`/`doPickup`). 6 qui prend through `onCardClick(uid)` (a second click on the same card, or `onPlayClick`,
 plays it) and `onRowClick(r)` when your card is too low; other seats: fill `S.chosen`, then the last choice calls
-`reveal()`. `loadDomGame(file)` in the harness loads any of the six card games.
+`reveal()`. 5000 through `onRollClick` (« Lancer », then « Relancer ») and `onBankClick` — the scoring dice are
+kept automatically, nothing to click on the dice; other seats: `doRoll(seat)`/`doBank(seat)`, or `keepDice()` then
+`throwDice()`. Dice come from `rollDie()`, a top-level function a targeted test replaces to impose the throws.
+`loadDomGame(file)` in the harness loads any of the six card games and 5000.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -122,8 +129,8 @@ reaches the draw-pile reshuffle or a non-positive finisher total — those are t
 
 ## Shared layout — cartes.css
 
-The six card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend — look alike on purpose, on desktop as on phones; Asteroids
-and the landing page stay independent.
+The six card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend — and the 5000 dice game look alike on
+purpose, on desktop as on phones; Asteroids and the landing page stay independent.
 [cartes.css](cartes.css) holds everything that used to be copied four times: base styles, header, buttons, opponent
 panels (`.player`, `.fan`), status, log, actions, the player's area, overlays and sheets, and the phone and short-screen
 rules. Each game links it **before** its own `<style>`, which keeps only what is the game's own: its tint, its card
@@ -145,9 +152,9 @@ faces, the contents of its table, its hand. The DOM is the same skeleton everywh
 - **Phones** (`max-width: 560px`): the three opponents become a grid with one equal column each, overlays become
   bottom-anchored sheets.
 
-After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the six links,
+After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the seven links,
 and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
-1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all six games fit with no scroll at every one
+1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all seven games fit with no scroll at every one
 of those sizes (Turkish's only exception: a 30-card hand on an iPhone SE scrolls a little). `fit.js` switches CSS
 animations off before measuring: headless Edge doesn't advance them in virtual time, and a card frozen at the start of
 its `pop` (24 px lower) reads as a false overflow. Landscape phones fall outside the 560 px query and get the desktop layout.
@@ -745,3 +752,121 @@ the revealed card shrank to 40 px in the hand. `#actions` always holds one « Po
 choice: on phones an empty `#actions` collapses, and the table would resize twice per turn. On phones the hand is
 5 cards per row at a fixed width, so cards never resize as the hand shrinks. Card faces are tinted by heads (white 1,
 blue 2, yellow 3, red 5, violet 7), with the heads drawn by a CSS mask of an inline SVG bull (`--bull`).
+
+## Architecture — cinq-mille.html
+
+### Rules as implemented
+
+The French Wikipedia article « 5 000 (jeu) », with the owner's house rules: five dice; a 1 scores 100 and a 5 scores
+50 on their own; a **brelan** is 100 × the face except **1s at 700**; a **full** (x x y y y) is **the brelan × 2**;
+both **suites** (1–5, 2–6) are **1000**; **five of a kind is a full** (the brelan × 2: five 1s 1400, five 5s 1000, five
+2s 400 and a main pleine). The game ends at **exactly 5000** (the article's variant). Two of the article's variants,
+as fixed rules: **three ballots in a row** put the score back to 0, and a turn's gain is only banked if it is a
+**multiple of 100**. The owner's own reading of the article's "main pleine": once all five dice have scored — in one
+throw *or over several* — all five may be thrown again. And **every scoring die is kept** (owner's rule): after a
+throw there is nothing to choose but to bank or throw again. Readings chosen here, all stated in the rules panel:
+
+- **Exactly 5000**: the bank that makes 5000 wins at once. A throw whose scoring dice would take the score past
+  5000 (at 4900, a 1 and a 5 make 5050) **loses the turn but is not a ballot** — the owner's ruling: the throw
+  scored.
+- **A ballot is only the first throw of a turn**, the five dice, scoring nothing (owner's ruling). Once it has
+  scored — a single 1 or 5 is enough — the turn can no longer end in a ballot: a later throw that scores nothing,
+  a main pleine of five thrown again included, loses the turn's points and that's all (`p.last.kind` « lost »). A
+  ballot itself never loses points, there are none yet; its only cost is the series.
+- **Three ballots in a row** means three consecutive turns ending in a ballot: any other turn — banked, lost on a
+  later throw, or past 5000 — **breaks the series** (`fails` back to 0). The owner didn't say; "in a row" was read
+  strictly. A reset is rare now: 7.7 % per turn, cubed — the bench sees about one per hundred player-games.
+- **Opening**: the first gain must be ≥ 500 (and a multiple of 100, like any gain). Falling to zero after three
+  ballots **does not close** a player again.
+- **Figures are made in one throw**, and suites and fulls need the five dice of a single throw. No four-of-a-kind
+  figure: four 2s are a brelan and a dead 2, four 1s are 800.
+- **The dice kept** are the largest part of the throw in which every die scores, read at its best: 1 1 1 5 5 is a
+  full at 1400, not 700 + 100; of 2 2 2 2 5, the brelan and the 5 are kept and the fourth 2 is thrown again.
+- The first player rotates from one game to the next (`S.starter = S.games++ % n`); the human starts the first.
+
+### Scoring and legality
+
+`combo(vals)` is the only scorer: `{ pts, name }`, 0 if a die doesn't score; `scoreOf` is its `pts`. `keptOf(dice)`
+gives the dice a throw makes you keep (`{ dice, pts, name }`, most dice then most points; empty if nothing scores);
+`throwDice()` stores it in `S.keep`, and the renderer, the AIs and `OUTCOMES` all read it. `room()` = 5000 − score −
+turn points. `cashable(opened, t)` is the bank rule (t > 0, multiple of 100, ≥ 500 until opened); `canRoll(seat)`
+is "a scoring throw is on the table", `canBank(seat)` adds that rule on the new turn total. The suite compares
+`combo` and `keptOf` against an independent partition-based scorer on all 461 multisets of 1–5 dice.
+
+### Flow
+
+`S.phase`: `roll` (a turn starts: five dice to throw) → `keep` (a scoring throw to sort) → `keep` … → bank, or
+`lost` (shown `BALLOT_MS`, then `nextTurn()`), and `over`. `beginTurn()` is the only place a turn starts.
+`throwDice()` throws `S.free` dice through `rollDie()` and calls `loseTurn(why)` itself when the turn is lost —
+`"ballot"` when nothing scores on the first throw (`S.turnPts` still 0, since kept dice always score: `fails` + 1,
+zero at three), `"lost"` when nothing scores later, `"bust"` when the scoring dice would pass 5000 (`S.keep` stays
+set so the dice show); the last two put `fails` back to 0. `keepDice()` moves `S.keep` to
+`S.kept`, adds its points to `S.turnPts`, and on a main pleine resets `S.free` to 5, folding the turn so far into
+`S.carried`. `doRoll(seat)`/`doBank(seat)` = keep, then throw or `bank()`. `aiTurn()` throws, shows the kept dice
+and its plan for `KEEP_MS`, then relaunches or banks; it checks `S.epoch` and the seat after every `await`.
+`decide(seat)` sanitises the policy's answer (an illegal bank → throw again).
+
+**Termination**: no `TURN_CAP`. Every throw has at least a 7.7 % chance of scoring nothing (600 five-dice throws
+in 7776; fewer dice, more), so every turn ends; and every round of turns has a chance of taking someone to
+exactly 5000 (with 100 missing, a lone 1 or two lone 5s do it — about 23 % of turns). Games are long: four sharps
+take 17.3 rounds, 27 at most over 500 games, none stuck.
+
+### Opponent AI
+
+`decide(p, seat) -> { bank }`, after each scoring throw: the kept dice are imposed (`S.keep`), the only choice is to
+bank or throw again. **Nothing is hidden in 5000** — dice, scores, ballot counts are public — so the suite's
+anti-cheat check becomes a purity check: during every policy call the game state must not change and `Math.random`
+must not be called.
+
+- `simple` (bench baseline): banks as soon as it may from 400, or from 200 with fewer than 3 dice to throw.
+- `sharp` ("Redoutable") computes. `OUTCOMES[n]` holds every throw of n dice as a multiset (probability, dice kept,
+  points in steps of 50; flat typed arrays). `solve(need, …)` is a dynamic programme over (turn points 0 to what is
+  missing, dice to throw 1–5): the value of throwing again, played optimally — the opening and the multiples of 100
+  included. Banking is worth the points; a throw that scores nothing or would pass 5000 is worth 0. **Ballots stay
+  out of it**: the policy only decides after a scoring throw, and from then on the turn can't end in a ballot, so
+  the series is reset whatever it does (an `AI.zero` term priced the third ballot while any failed throw counted;
+  it went with that rule). **Making 5000 ends the turn**: a winning bank is
+  always taken, and the programme banks the winning state on the spot. A winning state is worth `win` more, `win` =
+  `AI.win` + `AI.threat` × q / (1 − q), q being the chance that some opponent reaches 5000 in their next turn playing
+  all out (`reachProb`, the same programme with bank = 1 only at the target). Tables are cached by (opened, need,
+  win), q rounded to 0.05.
+
+Its thresholds, mid-game: bank from 200 with one to three dice left, from 400 with four, from 900 with five (a main
+pleine). It throws a 600 main pleine again at 3000, after two ballots too; at 4500 with 400 and two dice
+left it banks, unless an opponent sits at 4900 — then it goes for the 500 missing.
+
+**The pitfall that bit here** (while the game still ended at *at least* 5000): the first version gave every winning
+bank a flat bonus (`AI.win` 1500). That made it chase 5000 from too far, and it lost on both benches. But with no
+bonus at all, a points-only programme would throw a winning main pleine again (a 1400 full when 300 were missing
+was worth more as points if thrown again). Hence the stop: a win is taken as soon as it is there, and the programme
+knows it, so `win` can be 0. With the exact end, nothing can be kept past 5000 anyway, but the stop stays, and both
+cases are tested directly.
+
+```
+node tests/cinq-mille-bench.js 2000                            # 1 redoutable contre 3 tranquilles
+node tests/cinq-mille-bench.js sweep 2000 "livré,threat 1000"  # réglages de l'objet AI (tous sans 4e argument)
+node tests/cinq-mille-bench.js face 2000                       # chaque réglage contre le livré, 2 redoutables contre 2
+node tests/cinq-mille-bench.js stall 400                       # 4 redoutables : durée des parties
+```
+
+Reference points at the shipped settings and the current rules, 2000 games against three `simple` (25 % baseline):
+**27.8 % and 30.6 % wins** in two runs, 231–233 points banked a turn against 229–230, 0.01 resets to zero a game,
+17.6 rounds. The rules have left it little to decide: with every scoring die kept, its points a turn are `simple`'s,
+and with ballots on the first throw only, the three-ballot term that made most of its 33.5 % (when any failed throw
+was a ballot) is gone. What is left is the end of the game: `threat 0` falls to 27.8 % and loses 45.9 % two
+against two. When it could still choose its dice it won 50.8 % — keeping a lone 1, or one 5 of two to land on a
+hundred, was most of its strength. Judge at 2000 games (±2 points; 600 games, ±4, sent this tuning the wrong way
+twice) and on **both** benches: `win 1500` makes 31.4 % against `simple` but loses 45.4 % to the shipped AI; every
+other variant lands at 23–29 % and 41–49 %. Under the first rules (the end at *at least* 5000), `win 1500` made
+44.7 % and 44.9 %.
+
+### Rendering and layout
+
+The shared layout (see *Shared layout*) with dice for cards: the table (`#board`) is the dice kept this turn, small
+and grouped by throw with their points (a « main pleine » chip once five have been thrown again), the current throw,
+and the turn total; with nothing thrown, dashed slots for the free dice. Dice are `<button class="die vN">` with a 3 × 3
+grid of pips, the 1 red; `.sel` lifts the kept dice, `.dead` greys a lost turn, `.roll` animates new uids only
+(`shownUids`). `--die` sizes on the table in `cqh`/`cqw` (1.5 dice + 82 px high, 6 dice wide). Opponents show their
+score, a gauge to 5000 (`.meter`), « à ouvrir » and one ✗ per ballot in a row, and a bubble with their last turn;
+`#me` is the same, without a hand. `#actions` always holds « Lancer/Relancer » and « Encaisser », so the table never
+resizes during a turn. The `fit.js` sweep fits at every size, the fullest tray (main pleine + three groups) included.

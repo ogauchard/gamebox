@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>5000</title>
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
+<style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les dés, le lancer et les dés gardés sur la table, la
+     jauge des scores. */
+  :root {
+    --bg: #170f18;
+    --panel: #231826;
+    --line: #3d2b40;
+    --text: #f4edf3;
+    --dim: #ab98ad;
+    --bg-top: #2f1a33;
+    --btn: #2e2032;
+    --btn-hover: #3a2a3f;
+    --ok: #7fd08a;
+    --ko: #f0907e;
+    /* Les dés se dimensionnent sur la place réelle de la table (voir #board). */
+    --die: clamp(40px, min(10vh, 12vw), 84px);       /* navigateurs sans cqh */
+  }
+
+  /* ------------------------------------------------------------------- Dés */
+  /* Une grille de 3 × 3 : chaque point prend sa case. Le 1 est rouge, comme
+     sur bien des dés : avec le 5, c'est lui qui marque seul. */
+  .die {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--d); height: var(--d);
+    border: 0;
+    padding: calc(var(--d) * .13);
+    border-radius: calc(var(--d) * .2);
+    background: linear-gradient(150deg, #fffdf7 0%, #ece3d2 100%);
+    box-shadow: inset 0 calc(var(--d) * -.05) 0 rgba(0,0,0,.12), 0 2px 0 rgba(0,0,0,.25), 0 4px 10px rgba(0,0,0,.45);
+    display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+    cursor: default;
+    transition: transform .15s, box-shadow .15s, filter .15s;
+  }
+  .die:disabled { opacity: 1; }
+  .die i {
+    width: 76%; height: 76%; place-self: center;
+    border-radius: 50%;
+    background: #2b2228;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,.55);
+  }
+  .die .tl { grid-area: 1 / 1; } .die .tr { grid-area: 1 / 3; }
+  .die .ml { grid-area: 2 / 1; } .die .c  { grid-area: 2 / 2; } .die .mr { grid-area: 2 / 3; }
+  .die .bl { grid-area: 3 / 1; } .die .br { grid-area: 3 / 3; }
+  .die.v1 i { width: 100%; height: 100%; background: #c8322b; }
+  .die.roll { animation: roll .45s ease-out; }
+  @keyframes roll {
+    0%   { transform: translateY(-26px) rotate(-160deg) scale(.7); opacity: 0; }
+    65%  { transform: translateY(3px) rotate(12deg); opacity: 1; }
+    100% { transform: none; }
+  }
+  .slot {
+    flex: none; width: var(--d); height: var(--d);
+    border: 2px dashed rgba(255,255,255,.12);
+    border-radius: calc(var(--d) * .2);
+  }
+
+  /* ------------------------------------------------------------ Adversaires */
+  .player .meter { width: 132px; }
+  .marks { display: flex; gap: 6px; align-items: center; min-height: 16px; margin-top: 4px; font-size: 11px; color: var(--dim); }
+  .marks .open { border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
+  .marks .x { color: var(--ko); font-weight: 800; letter-spacing: 1px; }
+  .bubble {
+    position: absolute; top: -8px; right: 8px;
+    font-size: 11px; font-weight: 800;
+    padding: 1px 7px; border-radius: 999px;
+    background: #2f5d36; color: #fff; border: 1px solid #44804d;
+  }
+  .bubble.ko { background: #8e2c38; border-color: #b4414f; }
+  .bubble[hidden] { display: none; }
+
+  /* La jauge vers 5000. */
+  .meter { height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: var(--w, 0%); background: var(--accent); border-radius: inherit; transition: width .4s; }
+
+  /* ----------------------------------------------------------------- Table */
+  /* Les dés gardés ce tour (petits, par lancer, avec leurs points), le lancer
+     en cours, le total du tour. Hauteur : dés gardés 0,48 dé + 20, écarts 2 × 10,
+     lancer 1 dé + 12 (le dé choisi se soulève), total 26 — soit 1,5 dé + 78px.
+     Largeur : cinq dés et quatre écarts de 0,22 dé. */
+  #board {
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    --mini: calc(var(--die) * .48);
+  }
+  @supports (width: 1cqh) {
+    #board { --die: clamp(34px, min((100cqh - 82px) / 1.5, (100cqw - 20px) / 6), 96px); }
+  }
+  #tray {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 6px 14px;
+    min-height: calc(var(--mini) + 20px);
+    max-width: 100cqw;
+  }
+  #tray .empty { align-self: center; font-size: 12px; color: var(--dim); opacity: .6; }
+  .kept { display: flex; flex-direction: column; align-items: center; gap: 4px; --d: var(--mini); }
+  .kept .dice { display: flex; gap: 3px; }
+  .kept .pts { font-size: 12px; font-weight: 800; color: var(--dim); line-height: 1; }
+  .carried {
+    align-self: center;
+    font-size: 12px; font-weight: 700; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 999px; padding: 2px 9px;
+  }
+  #dice {
+    display: flex; justify-content: center; align-items: flex-end;
+    gap: calc(var(--die) * .22);
+    padding-top: 12px;
+    --d: var(--die);
+  }
+  #dice .die.sel {
+    transform: translateY(-10px);
+    box-shadow: 0 0 0 3px var(--accent), 0 10px 16px rgba(0,0,0,.5);
+  }
+  #dice .die.dead { filter: grayscale(.5) brightness(.6); }
+  #turnPts { min-height: 26px; font-size: 14px; color: var(--dim); text-align: center; }
+  #turnPts b { color: var(--text); font-size: 20px; margin: 0 2px; }
+  #turnPts b.lost { color: var(--ko); text-decoration: line-through; }
+
+  /* --------------------------------------------------------------- Le joueur */
+  #me .meter { max-width: 360px; margin: 6px auto 0; }
+  #me .marks { justify-content: center; }
+
+  /* -------------------------------------------------------------- Feuilles */
+  .sheet .scale { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0; }
+  .sheet .scale span { display: inline-flex; align-items: center; gap: 3px; --d: 22px; font-size: 13.5px; }
+  .sheet .scale b { margin-left: 4px; }
+
+  /* ------------------------------------------------- Téléphone (portrait) */
+  @media (max-width: 560px) {
+    main { padding-top: 12px; }                   /* place pour les bulles des adversaires */
+    #opponents .player .meter { width: auto; }
+    #opponents .marks { font-size: 10px; gap: 4px; }
+    .bubble { font-size: 9.5px; top: -9px; right: 4px; padding: 0 5px; }
+    @supports (width: 1cqh) {
+      #board { --die: clamp(34px, min((100cqh - 82px) / 1.5, (100cqw - 24px) / 6), 76px); }
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .die { transition: none; }
+    .die.roll { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>5000</h1>
+  <span class="meta" id="roundInfo">Tour 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div id="board">
+      <div id="tray"></div>
+      <div id="dice"></div>
+      <div id="turnPts"></div>
+    </div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions"></div>
+  <div id="me">
+    <div class="name"><span>Toi</span><span class="tag" id="myTag"></span></div>
+    <div class="meter"><i id="myFill"></i></div>
+    <div class="marks" id="myMarks"></div>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>5000</h2>
+    <p>Lance les cinq dés, mets de côté ceux qui marquent et relance les autres… ou encaisse
+       avant qu'un lancer sans rien ne te fasse <b>tout perdre</b>. Le premier à faire
+       <b>5000 points tout juste</b> gagne.</p>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur.</p>
+    <p class="hint">500 points pour ouvrir, des gains en multiples de 100, et trois ballots de suite
+       ramènent à zéro : le détail est dans les règles.</p>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Cinq dés. Le premier qui fait <b>5000 points tout juste</b> gagne.</p>
+    <h3>Ce qui marque</h3>
+    <div class="scale" id="scale"></div>
+    <ul>
+      <li><b>Brelan</b> (trois dés pareils) : 100 fois la face, sauf le brelan de 1, qui vaut
+          <b>700</b>.</li>
+      <li><b>Full</b> (un brelan et une paire) : le brelan <b>× 2</b> — 2 2 6 6 6 vaut 1200.
+          <b>Cinq dés pareils</b> comptent comme un full : cinq 1 font 1400.</li>
+      <li><b>Suite</b> 1 2 3 4 5 ou 2 3 4 5 6 : <b>1000</b>.</li>
+      <li>Les figures se font <b>en un seul lancer</b> : un 1, puis deux 1 au lancer suivant,
+          font 300 points, pas un brelan.</li>
+      <li>Pas de figure à quatre dés pareils : quatre 1 font un brelan de 1 et un 1 (800) ;
+          avec quatre 3, le quatrième ne marque pas.</li>
+    </ul>
+    <h3>Un tour</h3>
+    <ul>
+      <li>Tu lances les 5 dés. Après chaque lancer, <b>tous les dés qui marquent</b> sont mis
+          de côté : on ne choisit pas. Ils comptent au mieux — 1 1 1 5 5 est un full à 1400 —,
+          et un dé qui ne marque pas, comme le quatrième 2 de 2 2 2 2 5, reste à relancer.</li>
+      <li>Puis tu <b>encaisses</b> les points du tour, ou tu <b>relances</b> les dés qui
+          restent.</li>
+      <li><b>Main pleine</b> — quand tes 5 dés ont tous marqué, en un lancer ou en plusieurs,
+          tu peux les relancer tous et continuer à cumuler.</li>
+      <li>Un lancer qui ne marque rien met fin au tour : tu perds tous les points du tour, tu
+          gardes ton score.</li>
+      <li><b>Ballot</b> — c'est quand ton <b>premier lancer</b>, celui des 5 dés, ne marque rien.
+          Dès qu'il a marqué — un 1 ou un 5 suffit —, le tour ne peut plus finir en ballot,
+          même sur une main pleine relancée.</li>
+    </ul>
+    <h3>Pour encaisser</h3>
+    <ul>
+      <li><b>Ouvrir</b> — tant que tu n'as rien marqué, il faut au moins <b>500 points</b> dans
+          le tour : en dessous, on relance.</li>
+      <li><b>Multiple de 100</b> — le gain d'un tour doit être un multiple de 100 : avec 450,
+          il faut relancer.</li>
+      <li><b>Trois ballots de suite</b> — trois tours de suite qui finissent sur un ballot, et
+          ton score <b>retombe à zéro</b>. Tu restes ouvert. Un tour qui n'est pas un ballot,
+          encaissé ou perdu plus tard, interrompt la série.</li>
+    </ul>
+    <h3>La fin</h3>
+    <p>Le premier qui fait <b>5000 points tout juste</b> en encaissant gagne aussitôt.</p>
+    <ul>
+      <li>Si les dés qui marquent font <b>dépasser 5000</b> — à 4900, un 1 et un 5 feraient
+          5050 —, le <b>tour est perdu</b>, mais ce n'est <b>pas un ballot</b> : le lancer
+          marquait.</li>
+    </ul>
+    <p>Le premier joueur change à chaque partie.</p>
+    <p class="hint">D'après l'article « 5 000 (jeu) » de Wikipédia, avec les règles de la maison :
+       brelan de 1 à 700, full au double du brelan (cinq dés pareils compris), suites à 1000,
+       fin à 5000 tout juste, variantes des trois ballots et du multiple de 100.</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la partie</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Rejouer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   5000 — le jeu de dés. Un humain contre 3 adversaires gérés par l'ordinateur.
+
+   D'après l'article « 5 000 (jeu) » de Wikipédia, avec les règles de la maison :
+   cinq dés ; seuls le 1 (100) et le 5 (50) marquent seuls ; brelans (celui de 1
+   vaut 700), full (le brelan × 2, cinq dés pareils compris) et suites (1000),
+   en un seul lancer. Après chaque lancer, tous les dés qui marquent sont mis de
+   côté, puis on encaisse ou on relance le reste ; cinq dés gardés se relancent
+   tous (main pleine) ; un lancer sans rien fait perdre le tour, et c'est un
+   ballot si c'est le premier, celui des cinq dés. Ouverture à 500, gains en
+   multiples de 100, trois ballots de suite ramènent à zéro. Premier à 5000
+   tout juste : un lancer qui ferait dépasser perd le tour, sans ballot.
+   ========================================================================= */
+
+const DICE = 5;
+const TARGET = 5000;
+const OPENING = 500;             // le premier gain d'un joueur : au moins 500
+const STRIKES = 3;               // ballots de suite qui ramènent le score à zéro
+const BRELAN = [0, 700, 200, 300, 400, 500, 600];
+const SUITE = 1000;
+const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
+const THINK_MS = 550;            // avant un lancer de l'ordinateur
+const ROLL_MS = 750;             // lecture d'un lancer
+const KEEP_MS = 900;             // les dés qu'il garde, montrés avant qu'il relance ou encaisse
+const BALLOT_MS = 1500;          // un tour perdu : on le laisse voir
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* --------------------------------------------------------------- Points */
+const countsOf = (vals) => {
+  const c = [0, 0, 0, 0, 0, 0, 0];
+  for (const v of vals) c[v]++;
+  return c;
+};
+
+const NUMBER = ["", "un", "deux", "trois", "quatre", "cinq"];
+
+/* La meilleure lecture de dés tirés d'un même lancer, où chaque dé doit
+   marquer : { pts, name }, pts = 0 si un dé ne marque pas. Une suite ou un
+   full (cinq dés pareils compris) prennent les cinq dés ; sinon au plus un
+   brelan (il en faudrait six pour deux), et le reste en 1 et en 5. */
+function combo(vals) {
+  const c = countsOf(vals);
+  let best = { pts: 0, name: "" };
+  if (vals.length === DICE) {
+    if (c[2] && c[3] && c[4] && c[5] && (c[1] || c[6])) best = { pts: SUITE, name: c[1] ? "une petite suite" : "une grande suite" };
+    for (let y = 1; y <= 6; y++) {
+      if (c[y] === 5 && 2 * BRELAN[y] > best.pts) best = { pts: 2 * BRELAN[y], name: `un full de cinq ${y}` };
+      for (let x = 1; x <= 6; x++) {
+        if (c[y] === 3 && c[x] === 2 && 2 * BRELAN[y] > best.pts) best = { pts: 2 * BRELAN[y], name: `un full aux ${y}` };
+      }
+    }
+  }
+  for (let b = 0; b <= 6; b++) {
+    if (b && c[b] < 3) continue;
+    let pts = b ? BRELAN[b] : 0, ok = true;
+    const parts = b ? [`un brelan de ${b}`] : [];
+    for (let f = 1; f <= 6 && ok; f++) {
+      const k = c[f] - (f === b ? 3 : 0);
+      if (!k) continue;
+      if (f === 1 || f === 5) { pts += k * (f === 1 ? 100 : 50); parts.push(`${NUMBER[k]} ${f}`); }
+      else ok = false;
+    }
+    if (ok && pts > best.pts) best = { pts, name: parts.length > 1 ? parts.slice(0, -1).join(", ") + " et " + parts.at(-1) : parts[0] };
+  }
+  return best;
+}
+
+const scoreOf = (vals) => combo(vals).pts;
+
+/* Les dés gardés d'un lancer : tous ceux qui marquent, on ne choisit pas. C'est
+   la plus grande partie du lancer dont chaque dé marque, lue au mieux — 1 1 1 5 5
+   est un full à 1400 ; de 2 2 2 2 5, le brelan et le 5, le quatrième 2 se
+   relance. { dice, pts, name } ; dice vide sur un ballot. */
+function keptOf(dice) {
+  let best = { dice: [], pts: 0, name: "" };
+  for (let m = 1; m < 1 << dice.length; m++) {
+    const pick = dice.filter((_, i) => m >> i & 1);
+    if (pick.length < best.dice.length) continue;
+    const c = combo(pick.map((d) => d.v));
+    if (c.pts && (pick.length > best.dice.length || c.pts > best.pts)) best = { dice: pick, pts: c.pts, name: c.name };
+  }
+  return best;
+}
+
+/* Les points qui restent au joueur en cours avant 5000 tout juste. */
+const room = () => TARGET - S.players[S.current].score - S.turnPts;
+
+const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+const ptsLabel = (n) => `${fmt(n)} point${n > 1 ? "s" : ""}`;
+const diceLabel = (n) => `${n} dé${n > 1 ? "s" : ""}`;
+
+/* ------------------------------------------------------------------- État */
+const S = {
+  players: [],        // { name, ai, policy, score, opened, fails (ballots de suite), last, turns, best }
+  current: 0,         // le siège qui joue
+  starter: 0,         // qui a ouvert la partie : un tour de table de plus quand on y revient
+  games: 0,           // parties lancées : le premier joueur tourne de l'une à l'autre
+  round: 1,           // tour de table
+  dice: [],           // le lancer en cours, { uid, v } ; vide entre deux lancers
+  kept: [],           // les dés mis de côté depuis le dernier lancer de cinq : [{ dice, pts, name }]
+  carried: 0,         // points des mains pleines déjà relancées ce tour
+  turnPts: 0,         // points du tour : perdus si le tour est perdu
+  free: DICE,         // dés à lancer au prochain jet
+  keep: null,         // ce que le lancer en cours fait garder : keptOf(S.dice), null entre deux lancers
+  plan: null,         // ce que l'IA va faire des dés gardés : "bank" | "roll"
+  lost: 0,            // points du dernier tour perdu, pour l'affichage
+  phase: "idle",      // idle | roll (le tour commence) | keep (un lancer à trier) | lost (tour perdu) | over
+  winner: -1,
+  logs: [],
+  busy: false,        // l'ordinateur joue, ou un tour perdu s'affiche : l'humain attend
+  epoch: 0,           // change à chaque partie : un tour en vol d'une partie passée s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+const cur = () => S.players[S.current];
+let uidSeq = 0;
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* Tutoie l'humain, troisième personne pour les adversaires — jamais il/elle. */
+const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+
+/* --------------------------------------------------------------- Légalité */
+/* Un tour de `t` points s'encaisse-t-il ? Un multiple de 100, et 500 au moins
+   tant qu'on n'a pas ouvert. */
+const cashable = (opened, t) => t > 0 && t % 100 === 0 && (opened || t >= OPENING);
+
+/* Après un lancer qui marque, `seat` peut relancer ; et encaisser ? */
+const canRoll = (seat) => S.current === seat && S.phase === "keep" && !!S.keep;
+const canBank = (seat) => canRoll(seat) && cashable(S.players[seat].opened, S.turnPts + S.keep.pts);
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.epoch++;
+  const mkPlayer = (name, ai) => ({ name, ai, policy: ai ? "sharp" : undefined, score: 0, opened: false, fails: 0, last: null, turns: 0, best: 0 });
+  S.players = [mkPlayer("Toi", false)];
+  for (let i = 0; i < nPlayers - 1; i++) S.players.push(mkPlayer(AI_NAMES[i], true));
+  S.starter = S.games++ % nPlayers;
+  S.current = S.starter;
+  S.round = 1;
+  S.winner = -1;
+  S.logs = [];
+  S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
+  S.busy = false;
+  buildBoard();
+  beginTurn();
+}
+
+/* ------------------------------------------------------------------ Tours */
+/* Le seul endroit où un tour commence : cinq dés à lancer, rien de gardé. */
+function beginTurn() {
+  if (S.phase === "over") return;
+  S.dice = [];
+  S.kept = [];
+  S.carried = 0;
+  S.turnPts = 0;
+  S.free = DICE;
+  S.keep = null;
+  S.plan = null;
+  S.phase = "roll";
+  S.busy = false;
+  const p = cur();
+  p.last = null;
+  p.turns++;
+  render();
+  if (p.ai) aiTurn();
+}
+
+function nextTurn() {
+  S.current = (S.current + 1) % S.players.length;
+  if (S.current === S.starter) S.round++;
+  beginTurn();
+}
+
+/* Déclarée en `function` : les tests la remplacent pour imposer les dés. */
+function rollDie() { return 1 + Math.floor(Math.random() * 6); }
+
+/* Lance les dés libres et désigne ceux qui marquent : ils seront gardés.
+   Renvoie false quand le tour est perdu — rien ne marque, ou les dés qui
+   marquent feraient dépasser 5000 —, la suite étant programmée par loseTurn(). */
+function throwDice() {
+  const first = !S.turnPts;                      // les dés gardés marquent toujours : rien de gardé, premier lancer
+  S.dice = Array.from({ length: S.free }, () => ({ uid: ++uidSeq, v: rollDie() }));
+  S.plan = null;
+  const keep = keptOf(S.dice);
+  S.keep = keep.dice.length ? keep : null;       // montrés aussi sur un dépassement
+  if (!S.keep || keep.pts > room()) {
+    loseTurn(S.keep ? "bust" : first ? "ballot" : "lost");
+    return false;
+  }
+  S.phase = "keep";
+  return true;
+}
+
+/* Met de côté les dés qui marquent. Cinq dés gardés : main pleine, les cinq
+   repartent. Renvoie les points gardés. */
+function keepDice() {
+  const { dice, pts, name } = S.keep;
+  S.kept.push({ dice, pts, name });
+  S.turnPts += pts;
+  S.free -= dice.length;
+  S.dice = [];
+  S.keep = null;
+  if (!S.free) {
+    S.free = DICE;
+    S.carried = S.turnPts;
+    S.kept = [];
+  }
+  return pts;
+}
+
+/* Garder puis relancer. */
+function doRoll(seat) {
+  if (!canRoll(seat)) return false;
+  keepDice();
+  throwDice();
+  return true;
+}
+
+/* Garder puis encaisser. */
+function doBank(seat) {
+  if (!canBank(seat)) return false;
+  keepDice();
+  bank(seat);
+  return true;
+}
+
+function bank(seat) {
+  const p = S.players[seat];
+  const pts = S.turnPts;
+  const opening = !p.opened;
+  p.score += pts;
+  p.opened = true;
+  p.fails = 0;
+  p.best = Math.max(p.best, pts);
+  p.last = { kind: "bank", pts };
+  if (p.score === TARGET) {
+    log(`${says(p, "encaisses", "encaisse")} ${fmt(pts)} et ${p.ai ? "fait" : "fais"} ${fmt(TARGET)} tout juste !`);
+    endGame(seat);
+    return;
+  }
+  log(opening ? `${says(p, "ouvres", "ouvre")} avec ${ptsLabel(pts)}.`
+              : `${says(p, "encaisses", "encaisse")} ${ptsLabel(pts)} (${fmt(p.score)}).`);
+  nextTurn();
+}
+
+/* Le tour est perdu, et ses points avec. `why` :
+   - "ballot" : le premier lancer, celui des cinq dés, ne marque rien ; au
+     troisième tour de suite, le score retombe à zéro ;
+   - "lost" : un lancer suivant ne marque rien — une fois que le premier a
+     marqué, le tour ne peut plus finir en ballot, main pleine comprise ;
+   - "bust" : les dés qui marquent feraient dépasser 5000 (le lancer marquait).
+   Seul le ballot compte dans les trois de suite ; tout autre tour en rompt la
+   série. */
+async function loseTurn(why) {
+  const p = cur();
+  const lost = S.turnPts;
+  const old = p.score;
+  let kind = why;
+  if (why === "ballot") {
+    p.fails++;
+    if (p.fails >= STRIKES) { p.score = 0; p.fails = 0; kind = "zero"; }
+  } else p.fails = 0;
+  p.last = { kind, pts: lost };
+  S.lost = lost;
+  S.turnPts = 0;
+  S.phase = "lost";
+  S.busy = true;
+  log(kind === "bust" ? `${says(p, "dépasserais", "dépasserait")} ${fmt(TARGET)} avec les dés qui marquent : tour perdu${lost ? ` (${fmt(lost)})` : ""}.`
+      : kind === "zero" ? `${says(p, "fais", "fait")} trois ballots de suite et ${p.ai ? "retombe" : "retombes"} à zéro${old ? ` (${fmt(old)} perdus)` : ""}.`
+      : kind === "ballot" ? `${says(p, "fais", "fait")} ballot.`
+      : `${says(p, "perds", "perd")} ${ptsLabel(lost)} : le lancer ne marque rien.`);
+  render();
+  const epoch = S.epoch;
+  await sleep(BALLOT_MS);
+  if (epoch !== S.epoch || S.phase !== "lost") return;
+  nextTurn();
+}
+
+/* Le tour d'un siège tenu par l'ordinateur : lancer, montrer les dés gardés et
+   ce qu'il va faire, puis relancer ou encaisser. */
+async function aiTurn() {
+  const epoch = S.epoch, seat = S.current;
+  const gone = () => epoch !== S.epoch || S.current !== seat || S.phase === "over";
+  S.busy = true;
+  render();
+  await sleep(THINK_MS);
+  for (;;) {
+    if (gone()) return;
+    if (!throwDice()) return;
+    render();
+    await sleep(ROLL_MS);
+    if (gone()) return;
+    const bank = decide(seat);
+    S.plan = bank ? "bank" : "roll";
+    render();
+    await sleep(KEEP_MS);
+    if (gone()) return;
+    if (bank) { doBank(seat); return; }
+    keepDice();
+    S.plan = null;
+    render();
+    await sleep(THINK_MS);
+  }
+}
+
+/* La décision d'un siège de l'ordinateur, vérifiée : encaisser seulement si
+   c'est permis. */
+function decide(seat) {
+  const p = S.players[seat];
+  const d = policyOf(p).decide(p, seat);
+  return !!(d && d.bank) && canBank(seat);
+}
+
+/* ------------------------------------------------------------ Fin de partie */
+function endGame(seat) {
+  S.phase = "over";
+  S.winner = seat;
+  S.busy = false;
+  render();
+  showScores();
+}
+
+function showScores() {
+  const w = S.players[S.winner];
+  const order = S.players.map((p, i) => i).sort((a, b) => S.players[b].score - S.players[a].score);
+  let html = "<table><thead><tr><th>Joueur</th><th>Meilleur tour</th><th>Total</th></tr></thead><tbody>";
+  for (const i of order) {
+    const p = S.players[i];
+    const win = i === S.winner;
+    html += `<tr${win ? ' class="win"' : ""}><td>${p.name}${win ? " 🏆" : ""}</td>`
+          + `<td>${p.best ? fmt(p.best) : "—"}</td><td>${fmt(p.score)}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  const turns = `${w.turns} tour${w.turns > 1 ? "s" : ""}`;
+  html += w.ai
+    ? `<p class="next-round">🏆 <b>${w.name}</b> l'emporte en ${turns}, avec ${ptsLabel(w.score)}.</p>`
+    : `<p class="next-round">🏆 <b>Tu l'emportes</b> en ${turns}, avec ${ptsLabel(w.score)} !</p>`;
+  el("scoreBody").innerHTML = html;
+  el("scoreTitle").textContent = "Fin de la partie";
+  el("btnNext").textContent = "Rejouer";
+  el("btnNext").dataset.over = "1";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose :
+     decide(p, seat) -> { bank: encaisser, ou relancer }
+   appelée après chaque lancer qui marque : les dés gardés sont imposés
+   (S.keep), il ne reste qu'à choisir. Il n'y a rien de caché au 5000 :
+   les dés, les scores, les ballots de chacun sont publics. Une politique ne
+   fait que décider — elle ne touche pas à l'état et ne lance pas de dé. */
+
+/* Déclarée en `function` : les tests la remplacent pour vérifier qu'aucune
+   politique ne modifie la partie. */
+function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
+
+/* ---------------------------------------------------------------------------
+   Politique simple : encaisse dès 400 points, ou dès 200 quand il reste moins
+   de trois dés à relancer — dès que c'est permis. Les adversaires jouent
+   toujours « sharp » ; celle-ci ne sert que de référence au banc d'essai.
+   --------------------------------------------------------------------------- */
+const simplePolicy = {
+  decide(p) {
+    const t = S.turnPts + S.keep.pts;
+    const left = S.free - S.keep.dice.length || DICE;
+    return { bank: cashable(p.opened, t) && (p.score + t === TARGET || t >= 400 || (left < 3 && t >= 200)) };
+  },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable ». Elle calcule : tous les lancers de 1 à 5 dés et
+   les dés que chacun fait garder sont connus d'avance (OUTCOMES), et une
+   programmation dynamique sur (points du tour, dés à lancer) donne ce que vaut
+   relancer si la suite du tour est jouée au mieux — ouverture et multiples de
+   100 compris. Elle encaisse quand c'est mieux que relancer, en comptant en
+   points du tour, avec deux corrections :
+   - faire 5000 arrête le tour : elle encaisse toujours une victoire, et le
+     calcul aussi ; un lancer qui ferait dépasser perd le tour ;
+   - viser 5000 vaut davantage quand un adversaire risque de gagner avant son
+     prochain tour (q, la probabilité qu'au moins un l'atteigne en un tour, s'il
+     joue tout pour) : la partie risque de finir, ses points ne vaudraient plus
+     rien ; elle tente alors le coup jusqu'au bout.
+   Les ballots n'entrent pas dans le calcul : elle ne décide qu'après un lancer
+   qui marque, et passé le premier lancer le tour ne peut plus en être un.
+   Réglages mesurés au banc d'essai : un bonus de victoire sans menace (AI.win)
+   fait viser 5000 de trop loin et perd, contre la politique simple comme entre
+   redoutables.
+   --------------------------------------------------------------------------- */
+const AI = {
+  win: 0,          // atteindre 5000 vaut ces points de plus qu'un tour ordinaire, menace ou pas
+  threat: 3000,    // et ceux-ci, fois q / (1 - q), q le risque qu'un adversaire gagne avant mon tour
+};
+
+/* Tous les lancers de n dés, regroupés par faces : leur probabilité (p), les
+   dés qu'ils font garder (k, 0 si rien ne marque) et leurs points par pas de 50
+   (s). Des tableaux plats : solve() les parcourt des dizaines de milliers de
+   fois. */
+const OUTCOMES = [null];
+{
+  const fact = [1, 1, 2, 6, 24, 120];
+  for (let n = 1; n <= DICE; n++) {
+    const p = [], k = [], s = [], faces = [];
+    const rec = (from) => {
+      if (faces.length === n) {
+        const c = countsOf(faces);
+        let perms = fact[n];
+        for (let f = 1; f <= 6; f++) perms /= fact[c[f]];
+        const kept = keptOf(faces.map((v) => ({ v })));
+        p.push(perms / 6 ** n);
+        k.push(kept.dice.length);
+        s.push(kept.pts / 50);
+        return;
+      }
+      for (let f = from; f <= 6; f++) { faces.push(f); rec(f); faces.pop(); }
+    };
+    rec(1);
+    OUTCOMES.push({ p: Float64Array.from(p), k: Int8Array.from(k), s: Int16Array.from(s) });
+  }
+}
+
+/* Valeur de chaque état d'un tour, (points t de 0 à `need`, dés à lancer n), à
+   la case t / 50 * 6 + n : ce que vaut relancer, si la suite est jouée au
+   mieux. Un lancer qui ne marque rien ou qui passerait `need` perd le tour
+   (0). À `need`, on gagne : encaisser est d'office. bankAt(t) : ce que vaut
+   encaisser t (-Infinity si c'est interdit). */
+function solve(need, bankAt) {
+  const top = need / 50;
+  const V = new Float64Array((top + 1) * 6), R = new Float64Array((top + 1) * 6);
+  for (let ti = top; ti >= 0; ti--) {
+    const bank = bankAt(ti * 50), stop = ti === top && bank > -Infinity;
+    for (let n = 1; n <= DICE; n++) {
+      const { p, k, s } = OUTCOMES[n];
+      let r = 0;
+      for (let i = 0; i < p.length; i++) {
+        const t2 = ti + s[i];
+        if (k[i] && t2 <= top) r += p[i] * V[t2 * 6 + (n - k[i] || DICE)];
+      }
+      R[ti * 6 + n] = r;
+      V[ti * 6 + n] = stop ? bank : Math.max(bank, r);
+    }
+  }
+  return R;
+}
+
+/* Les tables déjà calculées : une par situation de joueur. */
+const TABLES = new Map();
+function cached(key, make) {
+  let v = TABLES.get(key);
+  if (v === undefined) {
+    if (TABLES.size > 3000) TABLES.clear();
+    v = make();
+    TABLES.set(key, v);
+  }
+  return v;
+}
+
+/* Un tour de `t` points mène-t-il à 5000 tout juste ? Il manque `need` points. */
+const wins = (opened, need, t) => cashable(opened, t) && t === need;
+
+/* Les points du tour, avec un bonus `win` pour celui qui fait 5000. */
+const valueTable = (opened, need, win) => cached(`v${+opened}|${need}|${win}`, () =>
+  solve(need, (t) => (cashable(opened, t) ? t + (t === need ? win : 0) : -Infinity)));
+
+/* La probabilité qu'un joueur fasse 5000 dans son prochain tour, s'il joue
+   tout pour. */
+const reachProb = (opened, need) => cached(`r${+opened}|${need}`, () =>
+  solve(need, (t) => (t === need ? 1 : 0))[DICE]);
+
+/* Le risque qu'un adversaire gagne avant le prochain tour de `seat`. */
+function threat(seat) {
+  let calm = 1;
+  S.players.forEach((q, i) => { if (i !== seat) calm *= 1 - reachProb(q.opened, TARGET - q.score); });
+  return 1 - calm;
+}
+
+const sharpPolicy = {
+  decide(p, seat) {
+    const q = Math.min(Math.round(threat(seat) * 20) / 20, 0.95);
+    const win = Math.round((AI.win + AI.threat * q / (1 - q)) / 50) * 50;
+    const need = TARGET - p.score;
+    const t = S.turnPts + S.keep.pts;
+    // Gagner tout de suite : rien ne vaut mieux.
+    if (wins(p.opened, need, t)) return { bank: true };
+    if (!cashable(p.opened, t)) return { bank: false };
+    const left = S.free - S.keep.dice.length || DICE;
+    return { bank: t >= valueTable(p.opened, need, win)[t / 50 * 6 + left] };
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+
+/* ================================================================= ENTRÉES */
+
+const myTurn = () => S.current === 0 && !S.players[0].ai && !S.busy && (S.phase === "roll" || S.phase === "keep");
+
+/* « Lancer » au début du tour, « Relancer » ensuite : les dés qui marquent
+   sont mis de côté, les autres repartent. */
+function onRollClick() {
+  if (!myTurn()) return;
+  if (S.phase === "roll") throwDice();
+  else if (!doRoll(0)) return;
+  render();
+}
+
+function onBankClick() {
+  if (!myTurn() || !doBank(0)) return;
+  render();
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/* Les points de chaque face, dans la grille de 3 × 3. */
+const PIPS = [null, ["c"], ["tr", "bl"], ["tr", "c", "bl"], ["tl", "tr", "bl", "br"],
+              ["tl", "tr", "c", "bl", "br"], ["tl", "tr", "ml", "mr", "bl", "br"]];
+
+function dieEl(v, extra) {
+  const b = mk("button", "die v" + v + (extra ? " " + extra : ""));
+  for (const pos of PIPS[v]) b.appendChild(mk("i", pos));
+  b.disabled = true;
+  return b;
+}
+
+function buildBoard() {
+  const host = el("opponents");
+  host.innerHTML = "";
+  S.players.forEach((p, pi) => {
+    if (pi === 0) return;
+    const box = mk("div", "player");
+    const name = mk("div", "name");
+    name.appendChild(mk("span", null, p.name));
+    const tag = mk("span", "tag", "");
+    name.appendChild(tag);
+    box.appendChild(name);
+    const meter = mk("div", "meter");
+    const fill = mk("i");
+    meter.appendChild(fill);
+    box.appendChild(meter);
+    const marks = mk("div", "marks");
+    box.appendChild(marks);
+    const bubble = mk("span", "bubble");
+    box.appendChild(bubble);
+    host.appendChild(box);
+    Object.assign(p, { _box: box, _tag: tag, _fill: fill, _marks: marks, _bubble: bubble });
+  });
+}
+
+/* « à ouvrir » tant que le joueur n'a rien marqué, une croix par ballot de suite. */
+function renderMarks(host, p) {
+  host.innerHTML = "";
+  if (!p.opened) host.appendChild(mk("span", "open", "à ouvrir"));
+  if (p.fails) host.appendChild(mk("span", "x", "✗".repeat(p.fails)));
+}
+
+const meterWidth = (p) => `${Math.min(100, p.score / TARGET * 100)}%`;
+
+let shownUids = new Set();
+
+/* Le sujet d'une phrase de statut : « Tu gardes », « <b>Nora</b> garde ». */
+const who = (p, second, third) => (p.ai ? `<b>${p.name}</b> ${third}` : `Tu ${second}`);
+
+function statusHtml() {
+  const p = cur();
+  if (!p) return "";
+  switch (S.phase) {
+    case "over": {
+      const w = S.players[S.winner];
+      return w.ai ? `🏆 <b>${w.name}</b> fait ${fmt(TARGET)} tout juste et gagne.` : `🏆 Tu fais ${fmt(TARGET)} tout juste : <b>tu gagnes !</b>`;
+    }
+    case "lost": {
+      const kind = p.last && p.last.kind;
+      if (kind === "zero") return `Troisième ballot de suite ! ${who(p, "retombes", "retombe")} à <b>zéro</b>.`;
+      if (kind === "bust") return `Trop haut ! Les dés qui marquent (+${S.keep ? S.keep.pts : 0}) feraient dépasser ${fmt(TARGET)} : tour perdu, mais pas de ballot.`;
+      if (kind === "ballot") return `Ballot ! Le premier lancer ne marque rien.`;
+      return `Rien ne marque ! ${who(p, "perds", "perd")} <b>${ptsLabel(S.lost)}</b> — pas de ballot, le premier lancer avait marqué.`;
+    }
+    case "roll":
+      if (!p.ai) return p.opened ? "À toi : lance les dés." : `À toi : lance les dés. Il te faut <b>${OPENING}</b> points pour ouvrir.`;
+      return `${who(p, "lances", "lance")} les dés…`;
+    case "keep": {
+      if (!S.dice.length) {
+        const again = S.free === DICE && !S.kept.length ? "Main pleine ! " : "";
+        return `${again}${who(p, "relances", "relance")} ${S.free === DICE ? "les 5 dés" : diceLabel(S.free)}…`;
+      }
+      const { dice, pts, name } = S.keep;
+      const t = S.turnPts + pts;
+      const left = S.free - dice.length || DICE;
+      if (p.ai) {
+        if (!S.plan) return `<b>${p.name}</b> garde ${name} (+${pts})…`;
+        const then = S.plan === "bank" ? `et encaisse ${fmt(t)}` : `et relance ${left === DICE ? "les 5 dés" : diceLabel(left)}`;
+        return `<b>${p.name}</b> garde ${name} (+${pts}) ${then}.`;
+      }
+      let s = `Tu gardes ${name} : <b>+${pts}</b>. `;
+      if (!p.opened && t < OPENING) s += `Il te faut ${OPENING} pour ouvrir : relance.`;
+      else if (t % 100) s += `${fmt(t)} n'est pas un multiple de 100 : relance.`;
+      else if (p.score + t === TARGET) s += `Encaisse ${fmt(t)} et <b>tu gagnes</b> !`;
+      else s += `Encaisse ${fmt(t)}, ou relance ${left === DICE ? "les 5 dés (main pleine)" : diceLabel(left)}.`;
+      return s;
+    }
+    default: return "";
+  }
+}
+
+function renderTable(next) {
+  const tray = el("tray");
+  tray.innerHTML = "";
+  if (S.carried) tray.appendChild(mk("span", "carried", `main pleine · ${fmt(S.carried)}`));
+  for (const g of S.kept) {
+    const box = mk("div", "kept");
+    const row = mk("div", "dice");
+    for (const d of g.dice) row.appendChild(dieEl(d.v));
+    box.appendChild(row);
+    box.appendChild(mk("span", "pts", `+${g.pts}`));
+    tray.appendChild(box);
+  }
+  if (!S.carried && !S.kept.length) tray.appendChild(mk("span", "empty", "les dés gardés se mettent ici"));
+
+  const host = el("dice");
+  host.innerHTML = "";
+  if (S.dice.length) {
+    for (const d of S.dice) {
+      next.add(d.uid);
+      let cls = "";
+      if (S.keep && S.keep.dice.includes(d)) cls += " sel";
+      if (S.phase === "lost") cls += " dead";
+      if (!shownUids.has(d.uid)) cls += " roll";
+      host.appendChild(dieEl(d.v, cls.trim()));
+    }
+  } else {
+    for (let i = 0; i < S.free; i++) host.appendChild(mk("div", "slot"));
+  }
+
+  const line = el("turnPts");
+  const p = cur();
+  if (S.phase === "over" || !p) line.innerHTML = "";
+  else if (S.phase === "lost") line.innerHTML = `Ce tour <b class="lost">${fmt(S.lost)}</b>`;
+  else line.innerHTML = `Ce tour <b>${fmt(S.turnPts)}</b>` + (p.opened ? "" : ` · ouverture à ${OPENING}`);
+}
+
+/* Deux boutons, toujours présents : la hauteur de la zone ne bouge pas d'un
+   tour à l'autre (sur téléphone, une zone vide se replie). */
+function renderActions() {
+  const host = el("actions");
+  host.innerHTML = "";
+  const mine = myTurn();
+  let label = "Lancer les dés", can = false;
+  if (mine && S.phase === "roll") can = true;
+  else if (mine && canRoll(0)) {
+    const left = S.free - S.keep.dice.length || DICE;
+    can = true;
+    label = `Relancer ${left === DICE ? "les 5 dés" : diceLabel(left)}`;
+  }
+  const roll = mk("button", mine && S.phase === "roll" ? "primary" : "", label);
+  roll.disabled = !can;
+  roll.addEventListener("click", onRollClick);
+  host.appendChild(roll);
+
+  const cash = mine && canBank(0);
+  const bank = mk("button", "primary", cash ? `Encaisser ${fmt(S.turnPts + S.keep.pts)}` : "Encaisser");
+  bank.disabled = !cash;
+  bank.addEventListener("click", onBankClick);
+  host.appendChild(bank);
+}
+
+function render() {
+  if (!S.players.length) return;
+  const next = new Set();
+  S.players.forEach((p, pi) => {
+    if (pi === 0 || !p._box) return;
+    p._box.classList.toggle("active", S.current === pi && S.phase !== "over");
+    p._tag.textContent = ptsLabel(p.score);
+    p._fill.style.setProperty("--w", meterWidth(p));
+    renderMarks(p._marks, p);
+    const l = p.last;
+    p._bubble.hidden = !l;
+    if (l) {
+      p._bubble.className = "bubble" + (l.kind === "bank" ? "" : " ko");
+      p._bubble.textContent = l.kind === "bank" ? `+${fmt(l.pts)}` : l.kind === "zero" ? "à zéro" : l.kind === "bust" ? "dépassé"
+                            : l.kind === "ballot" ? "ballot" : `−${fmt(l.pts)}`;
+    }
+  });
+  const me = S.players[0];
+  el("myTag").textContent = ptsLabel(me.score);
+  el("myFill").style.setProperty("--w", meterWidth(me));
+  renderMarks(el("myMarks"), me);
+
+  renderTable(next);
+  shownUids = next;
+  renderActions();
+  el("me").classList.toggle("active", S.current === 0 && S.phase !== "over");
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
+  el("roundInfo").textContent = `Tour ${S.round} · objectif ${fmt(TARGET)}`;
+}
+
+/* ============================================================== Interface */
+/* Toujours quatre joueurs : toi et trois adversaires « sharp », partie en
+   5000 points. newGame() reste générique — les tests et le banc d'essai y
+   asseyent d'autres tablées (2 à 6) par startGame(n). */
+const PLAYERS = 4;
+
+function startGame(nPlayers = PLAYERS) {
+  el("startOverlay").hidden = true;
+  el("scoreOverlay").hidden = true;
+  newGame(nPlayers);
+}
+
+// Les règles montrent ce qui marque, dés à l'appui.
+for (const [vals, pts] of [[[1], 100], [[5], 50], [[1, 1, 1], 700], [[4, 4, 4], 400], [[2, 2, 6, 6, 6], 1200], [[2, 3, 4, 5, 6], 1000]]) {
+  const item = mk("span");
+  for (const v of vals) item.appendChild(dieEl(v));
+  item.appendChild(mk("b", null, fmt(pts)));
+  el("scale").appendChild(item);
+}
+
+el("btnStart").addEventListener("click", () => startGame());
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  newGame(S.players.length);
+});
+</script>
+</body>
+</html>
