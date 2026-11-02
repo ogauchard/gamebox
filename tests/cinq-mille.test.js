@@ -7,7 +7,8 @@
  *      sans passer 5000, main pleine, ballot (premier lancer seulement),
  *      tour perdu et dépassement vrais,
  *      encaissements permis (ouverture, multiple de 100), trois ballots, ordre
- *      des tours, scores reconstitués, fin à 5000 tout juste ;
+ *      des tours, tour à reprendre offert au suivant tel qu'encaissé, et repris
+ *      tel quel, scores reconstitués, fin à 5000 tout juste ;
  *   2. des cas ciblés, tours d'IA neutralisés et dés imposés.
  */
 "use strict";
@@ -71,10 +72,13 @@ const roomOf = () => 5000 - S.players[S.current].score - S.turnPts;
    début de tour est vérifié à l'instant où il a lieu. */
 const illegal = [];
 const bad = (what) => { illegal.push(what); };
-const cov = { games: 0, turns: 0, maxRounds: 0, ballots: 0, losts: 0, busts: 0, zeros: 0, banks: 0, opens: 0, wins: 0, pleine: 0, full: 0, suites: 0, refused: 0 };
+const cov = { games: 0, turns: 0, maxRounds: 0, ballots: 0, losts: 0, busts: 0, zeros: 0, banks: 0, opens: 0, wins: 0, pleine: 0, full: 0, suites: 0, refused: 0,
+              offers: 0, noOffer: 0, resumes: 0, resumedPleine: 0, chains: 0, resumedBanks: 0, resumedOpens: 0, resumedLost: 0, humanResumes: 0 };
 let expected = [];          // le score de chacun, reconstitué depuis les encaissements et les remises à zéro
 let lastSeat = null;
 let checkOrder = false;
+let banked = null;          // le dernier encaissement, tel que le tour suivant doit pouvoir le reprendre
+const chained = new WeakSet();   // les offres d'un tour qui en reprenait déjà un
 
 const _newGame = ctx.newGame;
 ctx.newGame = function (n) {
@@ -83,15 +87,47 @@ ctx.newGame = function (n) {
   return _newGame(n);
 };
 
+/* Un tour commence : le précédent l'a-t-il encaissé, il est offert tel quel —
+   ses points, ses dés gardés, les dés qui restent —, sinon rien ne l'est ;
+   l'offre tombe quand ses points font déjà ce qui manque au nouveau joueur. */
 const _beginTurn = ctx.beginTurn;
 ctx.beginTurn = function () {
-  if (checkOrder && S.phase !== "over") {
-    const want = lastSeat === null ? S.starter : (lastSeat + 1) % S.players.length;
-    if (S.current !== want) bad({ order: S.current, want });
-    lastSeat = S.current;
-    cov.turns++;
+  const b = banked, o = S.offer;
+  banked = null;
+  if (!checkOrder || S.phase === "over") return _beginTurn();
+  const want = lastSeat === null ? S.starter : (lastSeat + 1) % S.players.length;
+  if (S.current !== want) bad({ order: S.current, want });
+  lastSeat = S.current;
+  cov.turns++;
+  if (b ? !o || o.from !== b.seat || o.pts !== b.pts || o.free !== b.free || o.kept !== b.kept || o.carried !== b.carried : o) {
+    bad({ offer: o && { from: o.from, pts: o.pts, free: o.free }, banked: b && { seat: b.seat, pts: b.pts, free: b.free } });
   }
-  return _beginTurn();
+  if (o && b.chain) chained.add(o);
+  const need = 5000 - S.players[S.current].score;
+  const r = _beginTurn();
+  if (o) {
+    // L'IA a pu reprendre aussitôt (S.resumed) ; l'humain, ou une IA qui laisse, voient encore l'offre.
+    const stays = S.offer === o || !!(S.resumed && S.resumed.from === o.from);
+    if (stays !== o.pts < need) bad({ offerKept: stays, pts: o.pts, need });
+    cov[stays ? "offers" : "noOffer"]++;
+  }
+  return r;
+};
+
+/* Reprendre : le tour en cours devient celui du précédent, à l'identique. */
+const _takeOffer = ctx.takeOffer;
+ctx.takeOffer = function (seat) {
+  const o = S.offer;
+  const done = _takeOffer(seat);
+  if (!done) return done;
+  if (S.turnPts !== o.pts || S.free !== o.free || S.kept !== o.kept || S.carried !== o.carried || S.offer
+      || !S.resumed || S.resumed.from !== o.from || S.phase !== "roll" || seat !== (o.from + 1) % S.players.length) {
+    bad({ takeOffer: seat, pts: S.turnPts, free: S.free, from: o.from });
+  }
+  cov.resumes++;
+  if (o.free === 5) cov.resumedPleine++;
+  if (chained.has(o)) cov.chains++;
+  return done;
 };
 
 /* Un lancer : les dés libres, et tous ceux qui marquent désignés pour être
@@ -102,7 +138,10 @@ ctx.throwDice = function () {
   if (S.dice.length) bad({ throwWithDice: S.dice.map((d) => d.v) });
   if (!(n >= 1 && n <= 5)) bad({ free: n });
   if (S.phase !== "roll" && S.phase !== "keep") bad({ throwPhase: S.phase });
+  // Lancer avec un tour à reprendre sur la table, c'est le laisser : cinq dés, à zéro.
+  if (S.offer && (n !== 5 || S.turnPts || S.resumed)) bad({ throwOverOffer: n, t: S.turnPts });
   const scoring = _throwDice();
+  if (S.offer) bad({ offerAfterThrow: S.offer.pts });
   const vals = S.dice.map((d) => d.v), rk = refKept(vals);
   if (vals.length !== n || !vals.every((v) => Number.isInteger(v) && v >= 1 && v <= 6)) bad({ thrown: vals, n });
   if (scoring !== (rk.n > 0 && rk.pts <= room)) bad({ lostWrong: vals, scoring, room });
@@ -137,10 +176,14 @@ ctx.bank = function (seat) {
   const t = S.turnPts, s0 = p.score, opened = p.opened;
   if (seat !== S.current) bad({ bankSeat: seat, current: S.current });
   if (t <= 0 || t % 100 || (!opened && t < 500) || s0 + t > 5000) bad({ bankIllegal: t, opened, s0 });
+  if (!(S.free >= 1 && S.free <= 5)) bad({ bankFree: S.free });
   expected[seat] += t;
   cov.banks++;
   if (!opened) cov.opens++;
+  if (S.resumed) { cov.resumedBanks++; if (!opened) cov.resumedOpens++; }
+  banked = { seat, pts: t, free: S.free, kept: S.kept, carried: S.carried, chain: !!S.resumed };
   _bank(seat);
+  banked = null;
   if (p.score !== s0 + t || p.fails !== 0 || !p.opened) bad({ bankAfter: p.score, s0, t });
   if ((s0 + t === 5000) !== (S.phase === "over")) bad({ end: s0 + t, phase: S.phase });
 };
@@ -156,6 +199,10 @@ ctx.loseTurn = function (why) {
   const vals = S.dice.map((d) => d.v);
   const want = refKept(vals).n > 0 ? "bust" : first ? "ballot" : "lost";
   if (why !== want || (want === "ballot" && vals.length !== 5)) bad({ why, want, vals });
+  if (S.resumed) {
+    cov.resumedLost++;
+    if (why === "ballot") bad({ resumedBallot: vals });
+  }
   const r = _loseTurn(why);
   if (why !== "ballot") {
     cov[why === "bust" ? "busts" : "losts"]++;
@@ -192,38 +239,45 @@ const _random = vmMath.random;
 vmMath.random = function () { if (counting) draws++; return _random(); };
 const snapshot = () => JSON.stringify({
   d: S.dice, k: S.kept, keep: S.keep, t: S.turnPts, f: S.free, c: S.carried, ph: S.phase, cur: S.current,
+  o: S.offer, r: S.resumed,
   pl: S.players.map((p) => [p.score, p.opened, p.fails, p.turns, p.last]),
 });
 const _policyOf = ctx.policyOf;
 ctx.policyOf = function (p) {
   const pol = _policyOf(p);
-  return {
-    decide(...args) {
-      const before = snapshot();
-      counting = true; draws = 0;
-      try { return pol.decide(...args); }
-      finally {
-        counting = false;
-        if (draws || snapshot() !== before) impure++;
-      }
-    },
+  const pure = (name) => (...args) => {
+    const before = snapshot();
+    counting = true; draws = 0;
+    try { return pol[name](...args); }
+    finally {
+      counting = false;
+      if (draws || snapshot() !== before) impure++;
+    }
   };
+  return { decide: pure("decide"), resume: pure("resume") };
 };
 
 const onRollClick = ctx.onRollClick;
 const onBankClick = ctx.onBankClick;
+const onResumeClick = ctx.onResumeClick;
 const myTurn = g("myTurn");
 const keptVals = () => (S.keep ? S.keep.dice.map((d) => d.v).sort().join(" ") : "");
 
 /* ---------------------------------------------------- 1. Parties complètes */
-/* Le siège humain encaisse au hasard quand il le peut, en essayant au passage
-   ce qui doit être refusé ; les dés gardés ne se choisissent pas. */
+/* Le siège humain encaisse au hasard quand il le peut, et reprend une fois sur
+   deux le tour qu'on lui laisse, en essayant au passage ce qui doit être
+   refusé ; les dés gardés ne se choisissent pas. */
 function humanAct() {
   const me = S.players[0];
   if (S.phase === "roll") {
     onBankClick();
     okOnce(S.phase === "roll" && !S.dice.length, "on n'encaisse rien avant d'avoir lancé");
-    onRollClick();
+    if (!S.offer) {
+      onResumeClick();
+      okOnce(S.phase === "roll" && !S.dice.length && !S.resumed, "sans tour laissé par le précédent, rien à reprendre");
+    }
+    if (S.offer && Math.random() < 0.5) { cov.humanResumes++; onResumeClick(); }
+    else onRollClick();
     return;
   }
   const rk = refKept(S.dice.map((d) => d.v));
@@ -341,6 +395,7 @@ async function targetedTests() {
   const settle = async () => { for (let i = 0; i < 50 && S.phase === "lost"; i++) await tick(); };
   const me = () => S.players[0];
   const canBank = g("canBank");
+  const fmt = g("fmt");           // les milliers séparés par une espace fine insécable
 
   /* ------------------------------------------------------------ Un tour */
   setup({ opened: [true, true, true, true] });
@@ -506,6 +561,126 @@ async function targetedTests() {
      "« Rejouer » : nouvelle partie, et le premier joueur change");
   byId.get("scoreOverlay").hidden = true;
 
+  /* ---------------------------------------------------- Reprendre un tour */
+  /* Le siège 3 (Yuki) lance `throws` — le premier, puis des relances — et
+     encaisse : son tour est laissé au siège 0, qui suit. */
+  const leave = (st, throws) => {
+    setup(st);
+    S.current = 3; S.phase = "idle";
+    ctx.beginTurn();
+    seq.push(...throws[0]);
+    ctx.throwDice();
+    for (const vals of throws.slice(1)) { seq.push(...vals); ctx.doRoll(3); }
+    ctx.doBank(3);
+  };
+  const yuki = () => S.players[3];
+  const buttons = () => byId.get("actions").children.map((b) => b.textContent);
+
+  leave({ scores: [1000, 0, 0, 2000] }, [[1, 1, 2, 3, 4]]);
+  ok(S.current === 0 && S.phase === "roll" && S.offer && S.offer.from === 3 && S.offer.pts === 200 && S.offer.free === 3,
+     "Yuki encaisse 200 en laissant trois dés : son tour est offert au suivant");
+  ok(yuki().score === 2200, "qui encaisse garde ses points");
+  ok(buttons().join(" | ") === "Lancer les 5 dés | Reprendre 200", `deux choix : lancer les 5 dés, ou reprendre les 200 (${buttons()})`);
+  ok(byId.get("turnPts").innerHTML.includes("À reprendre <b>200</b>") && byId.get("board").classList.contains("offer")
+     && byId.get("status").innerHTML.includes("reprends</b> le tour de Yuki : 200 points, 3 dés"),
+     "la table montre le tour à reprendre, estompé, et le statut dit ce qu'il vaut");
+  seq.push(5, 2, 3);
+  byId.get("actions").children[1].click();
+  ok(S.phase === "keep" && S.dice.length === 3 && S.turnPts === 200 && S.kept.length === 1 && S.resumed && S.resumed.from === 3,
+     "« Reprendre » lance aussitôt les trois dés qui restaient, à partir de 200, les deux 1 de Yuki sur la table");
+  ok(!byId.get("board").classList.contains("offer") && byId.get("turnPts").innerHTML.includes("Ce tour <b>200</b>"), "le tour repris est le tien : plus estompé");
+  ok(keptVals() === "5" && !canBank(0), "un 5 : 250, pas un multiple de 100");
+  roll([5, 2]);
+  ok(canBank(0) && S.keep.pts === 50, "un autre 5 : 300");
+  onBankClick();
+  ok(me().score === 1300 && yuki().score === 2200, "le tour repris s'encaisse en entier pour toi : 200 + 50 + 50 = 300, Yuki garde ses 200");
+  ok(S.logs.at(-1) === `Tu encaisses 300 points sur le tour de Yuki (${fmt(1300)}).`, `le journal dit que le tour était repris (${S.logs.at(-1)})`);
+  ok(S.current === 1 && S.offer && S.offer.from === 0 && S.offer.pts === 300 && S.offer.free === 1 && S.offer.kept.length === 3,
+     "en chaîne : le tour repris et encaissé est offert à son tour au suivant, 300 points et le dernier dé");
+
+  leave({ scores: [1000, 0, 0, 2000] }, [[1, 1, 2, 3, 4]]);
+  roll([1, 2, 3, 4, 6]);
+  ok(S.dice.length === 5 && S.turnPts === 0 && !S.offer && !S.resumed && !S.kept.length && S.keep.pts === 100,
+     "« Lancer les 5 dés » laisse le tour de Yuki : cinq dés, à zéro");
+  onBankClick();
+  ok(me().score === 1100 && S.offer && S.offer.pts === 100, "et les 200 de Yuki ne comptent pas : tu encaisses 100, et c'est ce que tu laisses");
+
+  leave({ scores: [1000, 0, 0, 2000], fails: [2, 0, 0, 0] }, [[1, 1, 2, 3, 4]]);
+  seq.push(2, 3, 4);
+  onResumeClick();
+  ok(S.phase === "lost" && me().last.kind === "lost" && S.lost === 200 && me().score === 1000 && me().fails === 0,
+     "le premier lancer d'un tour repris ne marque rien : tour perdu, pas un ballot — deux ballots avant, pas de retour à zéro, la série est rompue");
+  ok(yuki().score === 2200 && byId.get("status").innerHTML.includes("le tour était repris"), "Yuki garde ses points, et le statut dit pourquoi ce n'est pas un ballot");
+  await settle();
+  ok(S.current === 1 && !S.offer, "après un tour perdu, rien à reprendre pour le suivant");
+
+  leave({ scores: [1000, 0, 0, 2000] }, [[1, 1, 1, 5, 5]]);
+  ok(S.offer && S.offer.pts === 1400 && S.offer.free === 5 && S.offer.carried === 1400 && !S.offer.kept.length,
+     "encaisser une main pleine laisse au suivant les cinq dés et les points");
+  ok(byId.get("status").innerHTML.includes(`${fmt(1400)} points, les 5 dés`) && byId.get("tray").children[0].textContent === `main pleine · ${fmt(1400)}`,
+     "le statut et la table le disent");
+  seq.push(1, 2, 3, 4, 6);
+  onResumeClick();
+  ok(S.dice.length === 5 && S.turnPts === 1400 && S.carried === 1400 && keptVals() === "1", "reprendre une main pleine : les cinq dés, à partir de 1400");
+  onBankClick();
+  ok(me().score === 2500, "1400 + 100 encaissés");
+  leave({ scores: [1000, 0, 0, 2000], fails: [1, 0, 0, 0] }, [[1, 1, 1, 5, 5]]);
+  seq.push(2, 3, 4, 6, 6);
+  onResumeClick();
+  ok(S.phase === "lost" && me().last.kind === "lost" && me().fails === 0 && S.lost === 1400,
+     "les cinq dés d'une main pleine reprise ne marquent rien : pas un ballot non plus");
+  await settle();
+
+  leave({ scores: [0, 0, 0, 2000] }, [[1, 1, 2, 3, 4], [1, 1, 3]]);
+  ok(!me().opened && S.offer && S.offer.pts === 400 && S.offer.free === 1 && byId.get("turnPts").innerHTML.includes("ouverture à 500"),
+     "Yuki encaisse 400 en laissant un dé ; tu n'as pas ouvert");
+  seq.push(1);
+  onResumeClick();
+  ok(canBank(0), "pas encore ouvert : les 400 repris et un 1 font 500, assez pour ouvrir");
+  ok(S.free - S.keep.dice.length === 0, "le dernier dé repris marque : les cinq ont marqué, main pleine");
+  onBankClick();
+  ok(me().opened && me().score === 500 && S.logs.at(-1) === "Tu ouvres avec 500 points sur le tour de Yuki.", "on ouvre avec 500 sur le tour repris");
+
+  leave({ scores: [4700, 0, 0, 2000] }, [[1, 1, 5, 5, 2]]);
+  ok(S.current === 0 && !S.offer && buttons().join(" | ") === "Lancer les dés | Encaisser",
+     "à 4700, les 300 de Yuki ne pourraient que faire dépasser : rien à reprendre");
+  onResumeClick();
+  ok(S.phase === "roll" && !S.resumed && !S.dice.length, "« Reprendre » ne répond pas");
+  leave({ scores: [4700, 0, 0, 2000] }, [[1, 5, 5, 2, 3]]);
+  ok(S.offer && S.offer.pts === 200 && S.offer.free === 2, "à 4700, les 200 de Yuki se reprennent : il en manque 300");
+  seq.push(1, 1);
+  onResumeClick();
+  ok(S.phase === "lost" && me().last.kind === "bust" && me().score === 4700 && me().fails === 0, "200 repris et deux 1 : 5100, le tour est perdu, sans ballot");
+  await settle();
+  leave({ scores: [4600, 0, 0, 2000] }, [[1, 1, 5, 5, 2]]);
+  seq.push(1);
+  onResumeClick();
+  onBankClick();
+  ok(S.phase === "over" && S.winner === 0 && me().score === 5000, "à 4600, les 300 de Yuki et un 1 : 5000 tout juste, gagné sur le tour repris");
+  ok(!S.offer, "une victoire ne laisse rien à reprendre");
+  byId.get("scoreOverlay").hidden = true;
+
+  /* L'ordinateur reprend ton tour, ou le laisse : le statut et le journal le disent. */
+  setup({ scores: [1000, 1000, 0, 0] });
+  roll([1, 1, 1, 5, 5]);
+  onBankClick();
+  ok(S.current === 1 && S.offer && S.offer.from === 0 && S.offer.free === 5, "ta main pleine encaissée est offerte à Nora");
+  seq.push(1, 2, 3, 4, 6, 2, 3, 4, 6);
+  let aiPlay = _aiTurn();
+  ok(S.resumed && S.resumed.from === 0 && S.turnPts === 1400 && byId.get("status").innerHTML === `<b>Nora</b> reprend ton tour : ${fmt(1400)} points, les 5 dés…`,
+     `l'ordinateur reprend ta main pleine, et le dit (${byId.get("status").innerHTML})`);
+  await aiPlay;
+  await settle();
+  ok(S.logs.some((l) => l.startsWith("Nora") && l.includes("sur ton tour")), `le journal dit que Nora jouait ton tour (${S.logs.at(-1)})`);
+  setup({ scores: [1000, 1000, 0, 0] });
+  roll([5, 5, 2, 3, 4]);
+  onBankClick();
+  aiPlay = _aiTurn();
+  ok(S.offer && !S.resumed && byId.get("status").innerHTML === "<b>Nora</b> laisse ton tour et lance les 5 dés…",
+     `100 points et trois dés : l'ordinateur ne reprend pas, et le dit (${byId.get("status").innerHTML})`);
+  await aiPlay;
+  await settle();
+
   /* ------------------------------------------------------------ Politiques */
   let uid = 100000;
   const pose = (level, vals, turnPts, free, st) => {
@@ -517,7 +692,15 @@ async function targetedTests() {
   };
   ok(pose("sharp", [1, 1, 2, 3, 4], 0, 5, { scores: [0, 4800, 0, 0] }), "sharp : à 4800, deux 1 : encaisse et gagne");
   ok(pose("sharp", [1, 1, 1, 5, 5], 0, 5, { scores: [0, 3600, 0, 0] }), "sharp : à 3600, un full à 1400 fait main pleine, mais gagne : encaisse");
-  ok(pose("sharp", [1, 2, 3, 4, 6], 300, 5, { scores: [0, 1000, 0, 0] }), "sharp : 400 avec quatre dés à relancer : encaisse");
+  const AI = g("AI"), gift = AI.gift;
+  ok(pose("sharp", [1, 2, 3, 4, 6], 300, 5, { scores: [0, 1000, 0, 0] }) === false,
+     "sharp : 400 avec quatre dés à relancer : relance — encaisser laisserait au suivant, qui doit ouvrir, 400 points et quatre dés");
+  ok(pose("sharp", [1], 1400, 1, { scores: [0, 1000, 1000, 0] }) === false,
+     "sharp : 1500 sur une main pleine : relance — encaisser laisserait 1500 et les cinq dés au suivant");
+  AI.gift = 0;
+  ok(pose("sharp", [1, 2, 3, 4, 6], 300, 5, { scores: [0, 1000, 0, 0] }) && pose("sharp", [1], 1400, 1, { scores: [0, 1000, 1000, 0] }),
+     "sharp, sans compter ce qu'il laisse au suivant (AI.gift 0) : encaisse les deux");
+  AI.gift = gift;
   ok(pose("sharp", [5, 2, 3], 250, 3, { scores: [0, 1000, 0, 0] }), "sharp : 300 et deux dés à relancer : encaisse");
   ok(pose("sharp", [1, 2, 3], 300, 3, { scores: [1000, 4500, 0, 0] }), "sharp : à 4500, 400 avec deux dés à relancer, personne près du but : encaisse");
   ok(pose("sharp", [1, 2, 3], 300, 3, { scores: [4900, 4500, 0, 0] }) === false,
@@ -530,14 +713,31 @@ async function targetedTests() {
   ok(!pose("simple", [1, 2, 3, 4, 6], 300, 5), "simple : pas encore ouvert, 400 ne s'encaissent pas");
   ok(!pose("simple", [5, 5, 2, 3], 250, 4, { scores: [0, 1000, 0, 0] }), "simple : 350 ne s'encaissent pas, relance");
 
+  /* Reprendre ou non : le siège 0 vient d'encaisser `pts` en laissant `free` dés au siège 1. */
+  const poseOffer = (level, pts, free, st) => {
+    setup(st);
+    Object.assign(S, { current: 1, phase: "roll", offer: { from: 0, pts, free, kept: [], carried: free === 5 ? pts : 0 } });
+    return g(`${level}Policy`).resume(S.players[1], 1);
+  };
+  const mid = { scores: [0, 2000, 1000, 0] };
+  ok(poseOffer("sharp", 600, 5, mid), "sharp : reprend une main pleine de 600 et ses cinq dés");
+  ok(poseOffer("sharp", 400, 3, mid) && poseOffer("sharp", 200, 4, mid), "sharp : reprend 400 et trois dés, 200 et quatre dés");
+  ok(!poseOffer("sharp", 300, 1, mid) && !poseOffer("sharp", 300, 3, mid), "sharp : laisse 300 et un dé, 300 et trois dés");
+  ok(poseOffer("sharp", 300, 3, { ...mid, fails: [0, 2, 0, 0] }),
+     "sharp : reprend 300 et trois dés après deux ballots de suite — cinq dés risqueraient le troisième, et ses 2000 points");
+  ok(poseOffer("simple", 100, 5, mid) && poseOffer("simple", 300, 3, mid), "simple : reprend une main pleine, ou 300 et trois dés");
+  ok(!poseOffer("simple", 200, 4, mid) && !poseOffer("simple", 900, 2, mid), "simple : laisse 200 et quatre dés, 900 et deux dés");
+
   /* Une décision hors des règles est corrigée : pas d'encaissement interdit. */
-  g("POLICIES").evil = { decide: () => ({ bank: true }) };
+  g("POLICIES").evil = { decide: () => ({ bank: true }), resume: () => true };
   setup({ scores: [0, 1000, 0, 0] });
   Object.assign(S, { current: 1, phase: "keep", turnPts: 0, free: 5, kept: [], carried: 0 });
   S.dice = [5, 2, 2, 3, 6].map((v) => ({ uid: ++uid, v }));
   S.keep = keptOf(S.dice);
   S.players[1].policy = "evil";
   ok(g("decide")(1) === false, "une décision d'encaisser 50 est refusée : on relance");
+  S.phase = "roll";
+  ok(g("wantsResume")(1) === false, "une décision de reprendre sans tour laissé est refusée");
   delete g("POLICIES").evil;
 
   /* Un tour entier de l'ordinateur, aiTurn rétabli : il lance, garde, encaisse. */

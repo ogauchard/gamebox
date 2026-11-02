@@ -112,6 +112,19 @@ render();
 Pour un plateau de dés gardés bien rempli (le cas le plus haut de la table) : un full (main pleine) puis trois dés
 gardés un à un — `throwDice(); keepDice();` quatre fois, avec dans `seq` un full puis trois lancers qui ne font
 marquer qu'un 1 ou un 5. Un tour perdu (ballot, lancer raté, dépassement) reste affiché 1,5 s : `--budget 700` pour le saisir.
+
+Un tour à reprendre — Yuki (siège 3) garde deux 1, puis deux 5, et encaisse 300 en laissant un dé ; à toi de choisir
+entre « Lancer les 5 dés » et « Reprendre 300 », le tour de Yuki estompé sur la table :
+
+```js
+aiTurn = async () => {};
+el("btnStart").click();
+const seq = [1, 1, 2, 3, 4, 5, 5, 2];
+rollDie = () => seq.shift();
+S.current = 3; S.phase = "idle"; beginTurn();
+throwDice(); doRoll(3); doBank(3);
+render();
+```
 Fin de partie : la recette « Fin de manche réelle » ci-dessus, `--budget 900000`.
 
 ## 6 qui prend : une manche en cours

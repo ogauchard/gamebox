@@ -35,6 +35,14 @@ ctx.loseTurn = function (why) {
   if (why === "ballot" && p.fails === 2) p._zeros = (p._zeros || 0) + 1;
   return _loseTurn(why);
 };
+// Tours laissés par le précédent, et repris.
+const _wantsResume = ctx.wantsResume;
+ctx.wantsResume = function (seat) {
+  const p = S.players[seat], yes = _wantsResume(seat);
+  p._offers = (p._offers || 0) + 1;
+  if (yes) p._resumes = (p._resumes || 0) + 1;
+  return yes;
+};
 
 /* Toutes les places tenues par l'ordinateur. Si le siège 0 commence, son tour
    a démarré sans IA : on le relance. */
@@ -46,7 +54,8 @@ async function playGame(policies) {
   while (guard++ < 400000) {
     await tick();
     if (S.phase !== "over") continue;
-    return S.players.map((p, i) => ({ policy: policies[i], win: i === S.winner, turns: p.turns, gain: p._gain || 0, zeros: p._zeros || 0, rounds: S.round }));
+    return S.players.map((p, i) => ({ policy: policies[i], win: i === S.winner, turns: p.turns, gain: p._gain || 0, zeros: p._zeros || 0,
+                                      offers: p._offers || 0, resumes: p._resumes || 0, rounds: S.round }));
   }
   return null;
 }
@@ -54,12 +63,14 @@ async function playGame(policies) {
 let stats = {};
 function record(result) {
   for (const r of result) {
-    const s = (stats[r.policy] ||= { games: 0, wins: 0, turns: 0, gain: 0, zeros: 0, rounds: 0 });
+    const s = (stats[r.policy] ||= { games: 0, wins: 0, turns: 0, gain: 0, zeros: 0, offers: 0, resumes: 0, rounds: 0 });
     s.games++;
     s.wins += r.win ? 1 : 0;
     s.turns += r.turns;
     s.gain += r.gain;
     s.zeros += r.zeros;
+    s.offers += r.offers;
+    s.resumes += r.resumes;
     s.rounds += r.rounds;
   }
 }
@@ -80,10 +91,12 @@ async function table(N) {
     win: 100 * sh.wins / sh.games,
     sharp: sh.gain / sh.turns, simple: si.gain / si.turns,
     zeros: sh.zeros / sh.games, rounds: sh.rounds / sh.games,
+    resumes: 100 * sh.resumes / sh.offers, simpleResumes: 100 * si.resumes / si.offers,
   };
 }
 
 const line = (r) => `victoires ${r.win.toFixed(1).padStart(5)} % · points par tour ${r.sharp.toFixed(0)} contre ${r.simple.toFixed(0)}`
+  + ` · reprend ${r.resumes.toFixed(0)} % des tours laissés (${r.simpleResumes.toFixed(0)} %)`
   + ` · remises à zéro ${r.zeros.toFixed(2)} par partie · ${r.rounds.toFixed(1)} tours de table`;
 
 async function duel(N) {
@@ -113,6 +126,10 @@ const CONFIGS = [
   { name: "threat 1000", set: { threat: 1000 } },
   { name: "threat 5000", set: { threat: 5000 } },
   { name: "threat 8000", set: { threat: 8000 } },
+  { name: "gift 0", set: { gift: 0 } },
+  { name: "gift 0.25", set: { gift: 0.25 } },
+  { name: "gift 0.75", set: { gift: 0.75 } },
+  { name: "gift 1", set: { gift: 1 } },
 ];
 
 /* Les réglages nommés en 4e argument (« win 0,threat 1000 »), ou tous. */
@@ -139,13 +156,12 @@ async function face(N) {
   const AI = g("AI"), sharp = g("sharpPolicy");
   console.log(`\n=== Contre le réglage livré, 2 contre 2 (${N} parties par configuration) ===`);
   for (const cfg of picked(CONFIGS.slice(1))) {
-    g("POLICIES").variant = {
-      decide(p, seat) {
-        const save = { ...AI };
-        Object.assign(AI, cfg.set);
-        try { return sharp.decide(p, seat); } finally { Object.assign(AI, save); }
-      },
+    const tuned = (name) => (p, seat) => {
+      const save = { ...AI };
+      Object.assign(AI, cfg.set);
+      try { return sharp[name](p, seat); } finally { Object.assign(AI, save); }
     };
+    g("POLICIES").variant = { decide: tuned("decide"), resume: tuned("resume") };
     stats = {};
     for (let i = 0; i < N; i++) {
       const seats = [];

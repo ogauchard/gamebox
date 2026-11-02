@@ -22,8 +22,8 @@ common layout (see *Shared layout* below). No build step, no dependencies, no pa
 - [six-qui-prend.html](six-qui-prend.html) — *6 qui prend !* (Wolfgang Kramer's 6 nimmt!), official rules: everyone
   plays a card at once, the sixth card of a row takes it, game to 66 heads. DOM/CSS rendering.
 - [cinq-mille.html](cinq-mille.html) — *5000*, the French dice game (a Farkle cousin): five dice, rules from the French
-  Wikipedia article plus fixed house rules (scoring, three ballots back to zero, gains in hundreds), exactly 5000.
-  DOM/CSS rendering, dice drawn in CSS.
+  Wikipedia article plus fixed house rules (scoring, three ballots back to zero, gains in hundreds, the next player
+  may take over a banked turn), exactly 5000. DOM/CSS rendering, dice drawn in CSS.
 - [killer.html](killer.html) — *Killer*, the French dice game of attacks and hit points: aim under 11 or over 24 with
   five dice for an attack, last survivor wins. Base rules from the French Wikipedia article, 25 HP for everyone.
   DOM/CSS rendering, dice drawn in CSS.
@@ -116,8 +116,9 @@ seats: `doPlay`/`doPass`). Turkish through `onCardClick(zone, uid)` (`"hand"` or
 `doBlind`/`doPickup`). 6 qui prend through `onCardClick(uid)` (a second click on the same card, or `onPlayClick`,
 plays it) and `onRowClick(r)` when your card is too low; other seats: fill `S.chosen`, then the last choice calls
 `reveal()`. 5000 through `onRollClick` (« Lancer », then « Relancer ») and `onBankClick` — the scoring dice are
-kept automatically, nothing to click on the dice; other seats: `doRoll(seat)`/`doBank(seat)`, or `keepDice()` then
-`throwDice()`. Dice come from `rollDie()`, a top-level function a targeted test replaces to impose the throws.
+kept automatically, nothing to click on the dice — plus `onResumeClick` (« Reprendre ») at the start of a turn the
+previous player banked; other seats: `doRoll(seat)`/`doBank(seat)`, or `keepDice()` then `throwDice()`, and
+`takeOffer(seat)` before the first throw to take over. Dice come from `rollDie()`, a top-level function a targeted test replaces to impose the throws.
 Killer through `onRollClick` (« Lancer les dés », then « Relancer » the dice not chosen), `onDieClick(uid)` to choose
 the dice to keep, `onStopClick` and `onTargetClick(seat)` — the attack, the regeneration and a miss then play out
 alone (`await` a few ticks); other seats: `doThrow`/`doKeep(seat, uids)`/`doStop`/`doAttack(seat, target)`, with
@@ -791,6 +792,14 @@ throw there is nothing to choose but to bank or throw again. Readings chosen her
   figure: four 2s are a brelan and a dead 2, four 1s are 800.
 - **The dice kept** are the largest part of the throw in which every die scores, read at its best: 1 1 1 5 5 is a
   full at 1400, not 700 + 100; of 2 2 2 2 5, the brelan and the 5 are kept and the fourth 2 is thrown again.
+- **Taking over a turn** (owner's rule): when a player banks, the next player may take the turn over instead of
+  throwing five dice from zero — the turn's points, the dice kept on the table, and the dice still free, which is
+  always 1 to 5 since five kept dice are free again (a main pleine banked hands over all five, owner's ruling). The
+  banker keeps what they banked. The owner's readings: the points taken over **count toward the opening** and the
+  multiple of 100 like any turn total; a taken-over turn **never ends in a ballot**, even when its first throw is
+  five dice — it is a « lost » turn and breaks the ballot series; it can be taken over **in a chain**. One reading
+  chosen here: no offer when the points already make what the next player lacks (at 4700, 300 points could only
+  bust).
 - The first player rotates from one game to the next (`S.starter = S.games++ % n`); the human starts the first.
 
 ### Scoring and legality
@@ -799,7 +808,8 @@ throw there is nothing to choose but to bank or throw again. Readings chosen her
 gives the dice a throw makes you keep (`{ dice, pts, name }`, most dice then most points; empty if nothing scores);
 `throwDice()` stores it in `S.keep`, and the renderer, the AIs and `OUTCOMES` all read it. `room()` = 5000 − score −
 turn points. `cashable(opened, t)` is the bank rule (t > 0, multiple of 100, ≥ 500 until opened); `canRoll(seat)`
-is "a scoring throw is on the table", `canBank(seat)` adds that rule on the new turn total. The suite compares
+is "a scoring throw is on the table", `canBank(seat)` adds that rule on the new turn total, `canResume(seat)` is
+"a turn to take over, before the first throw". The suite compares
 `combo` and `keptOf` against an independent partition-based scorer on all 461 multisets of 1–5 dice.
 
 ### Flow
@@ -815,34 +825,50 @@ set so the dice show); the last two put `fails` back to 0. `keepDice()` moves `S
 and its plan for `KEEP_MS`, then relaunches or banks; it checks `S.epoch` and the seat after every `await`.
 `decide(seat)` sanitises the policy's answer (an illegal bank → throw again).
 
+**Taking over**: a bank that doesn't win sets `S.offer = { from, pts, free, kept, carried }` just before
+`nextTurn()`; `beginTurn()` drops it when `pts` already reaches what the new player lacks, and the first
+`throwDice()` of a turn clears it — throwing five dice *is* declining, so a turn that ends any other way never leaves
+an offer. `takeOffer(seat)` copies it into the turn (`S.turnPts`, `S.free`, `S.kept`, `S.carried`), sets
+`S.resumed = { from, pts }` for the log and the status, and the first throw follows. Nothing else changes: with
+`S.turnPts > 0`, `throwDice()` already calls a failed throw « lost », never « ballot ». `aiTurn()` decides at once
+(`wantsResume(seat)`, sanitised like `decide`) and shows it for `KEEP_MS` before the first throw.
+
 **Termination**: no `TURN_CAP`. Every throw has at least a 7.7 % chance of scoring nothing (600 five-dice throws
 in 7776; fewer dice, more), so every turn ends; and every round of turns has a chance of taking someone to
-exactly 5000 (with 100 missing, a lone 1 or two lone 5s do it — about 23 % of turns). Games are long: four sharps
-take 17.3 rounds, 27 at most over 500 games, none stuck.
+exactly 5000 (with 100 missing, a lone 1 or two lone 5s do it — about 23 % of turns). Taking over can't loop: it is
+part of a turn, and a turn still ends on a bank or a failed throw. Games are long: four sharps take 15.3 rounds, 32
+at most over 500 games, none stuck (17.3 before turns could be taken over).
 
 ### Opponent AI
 
 `decide(p, seat) -> { bank }`, after each scoring throw: the kept dice are imposed (`S.keep`), the only choice is to
-bank or throw again. **Nothing is hidden in 5000** — dice, scores, ballot counts are public — so the suite's
-anti-cheat check becomes a purity check: during every policy call the game state must not change and `Math.random`
-must not be called.
+bank or throw again; and `resume(p, seat) -> bool` at the start of a turn with an offer. **Nothing is hidden in
+5000** — dice, scores, ballot counts are public — so the suite's anti-cheat check becomes a purity check: during
+every policy call the game state must not change and `Math.random` must not be called.
 
-- `simple` (bench baseline): banks as soon as it may from 400, or from 200 with fewer than 3 dice to throw.
+- `simple` (bench baseline): banks as soon as it may from 400, or from 200 with fewer than 3 dice to throw; takes
+  over a main pleine, or 300 points or more with 3 or 4 dice.
 - `sharp` ("Redoutable") computes. `OUTCOMES[n]` holds every throw of n dice as a multiset (probability, dice kept,
   points in steps of 50; flat typed arrays). `solve(need, …)` is a dynamic programme over (turn points 0 to what is
   missing, dice to throw 1–5): the value of throwing again, played optimally — the opening and the multiples of 100
-  included. Banking is worth the points; a throw that scores nothing or would pass 5000 is worth 0. **Ballots stay
-  out of it**: the policy only decides after a scoring throw, and from then on the turn can't end in a ballot, so
-  the series is reset whatever it does (an `AI.zero` term priced the third ballot while any failed throw counted;
-  it went with that rule). **Making 5000 ends the turn**: a winning bank is
+  included. A throw that scores nothing or would pass 5000 is worth 0. **Banking hands the turn over**:
+  `bankAt(t, n)` is worth the points minus `AI.gift` × what the next player would gain by taking over t points and
+  n dice (`resumeGain`: their own table's value of that state minus that of five fresh dice, from `valueTable`
+  without the gift term, so the recursion stops there). **Making 5000 ends the turn**: a winning bank is
   always taken, and the programme banks the winning state on the spot. A winning state is worth `win` more, `win` =
-  `AI.win` + `AI.threat` × q / (1 − q), q being the chance that some opponent reaches 5000 in their next turn playing
-  all out (`reachProb`, the same programme with bank = 1 only at the target). Tables are cached by (opened, need,
-  win), q rounded to 0.05.
+  `AI.win` + `AI.threat` × q / (1 − q) (`winBonus`), q being the chance that some opponent reaches 5000 in their next
+  turn playing all out (`reachProb`, the same programme with bank = 1 only at the target), rounded to 0.05.
+  `tableOf(seat)` caches a table by its own (opened, need, win), the next player's, and `AI.gift`. **Taking over**:
+  the same table's value of the offered state against that of five fresh dice; **ballots enter only there** — five
+  fresh dice risk one (7.7 %), priced `P_BALLOT` ^ (3 − ballots in a row) × score, which matters only at two in a
+  row. After a scoring throw the turn can't end in a ballot, so `decide` ignores them (an `AI.zero` term priced the
+  third ballot while any failed throw counted; it went with that rule).
 
-Its thresholds, mid-game: bank from 200 with one to three dice left, from 400 with four, from 900 with five (a main
-pleine). It throws a 600 main pleine again at 3000, after two ballots too; at 4500 with 400 and two dice
-left it banks, unless an opponent sits at 4900 — then it goes for the 500 missing.
+Its thresholds, mid-game (2000 points, the next player at 1000): bank from 200 with one to three dice left, from 600
+with four, from **2100** with five — banking a main pleine hands over five dice and the points, so it throws it again
+far longer than the 900 it banked at before turns could be taken over. It takes over from 900 points with one die,
+600 with two, 400 with three, 200 with four, always with five; 300 and three dice only after two ballots in a row. At
+4500 with 400 and two dice left it banks, unless an opponent sits at 4900 — then it goes for the 500 missing.
 
 **The pitfall that bit here** (while the game still ended at *at least* 5000): the first version gave every winning
 bank a flat bonus (`AI.win` 1500). That made it chase 5000 from too far, and it lost on both benches (as measured
@@ -860,14 +886,16 @@ node tests/cinq-mille-bench.js stall 400                       # 4 redoutables :
 ```
 
 Reference points at the shipped settings and the current rules, 2000 games against three `simple` (25 % baseline),
-the sharp's place in the turn order rotating: **28.1 %, 27.1 % and 27.8 % wins** in three runs, 229–233 points
-banked a turn against 228–229, 0.01 resets to zero a game, 17.7 rounds. The rules have left it little to decide:
-with every scoring die kept, its points a turn are `simple`'s, and with ballots on the first throw only, the
-three-ballot term is gone. What is left is the end of the game, and that is all its edge: `threat 0` falls to
-23.1 % — below the baseline — and 48.5 % two against two, `threat 1000` to 25.1 %, while 5000 and 8000 make 27.5
-and 28.0 % and draw with the shipped AI (51.0 %, 50.0 %): 3000 sits on that plateau. `win 4000` loses on both
-benches (21.4 %, 43.6 %); `win` 500 and 1500 change nothing (26.6–26.9 %, 50.1–50.8 %). Judge at 2000 games
-(±2 points) and on **both** benches.
+the sharp's place in the turn order rotating: **31.9 %, 32.3 % and 30.4 % wins** in three runs, 291–294 points
+banked a turn against 278–280; it takes over 47 % of the turns left to it, `simple` 24 %; 0.00 resets to zero a
+game, 14.5 rounds. Taking over gave it something to decide again: before, with every scoring die kept, its points a
+turn were `simple`'s (229–233 against 228–229) and its 27–28 % all came from the end of the game. `AI.gift` is the
+defensive half: against `simple`, which takes over crudely and never prices what it leaves, every value from 0 to 1
+lands within the noise (29.9–32.4 %), but two against two `gift 0` loses 43.8 % to the shipped 0.5, while 0.25, 0.75
+and 1 draw (48.9–49.5 %). The end of the game still counts, less than before the rule: `threat 0` makes 29.6 % and
+loses 46.6 % two against two (23.1 % and 48.5 % before), `threat` 1000 and 5000 stay within the noise (33.0 % and
+48.7 %, 32.2 % and 51.5 %); `win 4000` loses on both benches (27.0 %, 46.3 %), `win 1500` changes nothing (32.2 %,
+48.8 %). Judge at 2000 games (±2 points) and on **both** benches.
 
 **The bench used to seat the sharp in the first player's chair at every game**: `seats[i % 4] = "sharp"` while the
 game rotates its first player by `S.games++ % 4`, so the two moved in step whenever `S.games` started on a multiple
@@ -891,7 +919,10 @@ grid of pips, the 1 red; `.sel` lifts the kept dice, `.dead` greys a lost turn, 
 (`shownUids`). `--die` sizes on the table in `cqh`/`cqw` (1.5 dice + 82 px high, 6 dice wide). Opponents show their
 score, a gauge to 5000 (`.meter`), « à ouvrir » and one ✗ per ballot in a row, and a bubble with their last turn;
 `#me` is the same, without a hand. `#actions` always holds « Lancer/Relancer » and « Encaisser », so the table never
-resizes during a turn. The `fit.js` sweep fits at every size, the fullest tray (main pleine + three groups) included.
+resizes during a turn; at the start of a turn you may take over, « Encaisser » (which could bank nothing) becomes
+« Reprendre N » beside « Lancer les 5 dés ». Until you choose, the turn left to you stays on the table, dimmed
+(`#board.offer`): its kept dice, its free slots, « À reprendre N ». The `fit.js` sweep fits at every size, the
+fullest tray (main pleine + three groups) included.
 
 ## Architecture — killer.html
 

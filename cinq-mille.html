@@ -119,6 +119,8 @@
     box-shadow: 0 0 0 3px var(--accent), 0 10px 16px rgba(0,0,0,.5);
   }
   #dice .die.dead { filter: grayscale(.5) brightness(.6); }
+  /* Le tour du précédent, à reprendre ou non : estompé tant qu'on n'a pas choisi. */
+  #board.offer #tray, #board.offer #dice { opacity: .55; }
   #turnPts { min-height: 26px; font-size: 14px; color: var(--dim); text-align: center; }
   #turnPts b { color: var(--text); font-size: 20px; margin: 0 2px; }
   #turnPts b.lost { color: var(--ko); text-decoration: line-through; }
@@ -186,8 +188,9 @@
        avant qu'un lancer sans rien ne te fasse <b>tout perdre</b>. Le premier à faire
        <b>5000 points tout juste</b> gagne.</p>
     <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur.</p>
-    <p class="hint">500 points pour ouvrir, des gains en multiples de 100, et trois ballots de suite
-       ramènent à zéro : le détail est dans les règles.</p>
+    <p class="hint">500 points pour ouvrir, des gains en multiples de 100, trois ballots de suite
+       ramènent à zéro, et qui encaisse laisse au suivant son tour à reprendre : le détail est
+       dans les règles.</p>
     <div class="actions">
       <button class="primary" id="btnStart">Commencer</button>
       <button id="btnRules2">Voir les règles</button>
@@ -238,6 +241,19 @@
           ton score <b>retombe à zéro</b>. Tu restes ouvert. Un tour qui n'est pas un ballot,
           encaissé ou perdu plus tard, interrompt la série.</li>
     </ul>
+    <h3>Reprendre un tour</h3>
+    <ul>
+      <li>Quand un joueur encaisse, le <b>suivant</b> peut <b>reprendre son tour</b> au lieu de
+          lancer les 5 dés : il relance les dés qui restaient — <b>les 5</b> après une main
+          pleine — et repart de ses points. Celui qui a encaissé garde les siens.</li>
+      <li>Le décompte continue : les points repris comptent pour ouvrir, le gain reste un
+          multiple de 100, et il faut toujours 5000 tout juste.</li>
+      <li>Un tour repris <b>ne finit jamais en ballot</b> : si son premier lancer ne marque
+          rien, le tour est perdu, rien de plus, et la série de ballots est interrompue.</li>
+      <li>Qui a repris un tour et l'encaisse peut être repris à son tour par le suivant.</li>
+      <li>Pas de reprise quand les points du tour, ajoutés à ton score, feraient déjà 5000 ou
+          plus : à 4700, on ne reprend pas 300 points.</li>
+    </ul>
     <h3>La fin</h3>
     <p>Le premier qui fait <b>5000 points tout juste</b> en encaissant gagne aussitôt.</p>
     <ul>
@@ -248,7 +264,8 @@
     <p>Le premier joueur change à chaque partie.</p>
     <p class="hint">D'après l'article « 5 000 (jeu) » de Wikipédia, avec les règles de la maison :
        brelan de 1 à 700, full au double du brelan (cinq dés pareils compris), suites à 1000,
-       fin à 5000 tout juste, variantes des trois ballots et du multiple de 100.</p>
+       fin à 5000 tout juste, variantes des trois ballots et du multiple de 100, reprise du tour
+       par le joueur suivant.</p>
     <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
   </div>
 </div>
@@ -278,7 +295,10 @@
    tous (main pleine) ; un lancer sans rien fait perdre le tour, et c'est un
    ballot si c'est le premier, celui des cinq dés. Ouverture à 500, gains en
    multiples de 100, trois ballots de suite ramènent à zéro. Premier à 5000
-   tout juste : un lancer qui ferait dépasser perd le tour, sans ballot.
+   tout juste : un lancer qui ferait dépasser perd le tour, sans ballot. Qui
+   encaisse laisse son tour au suivant : celui-ci peut le reprendre, ses points
+   et les dés qui restaient (les cinq après une main pleine), au lieu de lancer
+   les cinq dés à zéro ; un tour repris ne finit jamais en ballot.
    ========================================================================= */
 
 const DICE = 5;
@@ -290,7 +310,7 @@ const SUITE = 1000;
 const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
 const THINK_MS = 550;            // avant un lancer de l'ordinateur
 const ROLL_MS = 750;             // lecture d'un lancer
-const KEEP_MS = 900;             // les dés qu'il garde, montrés avant qu'il relance ou encaisse
+const KEEP_MS = 900;             // les dés qu'il garde, montrés avant qu'il relance ou encaisse ; ou le tour qu'il reprend, ou non
 const BALLOT_MS = 1500;          // un tour perdu : on le laisse voir
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -373,6 +393,8 @@ const S = {
   free: DICE,         // dés à lancer au prochain jet
   keep: null,         // ce que le lancer en cours fait garder : keptOf(S.dice), null entre deux lancers
   plan: null,         // ce que l'IA va faire des dés gardés : "bank" | "roll"
+  offer: null,        // le tour que le précédent vient d'encaisser, à reprendre : { from, pts, free, kept, carried }
+  resumed: null,      // le tour en cours en reprend un : { from, pts }
   lost: 0,            // points du dernier tour perdu, pour l'affichage
   phase: "idle",      // idle | roll (le tour commence) | keep (un lancer à trier) | lost (tour perdu) | over
   winner: -1,
@@ -392,6 +414,8 @@ function log(msg) {
 
 /* Tutoie l'humain, troisième personne pour les adversaires — jamais il/elle. */
 const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+/* Le tour de `seat`, vu de l'humain : « le tour de Nora », « ton tour ». */
+const turnOf = (seat) => (S.players[seat].ai ? `le tour de ${S.players[seat].name}` : "ton tour");
 
 /* --------------------------------------------------------------- Légalité */
 /* Un tour de `t` points s'encaisse-t-il ? Un multiple de 100, et 500 au moins
@@ -401,6 +425,8 @@ const cashable = (opened, t) => t > 0 && t % 100 === 0 && (opened || t >= OPENIN
 /* Après un lancer qui marque, `seat` peut relancer ; et encaisser ? */
 const canRoll = (seat) => S.current === seat && S.phase === "keep" && !!S.keep;
 const canBank = (seat) => canRoll(seat) && cashable(S.players[seat].opened, S.turnPts + S.keep.pts);
+/* Avant son premier lancer, `seat` peut reprendre le tour du précédent. */
+const canResume = (seat) => S.current === seat && S.phase === "roll" && !!S.offer;
 
 /* ------------------------------------------------------------ Mise en place */
 function newGame(nPlayers) {
@@ -415,12 +441,14 @@ function newGame(nPlayers) {
   S.logs = [];
   S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
   S.busy = false;
+  S.offer = null;
   buildBoard();
   beginTurn();
 }
 
 /* ------------------------------------------------------------------ Tours */
-/* Le seul endroit où un tour commence : cinq dés à lancer, rien de gardé. */
+/* Le seul endroit où un tour commence : cinq dés à lancer, rien de gardé —
+   ou, si le précédent vient d'encaisser, son tour à reprendre (S.offer). */
 function beginTurn() {
   if (S.phase === "over") return;
   S.dice = [];
@@ -430,13 +458,30 @@ function beginTurn() {
   S.free = DICE;
   S.keep = null;
   S.plan = null;
+  S.resumed = null;
   S.phase = "roll";
   S.busy = false;
   const p = cur();
   p.last = null;
   p.turns++;
+  // Des points qui font déjà 5000 ou plus ne pourraient que dépasser : rien à reprendre.
+  if (S.offer && S.offer.pts >= TARGET - p.score) S.offer = null;
   render();
   if (p.ai) aiTurn();
+}
+
+/* Reprendre le tour que le précédent vient d'encaisser : ses points, ses dés
+   gardés, et les dés qui lui restaient à lancer. Le premier lancer suit. */
+function takeOffer(seat) {
+  if (!canResume(seat)) return false;
+  const o = S.offer;
+  S.turnPts = o.pts;
+  S.free = o.free;
+  S.kept = o.kept;
+  S.carried = o.carried;
+  S.resumed = { from: o.from, pts: o.pts };
+  S.offer = null;
+  return true;
 }
 
 function nextTurn() {
@@ -453,8 +498,10 @@ function rollDie() { return 1 + Math.floor(Math.random() * 6); }
    marquent feraient dépasser 5000 —, la suite étant programmée par loseTurn(). */
 function throwDice() {
   const first = !S.turnPts;                      // les dés gardés marquent toujours : rien de gardé, premier lancer
+                                                 // (un tour repris a toujours des points : jamais de ballot)
   S.dice = Array.from({ length: S.free }, () => ({ uid: ++uidSeq, v: rollDie() }));
   S.plan = null;
+  S.offer = null;                                // lancer les cinq dés, c'est laisser le tour du précédent
   const keep = keptOf(S.dice);
   S.keep = keep.dice.length ? keep : null;       // montrés aussi sur un dépassement
   if (!S.keep || keep.pts > room()) {
@@ -502,18 +549,22 @@ function bank(seat) {
   const p = S.players[seat];
   const pts = S.turnPts;
   const opening = !p.opened;
+  const on = S.resumed ? ` sur ${turnOf(S.resumed.from)}` : "";
   p.score += pts;
   p.opened = true;
   p.fails = 0;
   p.best = Math.max(p.best, pts);
   p.last = { kind: "bank", pts };
   if (p.score === TARGET) {
-    log(`${says(p, "encaisses", "encaisse")} ${fmt(pts)} et ${p.ai ? "fait" : "fais"} ${fmt(TARGET)} tout juste !`);
+    log(`${says(p, "encaisses", "encaisse")} ${fmt(pts)}${on} et ${p.ai ? "fait" : "fais"} ${fmt(TARGET)} tout juste !`);
     endGame(seat);
     return;
   }
-  log(opening ? `${says(p, "ouvres", "ouvre")} avec ${ptsLabel(pts)}.`
-              : `${says(p, "encaisses", "encaisse")} ${ptsLabel(pts)} (${fmt(p.score)}).`);
+  log(opening ? `${says(p, "ouvres", "ouvre")} avec ${ptsLabel(pts)}${on}.`
+              : `${says(p, "encaisses", "encaisse")} ${ptsLabel(pts)}${on} (${fmt(p.score)}).`);
+  // Le suivant pourra reprendre ce tour : il reste toujours des dés à lancer,
+  // les cinq après une main pleine.
+  S.offer = { from: seat, pts, free: S.free, kept: S.kept, carried: S.carried };
   nextTurn();
 }
 
@@ -521,7 +572,8 @@ function bank(seat) {
    - "ballot" : le premier lancer, celui des cinq dés, ne marque rien ; au
      troisième tour de suite, le score retombe à zéro ;
    - "lost" : un lancer suivant ne marque rien — une fois que le premier a
-     marqué, le tour ne peut plus finir en ballot, main pleine comprise ;
+     marqué, le tour ne peut plus finir en ballot, main pleine comprise —, ou
+     un lancer d'un tour repris, qui n'est jamais un ballot ;
    - "bust" : les dés qui marquent feraient dépasser 5000 (le lancer marquait).
    Seul le ballot compte dans les trois de suite ; tout autre tour en rompt la
    série. */
@@ -542,7 +594,7 @@ async function loseTurn(why) {
   log(kind === "bust" ? `${says(p, "dépasserais", "dépasserait")} ${fmt(TARGET)} avec les dés qui marquent : tour perdu${lost ? ` (${fmt(lost)})` : ""}.`
       : kind === "zero" ? `${says(p, "fais", "fait")} trois ballots de suite et ${p.ai ? "retombe" : "retombes"} à zéro${old ? ` (${fmt(old)} perdus)` : ""}.`
       : kind === "ballot" ? `${says(p, "fais", "fait")} ballot.`
-      : `${says(p, "perds", "perd")} ${ptsLabel(lost)} : le lancer ne marque rien.`);
+      : `${says(p, "perds", "perd")} ${ptsLabel(lost)}${S.resumed ? ` sur ${turnOf(S.resumed.from)}` : ""} : le lancer ne marque rien.`);
   render();
   const epoch = S.epoch;
   await sleep(BALLOT_MS);
@@ -550,14 +602,17 @@ async function loseTurn(why) {
   nextTurn();
 }
 
-/* Le tour d'un siège tenu par l'ordinateur : lancer, montrer les dés gardés et
-   ce qu'il va faire, puis relancer ou encaisser. */
+/* Le tour d'un siège tenu par l'ordinateur : reprendre ou non le tour du
+   précédent, lancer, montrer les dés gardés et ce qu'il va faire, puis
+   relancer ou encaisser. */
 async function aiTurn() {
   const epoch = S.epoch, seat = S.current;
   const gone = () => epoch !== S.epoch || S.current !== seat || S.phase === "over";
   S.busy = true;
+  const offered = !!S.offer;
+  if (offered && wantsResume(seat)) takeOffer(seat);
   render();
-  await sleep(THINK_MS);
+  await sleep(offered ? KEEP_MS : THINK_MS);     // le temps de lire qui reprend quoi
   for (;;) {
     if (gone()) return;
     if (!throwDice()) return;
@@ -583,6 +638,12 @@ function decide(seat) {
   const p = S.players[seat];
   const d = policyOf(p).decide(p, seat);
   return !!(d && d.bank) && canBank(seat);
+}
+
+/* Reprendre le tour du précédent ? Seulement s'il y en a un. */
+function wantsResume(seat) {
+  const p = S.players[seat];
+  return canResume(seat) && !!policyOf(p).resume(p, seat);
 }
 
 /* ------------------------------------------------------------ Fin de partie */
@@ -621,7 +682,10 @@ function showScores() {
 /* Deux politiques interchangeables. Chacune expose :
      decide(p, seat) -> { bank: encaisser, ou relancer }
    appelée après chaque lancer qui marque : les dés gardés sont imposés
-   (S.keep), il ne reste qu'à choisir. Il n'y a rien de caché au 5000 :
+   (S.keep), il ne reste qu'à choisir ; et
+     resume(p, seat) -> reprendre le tour du précédent, ou lancer les cinq dés
+   appelée au début d'un tour quand il y en a un à reprendre (S.offer : ses
+   points, et les dés qui restent à lancer). Il n'y a rien de caché au 5000 :
    les dés, les scores, les ballots de chacun sont publics. Une politique ne
    fait que décider — elle ne touche pas à l'état et ne lance pas de dé. */
 
@@ -631,14 +695,20 @@ function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
 
 /* ---------------------------------------------------------------------------
    Politique simple : encaisse dès 400 points, ou dès 200 quand il reste moins
-   de trois dés à relancer — dès que c'est permis. Les adversaires jouent
-   toujours « sharp » ; celle-ci ne sert que de référence au banc d'essai.
+   de trois dés à relancer — dès que c'est permis. Reprend le tour du précédent
+   sur une main pleine, ou dès 300 points avec trois ou quatre dés. Les
+   adversaires jouent toujours « sharp » ; celle-ci ne sert que de référence au
+   banc d'essai.
    --------------------------------------------------------------------------- */
 const simplePolicy = {
   decide(p) {
     const t = S.turnPts + S.keep.pts;
     const left = S.free - S.keep.dice.length || DICE;
     return { bank: cashable(p.opened, t) && (p.score + t === TARGET || t >= 400 || (left < 3 && t >= 200)) };
+  },
+  resume() {
+    const o = S.offer;
+    return o.free === DICE || (o.free >= 3 && o.pts >= 300);
   },
 };
 
@@ -654,9 +724,13 @@ const simplePolicy = {
    - viser 5000 vaut davantage quand un adversaire risque de gagner avant son
      prochain tour (q, la probabilité qu'au moins un l'atteigne en un tour, s'il
      joue tout pour) : la partie risque de finir, ses points ne vaudraient plus
-     rien ; elle tente alors le coup jusqu'au bout.
-   Les ballots n'entrent pas dans le calcul : elle ne décide qu'après un lancer
-   qui marque, et passé le premier lancer le tour ne peut plus en être un.
+     rien ; elle tente alors le coup jusqu'au bout ;
+   - encaisser laisse le tour au suivant, qui peut le reprendre : chaque point
+     qu'il gagnerait à le faire, d'après sa propre table, coûte AI.gift.
+   Elle reprend le tour du précédent quand la même table le dit meilleur que
+   de lancer les cinq dés — qui risquent un ballot, et au troisième de suite
+   son score retombe à zéro : seul moment où les ballots entrent dans le
+   calcul, puisque passé le premier lancer le tour ne peut plus en être un.
    Réglages mesurés au banc d'essai : sans le terme de menace (AI.threat 0),
    elle ne bat plus la politique simple ; un gros bonus de victoire sans menace
    (AI.win 4000) fait viser 5000 de trop loin et perd, contre la politique
@@ -665,6 +739,7 @@ const simplePolicy = {
 const AI = {
   win: 0,          // atteindre 5000 vaut ces points de plus qu'un tour ordinaire, menace ou pas
   threat: 3000,    // et ceux-ci, fois q / (1 - q), q le risque qu'un adversaire gagne avant mon tour
+  gift: 0.5,       // chaque point que le suivant gagne à reprendre mon tour me coûte ceci
 };
 
 /* Tous les lancers de n dés, regroupés par faces : leur probabilité (p), les
@@ -694,17 +769,21 @@ const OUTCOMES = [null];
   }
 }
 
+/* Un ballot : cinq dés qui ne marquent rien, 600 lancers sur 7776. */
+const P_BALLOT = OUTCOMES[DICE].p.reduce((a, p, i) => a + (OUTCOMES[DICE].k[i] ? 0 : p), 0);
+
 /* Valeur de chaque état d'un tour, (points t de 0 à `need`, dés à lancer n), à
    la case t / 50 * 6 + n : ce que vaut relancer, si la suite est jouée au
    mieux. Un lancer qui ne marque rien ou qui passerait `need` perd le tour
-   (0). À `need`, on gagne : encaisser est d'office. bankAt(t) : ce que vaut
-   encaisser t (-Infinity si c'est interdit). */
+   (0). À `need`, on gagne : encaisser est d'office. bankAt(t, n) : ce que vaut
+   encaisser t en laissant n dés à lancer au suivant (-Infinity si c'est
+   interdit). */
 function solve(need, bankAt) {
   const top = need / 50;
   const V = new Float64Array((top + 1) * 6), R = new Float64Array((top + 1) * 6);
   for (let ti = top; ti >= 0; ti--) {
-    const bank = bankAt(ti * 50), stop = ti === top && bank > -Infinity;
     for (let n = 1; n <= DICE; n++) {
+      const bank = bankAt(ti * 50, n), stop = ti === top && bank > -Infinity;
       const { p, k, s } = OUTCOMES[n];
       let r = 0;
       for (let i = 0; i < p.length; i++) {
@@ -749,17 +828,46 @@ function threat(seat) {
   return 1 - calm;
 }
 
+/* Le bonus de victoire de `seat` : AI.win, plus AI.threat × q / (1 − q). */
+function winBonus(seat) {
+  const q = Math.min(Math.round(threat(seat) * 20) / 20, 0.95);
+  return Math.round((AI.win + AI.threat * q / (1 - q)) / 50) * 50;
+}
+
+/* Ce que gagne un joueur à reprendre t points et n dés plutôt qu'à lancer les
+   cinq, d'après sa table R ; rien si ces points font déjà ce qui lui manque. */
+const resumeGain = (R, need, t, n) => (t < need ? Math.max(0, R[t / 50 * 6 + n] - R[DICE]) : 0);
+
+/* La table de `seat` : les points du tour et son bonus de victoire, moins, à
+   chaque encaissement, AI.gift fois ce que le suivant gagnerait à le reprendre
+   (d'après sa table à lui, sans ce terme). { R, bankAt }. */
+function tableOf(seat) {
+  const p = S.players[seat], need = TARGET - p.score, win = winBonus(seat);
+  const ns = (seat + 1) % S.players.length, np = S.players[ns], nneed = TARGET - np.score, nwin = winBonus(ns);
+  return cached(`g${+p.opened}|${need}|${win}|${+np.opened}|${nneed}|${nwin}|${AI.gift}`, () => {
+    const Rn = valueTable(np.opened, nneed, nwin);
+    const bankAt = (t, n) => (!cashable(p.opened, t) ? -Infinity
+      : t === need ? t + win : t - AI.gift * resumeGain(Rn, nneed, t, n));
+    return { R: solve(need, bankAt), bankAt };
+  });
+}
+
 const sharpPolicy = {
   decide(p, seat) {
-    const q = Math.min(Math.round(threat(seat) * 20) / 20, 0.95);
-    const win = Math.round((AI.win + AI.threat * q / (1 - q)) / 50) * 50;
     const need = TARGET - p.score;
     const t = S.turnPts + S.keep.pts;
     // Gagner tout de suite : rien ne vaut mieux.
     if (wins(p.opened, need, t)) return { bank: true };
     if (!cashable(p.opened, t)) return { bank: false };
     const left = S.free - S.keep.dice.length || DICE;
-    return { bank: t >= valueTable(p.opened, need, win)[t / 50 * 6 + left] };
+    const { R, bankAt } = tableOf(seat);
+    return { bank: bankAt(t, left) >= R[t / 50 * 6 + left] };
+  },
+  // Lancer les cinq dés, c'est risquer un ballot : cher au troisième de suite.
+  resume(p, seat) {
+    const { R } = tableOf(seat), o = S.offer;
+    const fresh = R[DICE] - P_BALLOT ** (STRIKES - p.fails) * p.score;
+    return R[o.pts / 50 * 6 + o.free] > fresh;
   },
 };
 
@@ -780,6 +888,14 @@ function onRollClick() {
 
 function onBankClick() {
   if (!myTurn() || !doBank(0)) return;
+  render();
+}
+
+/* « Reprendre » au début du tour : les points du précédent, et ses dés qui
+   restaient, lancés aussitôt. */
+function onResumeClick() {
+  if (!myTurn() || !takeOffer(0)) return;
+  throwDice();
   render();
 }
 
@@ -854,11 +970,21 @@ function statusHtml() {
       if (kind === "zero") return `Troisième ballot de suite ! ${who(p, "retombes", "retombe")} à <b>zéro</b>.`;
       if (kind === "bust") return `Trop haut ! Les dés qui marquent (+${S.keep ? S.keep.pts : 0}) feraient dépasser ${fmt(TARGET)} : tour perdu, mais pas de ballot.`;
       if (kind === "ballot") return `Ballot ! Le premier lancer ne marque rien.`;
-      return `Rien ne marque ! ${who(p, "perds", "perd")} <b>${ptsLabel(S.lost)}</b> — pas de ballot, le premier lancer avait marqué.`;
+      return `Rien ne marque ! ${who(p, "perds", "perd")} <b>${ptsLabel(S.lost)}</b> — pas de ballot, `
+           + (S.resumed ? "le tour était repris." : "le premier lancer avait marqué.");
     }
-    case "roll":
-      if (!p.ai) return p.opened ? "À toi : lance les dés." : `À toi : lance les dés. Il te faut <b>${OPENING}</b> points pour ouvrir.`;
+    case "roll": {
+      // Les dés d'un tour à reprendre : les cinq après une main pleine.
+      const dice = (n) => (n === DICE ? "les 5 dés" : diceLabel(n));
+      const o = S.offer;
+      if (!p.ai) {
+        if (o) return `À toi : lance les 5 dés, ou <b>reprends</b> ${turnOf(o.from)} : ${ptsLabel(o.pts)}, ${dice(o.free)}.`;
+        return p.opened ? "À toi : lance les dés." : `À toi : lance les dés. Il te faut <b>${OPENING}</b> points pour ouvrir.`;
+      }
+      if (S.resumed) return `<b>${p.name}</b> reprend ${turnOf(S.resumed.from)} : ${ptsLabel(S.turnPts)}, ${dice(S.free)}…`;
+      if (o) return `<b>${p.name}</b> laisse ${turnOf(o.from)} et lance les 5 dés…`;
       return `${who(p, "lances", "lance")} les dés…`;
+    }
     case "keep": {
       if (!S.dice.length) {
         const again = S.free === DICE && !S.kept.length ? "Main pleine ! " : "";
@@ -884,10 +1010,14 @@ function statusHtml() {
 }
 
 function renderTable(next) {
+  // Un tour à reprendre reste sur la table, estompé, tant qu'on n'a pas choisi.
+  const o = S.phase === "roll" ? S.offer : null;
+  const { carried, kept, free } = o || S;
+  el("board").classList.toggle("offer", !!o);
   const tray = el("tray");
   tray.innerHTML = "";
-  if (S.carried) tray.appendChild(mk("span", "carried", `main pleine · ${fmt(S.carried)}`));
-  for (const g of S.kept) {
+  if (carried) tray.appendChild(mk("span", "carried", `main pleine · ${fmt(carried)}`));
+  for (const g of kept) {
     const box = mk("div", "kept");
     const row = mk("div", "dice");
     for (const d of g.dice) row.appendChild(dieEl(d.v));
@@ -895,7 +1025,7 @@ function renderTable(next) {
     box.appendChild(mk("span", "pts", `+${g.pts}`));
     tray.appendChild(box);
   }
-  if (!S.carried && !S.kept.length) tray.appendChild(mk("span", "empty", "les dés gardés se mettent ici"));
+  if (!carried && !kept.length) tray.appendChild(mk("span", "empty", "les dés gardés se mettent ici"));
 
   const host = el("dice");
   host.innerHTML = "";
@@ -909,25 +1039,30 @@ function renderTable(next) {
       host.appendChild(dieEl(d.v, cls.trim()));
     }
   } else {
-    for (let i = 0; i < S.free; i++) host.appendChild(mk("div", "slot"));
+    for (let i = 0; i < free; i++) host.appendChild(mk("div", "slot"));
   }
 
   const line = el("turnPts");
   const p = cur();
+  const opening = p && !p.opened ? ` · ouverture à ${OPENING}` : "";
   if (S.phase === "over" || !p) line.innerHTML = "";
   else if (S.phase === "lost") line.innerHTML = `Ce tour <b class="lost">${fmt(S.lost)}</b>`;
-  else line.innerHTML = `Ce tour <b>${fmt(S.turnPts)}</b>` + (p.opened ? "" : ` · ouverture à ${OPENING}`);
+  else if (o) line.innerHTML = `À reprendre <b>${fmt(o.pts)}</b>` + opening;
+  else line.innerHTML = `Ce tour <b>${fmt(S.turnPts)}</b>` + opening;
 }
 
 /* Deux boutons, toujours présents : la hauteur de la zone ne bouge pas d'un
-   tour à l'autre (sur téléphone, une zone vide se replie). */
+   tour à l'autre (sur téléphone, une zone vide se replie). Au début d'un tour
+   à reprendre, le second, qui n'encaisserait rien, devient « Reprendre ». */
 function renderActions() {
   const host = el("actions");
   host.innerHTML = "";
   const mine = myTurn();
   let label = "Lancer les dés", can = false;
-  if (mine && S.phase === "roll") can = true;
-  else if (mine && canRoll(0)) {
+  if (mine && S.phase === "roll") {
+    can = true;
+    if (S.offer) label = "Lancer les 5 dés";
+  } else if (mine && canRoll(0)) {
     const left = S.free - S.keep.dice.length || DICE;
     can = true;
     label = `Relancer ${left === DICE ? "les 5 dés" : diceLabel(left)}`;
@@ -937,6 +1072,12 @@ function renderActions() {
   roll.addEventListener("click", onRollClick);
   host.appendChild(roll);
 
+  if (mine && canResume(0)) {
+    const take = mk("button", "primary", `Reprendre ${fmt(S.offer.pts)}`);
+    take.addEventListener("click", onResumeClick);
+    host.appendChild(take);
+    return;
+  }
   const cash = mine && canBank(0);
   const bank = mk("button", "primary", cash ? `Encaisser ${fmt(S.turnPts + S.keep.pts)}` : "Encaisser");
   bank.disabled = !cash;
