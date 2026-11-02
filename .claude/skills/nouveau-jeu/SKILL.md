@@ -5,7 +5,7 @@ description: Ajoute un nouveau jeu à gamebox de bout en bout — page HTML auto
 
 # Ajouter un jeu à gamebox
 
-Neuf jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
+Dix jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
 Le fil conducteur : **un fichier HTML autonome, des règles écrites noir sur blanc, des IA qui ne trichent pas, et une
 suite de tests qui joue des parties entières sous invariants.** Ne rien partager entre les jeux : copier un motif
 d'un autre fichier, oui ; l'importer, non.

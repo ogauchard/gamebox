@@ -75,7 +75,8 @@ Deux réflexes :
 
 - **Changement de CSS mobile** : `--phone` et `--phone 375x667`, et pour Uno, Cinq Rois, Trou du cul et Turkish des
   mains d'environ 5, 13 et 20 cartes (30 pour Turkish, où l'on ramasse des plis entiers), puisque la mise en page
-  dépend de la taille de la main.
+  dépend de la taille de la main ; pour Rikiki, une main de 13 cartes, une de 3, les annonces à 13 cartes (quatorze
+  nombres sur la table) et la manche au front.
 - **Changement de rendu de bureau** : `--size 900x900`, une fenêtre plus large (`1400x900`) et surtout un portable
   court (`1366x650` : un écran de 768 px moins la barre du navigateur, cas très courant) ; Cinq Rois a déjà débordé à
   1000 px avec 14 cartes, et Skyjo débordait sur tous les écrans de bureau avant d'être mesuré.

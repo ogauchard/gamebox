@@ -6,7 +6,7 @@ nomme.
 
 ## Démarrer une partie (Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend)
 
-Les six jeux de cartes partagent les mêmes noms : le bouton `btnStart`, `startGame()`, `aiTurn()`, `beginTurn()`,
+Les sept jeux de cartes partagent les mêmes noms : le bouton `btnStart`, `startGame()`, `aiTurn()`, `beginTurn()`,
 `render()`. Une partie a toujours 4 joueurs, toi et 3 adversaires « Redoutable » : rien à choisir avant le clic.
 
 ```js
@@ -40,6 +40,36 @@ S.current = 0; beginTurn();               // la main est jouable : anneaux et ca
 ```
 
 Pour réduire la main : `me.hand.length = 5;` avant `beginTurn()`.
+
+## Rikiki : annonces, pli en cours, au front
+
+Le jeu change de forme d'une manche à l'autre : poser la manche avec `S.round = r; startRound();` (1 à 25 ; 13 cartes à
+la 13e, sans atout). Les annonces à 13 cartes — quatorze nombres sur la table, le cas le plus haut sur téléphone —, toi
+donneur, le nombre interdit barré :
+
+```js
+aiTurn = async () => {};
+el("btnStart").click();
+S.round = 13; startRound();
+S.players[1].bid = 3; S.players[2].bid = 4; S.players[3].bid = 2;
+S.current = 0; S.dealer = 0; S.phase = "idle"; beginTurn(); S.bidSel = 3; render();
+```
+
+Un pli en cours, à toi de fournir, une carte choisie (son fantôme dans sa place, le statut qui dit si elle prendrait) :
+
+```js
+aiTurn = async () => {};
+el("btnStart").click();
+S.round = 12; startRound();
+S.players.forEach((p, i) => { p.bid = [3, 2, 4, 0][i]; });
+S.current = 2; S.phase = "idle";
+doPlay(2, legalCards(2)[0]); doPlay(3, legalCards(3).at(-1));
+S.sel = legalCards(0)[0].uid; render();
+```
+
+Au front : la première manche, sans rien de plus que le gel et le clic — tu annonces le premier à la première partie,
+les cartes des autres face visible dans leur vignette, la tienne de dos. Fin de manche réelle : la recette générale
+ci-dessus, `--budget 30000` suffit pour la manche à une carte.
 
 ## Skyjo : grilles retournées
 

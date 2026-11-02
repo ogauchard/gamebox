@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Nine **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
-except that the six card games and the two dice games load one shared stylesheet, [cartes.css](cartes.css), for their
+Ten **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
+except that the seven card games and the two dice games load one shared stylesheet, [cartes.css](cartes.css), for their
 common layout (see *Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
@@ -21,6 +21,9 @@ common layout (see *Shared layout* below). No build step, no dependencies, no pa
   minus the trumps; rules from the « Le jeu de Turkish » blog and its author's answers, DOM/CSS rendering.
 - [six-qui-prend.html](six-qui-prend.html) — *6 qui prend !* (Wolfgang Kramer's 6 nimmt!), official rules: everyone
   plays a card at once, the sixth card of a row takes it, game to 66 heads. DOM/CSS rendering.
+- [rikiki.html](rikiki.html) — *Rikiki* (l'Ascenseur), the trick-taking game where you bid the exact number of tricks
+  you'll take: 25 rounds from 1 card to 13 and back, the turned card gives trump, the dealer can't make the bids add
+  up, the one-card rounds played on the forehead. Rules from the French Wikipedia article. DOM/CSS rendering.
 - [cinq-mille.html](cinq-mille.html) — *5000*, the French dice game (a Farkle cousin): five dice, rules from the French
   Wikipedia article plus fixed house rules (scoring, three ballots back to zero, gains in hundreds, the next player
   may take over a banked turn), exactly 5000. DOM/CSS rendering, dice drawn in CSS.
@@ -40,7 +43,7 @@ and **one AI level**, the strongest ("Redoutable") — the owner removed the pla
 choices. Only Uno (format, house rules) and Turkish (number of deals, which the owner asked to keep as a choice) have
 options. The engines stayed generic: `newGame(n)` still seats 2–6, and `startGame(n = PLAYERS)` — what the
 "Commencer" button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du
-cul, Turkish, 6 qui prend, 5000 and Killer still contain are **benchmark baselines only**, never dealt to a player; Uno had no
+cul, Turkish, 6 qui prend, Rikiki, 5000 and Killer still contain are **benchmark baselines only**, never dealt to a player; Uno had no
 bench, so its weak policy was deleted.
 
 ## Hosting
@@ -56,18 +59,19 @@ hash (`cartes.css?v=<hash>`), kept in step by `node tests/cartes.test.js --fix`.
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les dix suites (~7300 assertions, le total varie — cartes et dés sont tirés au hasard)
+node tests/run-all.js          # les onze suites (~9300 assertions, le total varie — cartes et dés sont tirés au hasard)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
 node tests/trou-du-cul.test.js # règles du Trou du cul seules
 node tests/turkish.test.js     # règles du Turkish seules
 node tests/six-qui-prend.test.js # règles du 6 qui prend seules
+node tests/rikiki.test.js      # règles du Rikiki seules
 node tests/cinq-mille.test.js  # règles et barème du 5000 seuls
 node tests/killer.test.js      # règles du Killer seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 node tests/cartes.test.js      # gabarit commun : liens vers cartes.css, empreinte, teintes
-node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 8 liens
+node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 9 liens
 ```
 
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
@@ -122,8 +126,10 @@ previous player banked; other seats: `doRoll(seat)`/`doBank(seat)`, or `keepDice
 Killer through `onRollClick` (« Lancer les dés », then « Relancer » the dice not chosen), `onDieClick(uid)` to choose
 the dice to keep, `onStopClick` and `onTargetClick(seat)` — the attack, the regeneration and a miss then play out
 alone (`await` a few ticks); other seats: `doThrow`/`doKeep(seat, uids)`/`doStop`/`doAttack(seat, target)`, with
-`rollDie()` replaced as for 5000. `loadDomGame(file)` in the harness loads any of the six card games and the two dice
-games.
+`rollDie()` replaced as for 5000. Rikiki through `onBidClick(k)` (a second click on the same number, or
+`onAnnounceClick`, bids) and `onCardClick(uid)` (likewise a second click, or `onPlayClick`, plays); other seats:
+`doBid`/`doPlay`; a one-card round plays itself (phase `"front"`, your card included). `loadDomGame(file)` in the
+harness loads any of the seven card games and the two dice games.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -138,7 +144,7 @@ reaches the draw-pile reshuffle or a non-positive finisher total — those are t
 
 ## Shared layout — cartes.css
 
-The six card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend — and the two dice games, 5000 and
+The seven card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend, Rikiki — and the two dice games, 5000 and
 Killer, look alike on
 purpose, on desktop as on phones; Asteroids and the landing page stay independent.
 [cartes.css](cartes.css) holds everything that used to be copied four times: base styles, header, buttons, opponent
@@ -162,9 +168,9 @@ faces, the contents of its table, its hand. The DOM is the same skeleton everywh
 - **Phones** (`max-width: 560px`): the three opponents become a grid with one equal column each, overlays become
   bottom-anchored sheets.
 
-After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the eight links,
+After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the nine links,
 and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
-1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all eight games fit with no scroll at every one
+1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all nine games fit with no scroll at every one
 of those sizes (Turkish's only exception: a 30-card hand on an iPhone SE scrolls a little). `fit.js` switches CSS
 animations off before measuring: headless Edge doesn't advance them in virtual time, and a card frozen at the start of
 its `pop` (24 px lower) reads as a false overflow. Landscape phones fall outside the 560 px query and get the desktop layout.
@@ -196,6 +202,9 @@ height. What each game shows:
 - **5000**: a throw reads 1 s, its 0.45 s animation included (it was 0.75 s); the kept dice already moved aside in
   their own step.
 - **6 qui prend** was already paced (reveal, each card laid, a row taken in red); only the end changed.
+- **Rikiki** was written paced: an AI bid shows `BID_MS` (« Nora annonce… », ringed) and a card `THINK_MS`; a full
+  trick stays `TRICK_MS` with its winner ringed and named in the status before it is gathered; in a one-card round each
+  card falls `FRONT_MS` apart, yours too.
 
 Some engine functions became asynchronous, so a targeted test awaits a few ticks after them: Turkish's failing
 `doBlind`, Cinq Rois' `afterDiscard` on a going out, Trou du cul's closing `doPlay` and `nextGive`, Uno's
@@ -800,6 +809,105 @@ the revealed card shrank to 40 px in the hand. `#actions` always holds one « Po
 choice: on phones an empty `#actions` collapses, and the table would resize twice per turn. On phones the hand is
 5 cards per row at a fixed width, so cards never resize as the hand shrinks. Card faces are tinted by heads (white 1,
 blue 2, yellow 3, red 5, violet 7), with the heads drawn by a CSS mask of an inline SVG bull (`--bull`).
+
+## Architecture — rikiki.html
+
+### Rules as implemented
+
+The French Wikipedia article « Ascenseur (jeu de cartes) » (also Rikiki, Escalier, Grimpette), with the owner's
+choices, all fixed — no option on the start screen — and all stated in the rules panel:
+
+- 52 cards, the As high. **25 rounds**: one card each, one more every round up to 13, then back down to 1
+  (`dealsFor(n)`: up to ⌊52 / n⌋, the engine still seats 2–6). The dealer rotates every round
+  (`S.dealer = (S.firstDealer + round − 1) % n`) and the first dealer from one game to the next (`S.games`): seat 3 at
+  the first game, so you bid and lead first.
+- **Trump**: the next card of the deck is turned (`S.turned`, public, out of play); at 13 cards none is left and the
+  round is played **without trump** (`S.trump = −1`). The cards never dealt are `S.out`, hidden from everybody.
+- **Bids** from the dealer's neighbour, in turn, 0 to the hand size; the **dealer bids last and may not make the total
+  equal the number of tricks** (`forbiddenBid()`; nothing is forbidden once the other bids already exceed it).
+- **Play**: the dealer's neighbour leads, the winner of a trick leads the next. You must **follow suit**; void,
+  anything goes — **no obligation to trump nor to overtrump** (the article: « généralement pas obligatoire de monter à
+  l'atout »).
+- **Scoring**: exact, 10 + 1 per trick (a bid of 0 made is worth 10); missed, −1 per trick of difference — the
+  article's main rule, its « 0 point » variant was not taken. Highest total after 25 rounds, ties shared.
+- **On the forehead** (« au front », the article's Tarot africain variant, chosen by the owner for the two one-card
+  rounds): everyone sees the others' cards, not their own, and bids on that. The cards then fall by themselves in turn
+  order (phase `"front"`, yours too): with one card there is nothing to choose.
+
+### Legality and flow
+
+`canPlay(seat, card)` is the only card rule, `canBid`/`legalBids`/`forbiddenBid` the bid rule: the renderer, the clicks
+and the AIs go through them. `trickWinner()` rests on `beats(a, b)`: same suit, the higher; otherwise only a trump
+takes. `S.phase`: `bid` (your bid), `play` (your card), `ai` (an opponent bids or plays), `front` (a one-card round's
+card falls), `trick` (the full trick stays `TRICK_MS`, its winner ringed and named), `over`. `beginTurn()` is the only
+place a turn starts; the bidding lasts while `bidding()` (someone's `bid` is still `null`). `doBid` passes to the next
+seat — after the dealer, to the neighbour, who leads; `doPlay` calls `closeTrick()` at the n-th card, then `endTrick()`
+(winner + 1, `S.history`, `S.lastTrick` shown dimmed until the next card), and `endRound()` once the hands are empty.
+**Terminates by construction**: 25 rounds of a fixed number of tricks, no `TURN_CAP`.
+
+Your input: a click on a number in the table selects it, a second click (or « Annoncer ») bids; a click on a card
+selects it — its ghost shows in its slot and the status says whether it would take the trick so far — and a second
+click (or « Jouer ») plays it.
+
+The suite checks every bid (order, seat, dealer rule) and every card (seat, leader, following suit) when it is made,
+every trick's winner against an independent reading (highest trump, else highest of the suit led), every deal (size,
+dealer, trump, cards out), and every round's score; plus card conservation (hands, trick, history, turned, out = 52).
+
+### Opponent AI
+
+`bid(p, seat)` and `play(p, seat)`, sanitised by `chooseBid`/`chooseCard`. Hidden from the policies: the other hands
+and `S.out` — except in a one-card round, where it is the reverse: `bid` sees the others' cards but **not its own**,
+and `play` is never called. The test swaps the hands accordingly for counting `Proxy`s: the others' hands and `S.out`
+normally, the player's own hand on the forehead.
+
+- `simple` (bench baseline): bids `handStrength()` — big trumps 1, middle ones 0.6, small ones 0.35, non-trump Aces
+  0.8, Kings 0.4 in a hand of four or more — rounded to the nearest legal bid; plays « au plus juste » (`greedyIdx`:
+  takes with its lowest winning card while it is short, ducks with its highest losing card once its count is made);
+  bids 0 on the forehead.
+- `sharp` (« Redoutable ») simulates, like 6 qui prend. `AI.samples` times it deals the cards it can't see to the
+  others (`dealHidden`, never a suit a player has shown void in: `voidsOf()`), then plays the rest of the round with
+  everyone on `greedyIdx` toward their bid, the opponents at random `AI.noise` of the time; each sampled deal weighs
+  `AI.fit` per trick of gap between what the sampled hand promises (`handStrength`, with the cards that player already
+  played) and the bid that player made (`plausibility`). It bids the number, then plays the card, with the best average
+  contract. Cards are integers in the simulations (`id = 13 × suit + rank − 2`) and `rollout()` allocates nothing.
+  On the forehead, `frontChance(seat)` tries each card it can't see as its own; every earlier bidder saw that card and
+  is assumed to have bid 1 exactly when their own chance was over one half (`AI.trust` in that model), so the bids
+  make each candidate more or less likely. The test's case: Yuki leads A♠ and you take only with a heart; Yuki bidding
+  0 lifts your chance from 0.1 to 0.5.
+
+```
+node tests/rikiki-bench.js 300          # 1 redoutable contre 3 tranquilles
+node tests/rikiki-bench.js sweep 200    # compare des réglages de l'objet AI
+node tests/rikiki-bench.js face 200     # chaque réglage contre le livré, 2 redoutables contre 2
+node tests/rikiki-bench.js stall 30     # 4 redoutables : durée des parties à l'écran
+```
+
+Reference points at the shipped settings: **88.3 % wins** over 400 games against three `simple` (25 % baseline),
+**7.75 points a round against 4.95**, contracts made 70.4 % of the time against 51.2 %. Against `simple` every setting
+lands within the noise (83–88 %, 7.5–7.8 points a round at 200 games: `noise` 0 or 0.3, `fit` 0.35 or 1, `spite`
+0.3, `trust` 0.6 or 0.9), so the settings were chosen two against two, with `face`: 120 samples beat 60 (56.0 % to
+44.0 %, 6.77 points a round against 6.48); `fit 1` — no weighting by the bids — loses a little (6.51 against 6.68);
+`noise 0` draws (6.47 against 6.50). 250 samples beat 120 again (55.8 % to 44.3 %, 6.84 against 6.63) but cost twice
+as much: a 13-card bid takes 27 ms at most in Node at 120 samples, 58 ms at 250, several times that on a phone, on
+top of the AI's pause — `AI.samples` is the strength/cost dial. `trust` only matters in the two one-card rounds and
+can't be measured at this scale. Four sharps, the table a player faces, make 61.8 % of their contracts (6.6 points a
+round); a game lasts **14.4 minutes** on screen at the AI's pace (`stall` sums the delays), plus the player's own
+decisions — about the same every game, since the 25 rounds always make 169 tricks.
+
+### Rendering and layout
+
+The shared layout (see *Shared layout*). The table: during the bidding, the turned card (or a dashed « sans atout »)
+and the numbers 0 to the hand size (`#bidPick`, there for the whole bidding and active at your turn, the forbidden one
+struck through: the table doesn't resize between bids); during play, the trick, one slot per player in playing order —
+the name under the card, the leader in bold, a dashed slot until played, the winner ringed — and the last trick dimmed
+until the next card. `#tableInfo` gives the trump and the bids' total. Opponents: name, a chip (the bid during the
+bidding, then tricks / bid: green when exact, red once the contract can't be made), score, a fan of backs, a « donne »
+bubble, then the round's points. On the forehead their fan becomes their card face up (`--front-card`, the fan's
+height fixed for the round), and yours stays a back in your hand. The hand is grouped by suit, trump first, then the
+colour cycle from it, so black and red always alternate; trumps carry a gold inner border, unplayable cards are
+darkened (`filter`). `#actions` always holds one button (« Annoncer » / « Jouer »). Card sizes in `cqh`/`cqw`;
+`#table.bidding` sizes the turned card leaving room for two rows of numbers. The `fit.js` sweep fits at every size,
+13-card bidding on an iPhone SE included.
 
 ## Architecture — cinq-mille.html
 

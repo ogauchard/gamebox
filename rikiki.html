@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rikiki</title>
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
+<style>
+  /* Gabarit, en-tête, boutons, vignettes, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les cartes, les annonces, le pli au centre et la main. */
+  :root {
+    --bg: #0a171a;
+    --panel: #12252a;
+    --line: #24424a;
+    --text: #ecf5f6;
+    --dim: #8fb0b5;
+    --bg-top: #123a40;
+    --btn: #183238;
+    --btn-hover: #214249;
+    --good: #4fbf6a;
+    --bad: #e0574d;
+    --red: #c8322b;
+    --black: #1f2328;
+    --gold: #d9a520;
+    /* Ratio hauteur/largeur d'une carte : 1.4. Les cartes du pli se
+       dimensionnent sur la hauteur réelle de la table (voir #table). */
+    --hand-card: clamp(46px, min(11vh, 7vw), 80px);
+    --trick-card: clamp(48px, min(12vh, 14vw), 96px);    /* navigateurs sans cqh */
+    --mini-card: clamp(14px, min(3vh, 4vw), 22px);
+    --front-card: clamp(28px, min(6vh, 4.4vw), 42px);    /* la carte au front d'un adversaire */
+  }
+
+  /* -------------------------------------------------------------- Cartes */
+  .card {
+    position: relative;
+    flex: 0 0 auto;
+    width: var(--cw);
+    height: calc(var(--cw) * 1.4);
+    border: 0; padding: 0;
+    border-radius: calc(var(--cw) * .11);
+    background: #fbf7ee;
+    color: var(--sc, var(--black));
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 3px 8px rgba(0,0,0,.45);
+    overflow: hidden;
+    cursor: default;
+    font: inherit;
+    transition: transform .15s, box-shadow .15s, opacity .15s;
+  }
+  .card:disabled { opacity: 1; }
+  .card.red { --sc: var(--red); }
+  /* L'atout : un filet doré à l'intérieur de la carte, dans la main comme sur la table. */
+  .card.trump::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    box-shadow: inset 0 0 0 calc(var(--cw) * .06) var(--gold);
+  }
+  .card .corner {
+    position: absolute; top: 5%; left: 7%;
+    display: flex; flex-direction: column; align-items: center;
+    line-height: .95;
+  }
+  .card .corner b { font-size: calc(var(--cw) * .3); font-weight: 900; letter-spacing: -.04em; }
+  .card .corner i { font-style: normal; font-size: calc(var(--cw) * .24); }
+  .card .pip {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 22% 0 0 18%;
+    font-size: calc(var(--cw) * .62); line-height: 1;
+  }
+  .card.back {
+    background: repeating-linear-gradient(45deg, #1d5f68 0 5px, #236e78 5px 10px);
+    box-shadow: inset 0 0 0 calc(var(--cw) * .07) #f1e6d2, 0 3px 8px rgba(0,0,0,.45);
+  }
+
+  /* ------------------------------------------------------------ Adversaires */
+  .player .name { gap: 7px; }
+  /* L'annonce, puis les plis faits sur l'annonce : vert quand le compte est
+     juste, rouge quand le contrat ne peut plus être réussi. */
+  .chip {
+    font-size: 11px; font-weight: 800; white-space: nowrap;
+    padding: 1px 7px; border-radius: 999px;
+    background: #24424a; color: var(--text);
+  }
+  .chip:empty { display: none; }
+  .chip.ok { background: var(--good); color: #0e2412; }
+  .chip.bad { background: var(--bad); color: #fff; }
+  .fan { --fan: .55; align-items: center; min-height: calc(var(--mini-card) * 1.4); }
+  .fan .more { margin-left: 6px; }
+  /* Au front : la carte de l'adversaire, face visible, assez grande pour se lire. */
+  .fan.front { min-height: calc(var(--front-card) * 1.4); padding-left: 0; }
+  .fan.front .card { --cw: var(--front-card); margin-left: 0; }
+  /* Le donneur, et en fin de manche les points marqués. */
+  .bubble {
+    position: absolute; top: -8px; right: 8px;
+    font-size: 11px; font-weight: 700;
+    padding: 1px 7px; border-radius: 999px;
+    background: #24424a; color: var(--dim);
+    border: 1px solid var(--line);
+  }
+  .bubble.pos { background: var(--good); color: #0e2412; border-color: var(--good); }
+  .bubble.neg { background: var(--bad); color: #fff; border-color: var(--bad); }
+
+  /* ----------------------------------------------------------------- Table */
+  /* Pendant les annonces : la carte retournée et les nombres à annoncer.
+     Pendant le jeu : le pli, une place par joueur dans l'ordre de pose, le nom
+     sous la carte. Dessous, l'atout et le total des annonces. */
+  #table { flex-direction: column; gap: 10px; --cw: var(--trick-card); }
+  @supports (width: 1cqh) {
+    /* 62px = noms sous les cartes + ligne d'information + écarts. */
+    #table { --trick-card: clamp(36px, min((100cqh - 62px) / 1.4, (100cqw - 40px) / 4.4), 104px); }
+    /* 150px = nombres à annoncer (deux rangées au plus) + ligne d'information + écarts. */
+    #table.bidding { --trick-card: clamp(30px, min((100cqh - 150px) / 1.4, 22cqw), 96px); }
+  }
+  #trick[hidden], #deal[hidden], #bidPick[hidden] { display: none; }
+  #trick { display: flex; gap: 10px; justify-content: center; align-items: flex-start; }
+  #trick.old { opacity: .38; }
+  .slot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .slot .who {
+    font-size: 12px; color: var(--dim); line-height: 1.2;
+    max-width: calc(var(--cw) + 10px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .slot.lead .who { color: var(--text); font-weight: 700; }
+  .empty {
+    flex: none; width: var(--cw); height: calc(var(--cw) * 1.4);
+    border: 2px dashed var(--line); border-radius: calc(var(--cw) * .11);
+  }
+  #trick .card.win { box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgba(0,0,0,.5); transform: translateY(-4px); }
+  #trick .card.ghost { opacity: .5; }
+  #trick .card.pop { animation: pop .26s ease-out; }
+
+  #deal { display: flex; align-items: center; gap: 14px; }
+  #deal .caption { font-size: 14px; color: var(--dim); max-width: 210px; }
+  #deal .caption b { color: var(--text); }
+  #deal .empty { display: grid; place-items: center; color: var(--dim); font-size: 12px; text-align: center; }
+  #bidPick { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 720px; padding: 0 8px; }
+  #bidPick button { min-width: 42px; height: 40px; padding: 0 8px; font-size: 16px; font-weight: 800; }
+  #bidPick button.sel { background: var(--accent); color: var(--ink); border-color: var(--accent); opacity: 1; }
+  #bidPick button.no { text-decoration: line-through; }
+
+  #tableInfo { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; align-items: center; font-size: 12px; color: var(--dim); }
+  .badge {
+    font-weight: 800; padding: 2px 10px; border-radius: 999px;
+    background: var(--btn); border: 1px solid var(--line); color: var(--text);
+  }
+  .badge.trumpBadge { border-color: var(--gold); }
+  .badge .red, #status b.red { color: #ff7a70; }
+
+  /* ------------------------------------------------------------------ Main */
+  /* Une couleur = un groupe de cartes chevauchées, l'atout en tête. */
+  #hand {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+    gap: 14px 10px;
+    padding: 16px 10px 8px;
+    --cw: var(--hand-card);
+  }
+  .group { display: flex; padding-left: calc(var(--cw) * .45); }
+  .group .card { margin-left: calc(var(--cw) * -.45); }
+  #hand .card.pickable { cursor: pointer; }
+  #hand .card.pickable:hover { transform: translateY(-5px); }
+  /* Assombrie plutôt que transparente : dans un groupe chevauché, la
+     transparence laisserait voir la carte du dessous. */
+  #hand .card.dead { filter: brightness(.55) saturate(.5); }
+  #hand .card.sel, #hand .card.sel:hover { transform: translateY(-12px); box-shadow: 0 0 0 3px var(--accent), 0 10px 18px rgba(0,0,0,.55); }
+  #hand .card.pop { animation: pop .26s ease-out; }
+  #hand .note { align-self: center; font-size: 13px; color: var(--dim); }
+
+  /* -------------------------------------------------------------- Feuilles */
+  td.pos { color: var(--good); }
+  td.neg { color: var(--bad); }
+  .next-round b { color: var(--text); }
+
+  /* ------------------------------------------------- Téléphone (portrait) */
+  @media (max-width: 560px) {
+    main { padding-top: 12px; }                   /* place pour les bulles de la première rangée */
+
+    #opponents .player { --mini-card: clamp(12px, 3.6vw, 17px); --front-card: clamp(26px, 8vw, 34px); padding: 5px 7px 6px; }
+    #opponents .player .name { margin-bottom: 3px; }
+    #opponents .fan { --fan: .7; }
+    .chip { font-size: 9.5px; padding: 0 5px; }
+    .bubble { font-size: 9.5px; top: -9px; right: 4px; padding: 0 5px; }
+
+    #table { gap: 7px; }
+    @supports (width: 1cqh) {
+      #table { --trick-card: clamp(36px, min((100cqh - 56px) / 1.4, (100cqw - 36px) / 4.3), 90px); }
+      #table.bidding { --trick-card: clamp(30px, min((100cqh - 150px) / 1.4, 22cqw), 80px); }
+    }
+    #trick { gap: 7px; }
+    .slot .who { font-size: 11px; }
+    #deal .caption { font-size: 12.5px; }
+    #bidPick { gap: 5px; }
+    #bidPick button { min-width: 38px; height: 38px; font-size: 15px; padding: 0 6px; }
+    #tableInfo { font-size: 11px; }
+
+    #hand {
+      --k: clamp(5, calc(var(--n, 13) * .42 + 1.6), 7.2);
+      --hand-card: min((100vw - 20px) / var(--k), 80px);
+      gap: 12px 6px;
+      padding: 14px 6px 2px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>RIKIKI</h1>
+  <span class="meta" id="roundInfo">Manche 1</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="opponents"></div>
+  <div id="table">
+    <div id="deal" hidden></div>
+    <div id="bidPick" hidden></div>
+    <div id="trick"></div>
+    <div id="tableInfo"><span class="badge trumpBadge" id="trumpInfo"></span><span id="bidsInfo"></span></div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions"></div>
+  <div id="me">
+    <div class="name"><span>Toi</span><span class="chip" id="myChip"></span><span class="tag" id="myTag"></span></div>
+    <div id="hand"></div>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>Rikiki</h2>
+    <p>À chaque manche, annonce le nombre <b>exact</b> de plis que tu vas faire. Réussi, ton contrat
+       rapporte <b>10 points plus 1 par pli</b> ; raté, tu perds un point par pli d'écart.</p>
+    <p>Tu joues contre <b>trois adversaires</b> gérés par l'ordinateur, en <b>25 manches</b> : de 1 à
+       13 cartes chacun, puis retour à 1.</p>
+    <p class="hint">52 cartes, un atout par manche, et les manches à une carte se jouent au front : le
+       détail est dans les règles.</p>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Un jeu de <b>52 cartes</b>, de l'As, la plus forte, au 2. La partie se joue en <b>25 manches</b> :
+       une carte chacun à la première, une de plus à chaque manche jusqu'à <b>13</b>, puis une de moins
+       jusqu'à 1 — c'est l'ascenseur. Le donneur change à chaque manche.</p>
+    <h3>L'atout</h3>
+    <p>Après la distribution, la carte suivante du paquet est retournée : sa couleur est l'<b>atout</b>
+       de la manche. À 13 cartes, il n'en reste aucune : la manche se joue <b>sans atout</b>.</p>
+    <h3>Les annonces</h3>
+    <p>En commençant par le joueur qui suit le donneur, chacun annonce le nombre de plis qu'il pense
+       faire, de 0 au nombre de cartes. Le <b>donneur parle en dernier</b> et n'a pas le droit de faire
+       tomber le total juste : il y a toujours au moins un contrat raté.</p>
+    <h3>Les plis</h3>
+    <p>Le joueur qui suit le donneur entame le premier pli. Chacun à son tour pose une carte : il doit
+       <b>fournir</b> la couleur demandée s'il en a. Sinon il joue ce qu'il veut — <b>couper</b> avec
+       un atout ou se défausser : rien n'oblige à couper, ni à monter.</p>
+    <p>Le pli va à l'<b>atout le plus fort</b>, ou à défaut à la plus forte carte de la couleur
+       demandée. Son gagnant entame le pli suivant.</p>
+    <h3>Au front</h3>
+    <p>Dans les deux manches à <b>une carte</b>, chacun la pose sur son front sans la regarder : tu vois
+       les cartes des trois autres, pas la tienne. On annonce d'après ce qu'on voit — et d'après les
+       annonces des autres, qui, eux, voient ta carte. Puis les cartes tombent d'elles-mêmes, dans
+       l'ordre.</p>
+    <h3>Les points</h3>
+    <ul>
+      <li><b>Contrat réussi</b>, exactement le nombre de plis annoncé : <b>10 points + 1 par pli</b>.
+          Annoncer 0 et n'en faire aucun rapporte 10.</li>
+      <li><b>Contrat raté</b> : <b>−1 point par pli d'écart</b>, en plus ou en moins.</li>
+    </ul>
+    <p>Après les 25 manches, le plus haut total gagne.</p>
+    <p class="hint">D'après l'article « Ascenseur (jeu de cartes) » de Wikipédia, où le jeu porte aussi
+       les noms de Rikiki, Escalier ou Grimpette.</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de manche / de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Fin de la manche</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Manche suivante</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   RIKIKI — jeu de plis à annonces (aussi appelé l'Ascenseur).
+   Un humain contre 3 adversaires gérés par l'ordinateur.
+
+   Règles d'après l'article de Wikipédia « Ascenseur (jeu de cartes) », avec
+   les choix fixes de l'auteur : 25 manches de 1 à 13 cartes puis de 12 à 1 ;
+   la carte retournée donne l'atout, la manche à 13 cartes se joue sans
+   atout ; le donneur ne peut pas faire tomber le total des annonces juste ;
+   fournir est obligatoire, couper et monter ne le sont pas ; contrat réussi
+   10 points + 1 par pli, raté −1 par pli d'écart ; les manches à une carte se
+   jouent au front. Le détail est dans le panneau des règles.
+   ========================================================================= */
+
+/* Couleurs 0 à 3, dans l'ordre de la main : noires et rouges alternent. */
+const SUIT_SYM = ["♠", "♥", "♣", "♦"];
+const SUIT_NAME = ["pique", "cœur", "trèfle", "carreau"];
+const RED = [false, true, false, true];
+const RANK_SHORT = { 11: "V", 12: "D", 13: "R", 14: "A" };
+const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
+const BID_MS = 900;              // un adversaire annonce
+const THINK_MS = 750;            // un adversaire choisit sa carte
+const FRONT_MS = 700;            // au front, chaque carte tombe seule
+const TRICK_MS = 1300;           // le pli complet reste sur la table, son gagnant entouré
+const END_MS = 2000;             // le dernier pli et la fin de manche annoncée, avant la feuille
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ------------------------------------------------------------------ Paquet */
+/* Valeurs 2 à 14 (As). `id` = 13 × couleur + valeur − 2 : c'est sous cette
+   forme que les politiques simulent la suite de la manche. */
+let uidSeq = 0;
+const mkCard = (suit, rank) => ({ uid: ++uidSeq, suit, rank, id: suit * 13 + rank - 2 });
+
+function buildDeck() {
+  const d = [];
+  for (let s = 0; s < 4; s++) for (let r = 2; r <= 14; r++) d.push(mkCard(s, r));
+  return d;                                            // 4 × 13 = 52
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const rankLabel = (r) => RANK_SHORT[r] || String(r);
+const cardLabel = (c) => rankLabel(c.rank) + SUIT_SYM[c.suit];
+const plis = (k) => `${k} pli${k > 1 ? "s" : ""}`;
+const signed = (n) => (n < 0 ? `−${-n}` : `+${n}`);
+const pts = (n) => `${n < 0 ? `−${-n}` : n} pt${Math.abs(n) > 1 ? "s" : ""}`;
+
+/* Les manches : une carte, puis une de plus jusqu'au maximum, puis on redescend.
+   À quatre : 1 à 13 puis 12 à 1, 25 manches. */
+function dealsFor(n) {
+  const up = Array.from({ length: Math.floor(52 / n) }, (_, i) => i + 1);
+  return [...up, ...up.slice(0, -1).reverse()];
+}
+
+/* Le score d'une manche : exactement l'annonce, 10 + 1 par pli ; sinon −1 par pli d'écart. */
+const contract = (bid, tricks) => (bid === tricks ? 10 + tricks : -Math.abs(bid - tricks));
+
+/* ------------------------------------------------------------------- État */
+const S = {
+  players: [],        // { name, ai, policy, hand, bid (null avant d'annoncer), tricks, score, rounds, gain }
+  deals: [],          // nombre de cartes de chaque manche
+  round: 1,           // 1 à deals.length
+  size: 0,            // cartes par joueur cette manche
+  dealer: 0,
+  firstDealer: 0,     // donneur de la première manche : il tourne d'une partie à l'autre
+  games: 0,
+  turned: null,       // la carte retournée, publique et hors jeu ; null quand tout est distribué
+  trump: -1,          // couleur d'atout, -1 sans atout
+  out: [],            // les cartes jamais distribuées, la retournée à part : personne ne les voit
+  current: 0,
+  trick: [],          // le pli en cours : { seat, card } dans l'ordre de pose
+  lastTrick: null,    // { cards, winner } : le pli qu'on vient de ramasser, affiché en grisé
+  history: [],        // les plis ramassés de la manche, { cards, winner } : information publique
+  phase: "idle",      // idle | bid | play | ai | front | trick | over
+  sel: null,          // uid de la carte que l'humain s'apprête à jouer
+  bidSel: null,       // l'annonce que l'humain s'apprête à faire
+  logs: [],
+  busy: false,
+  epoch: 0,           // change à chaque manche : un tour d'IA en vol d'une manche passée s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+const nplayers = () => S.players.length;
+/* Les manches à une carte se jouent au front. */
+const fronton = () => S.size === 1;
+const bidding = () => S.players.some((p) => p.bid === null);
+const ledSuit = () => (S.trick.length ? S.trick[0].card.suit : -1);
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* Tutoie l'humain, troisième personne pour les adversaires — jamais il/elle. */
+const says = (p, second, third) => (p.ai ? `${p.name} ${third}` : `Tu ${second}`);
+
+/* --------------------------------------------------------------- Légalité */
+/* Toute la règle du jeu de la carte tient ici : le rendu, les clics et les IA
+   passent par elle. On entame avec ce qu'on veut ; ensuite il faut fournir la
+   couleur demandée si on en a, et sinon on joue n'importe quoi — couper n'est
+   pas obligatoire, ni monter. */
+function canPlay(seat, card) {
+  const hand = S.players[seat].hand;
+  if (!hand.includes(card)) return false;
+  const led = ledSuit();
+  return led < 0 || card.suit === led || !hand.some((c) => c.suit === led);
+}
+const legalCards = (seat) => S.players[seat].hand.filter((c) => canPlay(seat, c));
+
+/* L'annonce interdite au donneur, qui parle en dernier : celle qui ferait
+   tomber le total juste. null pour les autres, et quand les annonces déjà
+   faites dépassent le nombre de plis. */
+function forbiddenBid(seat) {
+  if (seat !== S.dealer) return null;
+  const others = S.players.reduce((t, p, i) => t + (i === seat ? 0 : p.bid || 0), 0);
+  return others <= S.size ? S.size - others : null;
+}
+const canBid = (seat, k) => Number.isInteger(k) && k >= 0 && k <= S.size && k !== forbiddenBid(seat);
+const legalBids = (seat) => [...Array(S.size + 1).keys()].filter((k) => canBid(seat, k));
+
+/* `a`, posée après `b` qui tient le pli, le prend-elle ? Même couleur : la
+   plus haute ; sinon seul un atout prend. */
+const beats = (a, b) => (a.suit === b.suit ? a.rank > b.rank : a.suit === S.trump);
+function trickWinner(trick) {
+  let w = trick[0];
+  for (const t of trick) if (beats(t.card, w.card)) w = t;
+  return w.seat;
+}
+
+/* ------------------------------------------------------------ Mise en place */
+function newGame(nPlayers) {
+  S.players = [{ name: "Toi", ai: false, hand: [], bid: null, tricks: 0, score: 0, rounds: [], gain: 0 }];
+  for (let i = 0; i < nPlayers - 1; i++) {
+    S.players.push({ name: AI_NAMES[i], ai: true, policy: "sharp", hand: [], bid: null, tricks: 0, score: 0, rounds: [], gain: 0 });
+  }
+  S.deals = dealsFor(nPlayers);
+  S.round = 1;
+  // À la première partie, le dernier siège distribue : tu annonces et tu
+  // entames le premier. Puis le premier donneur tourne d'une partie à l'autre.
+  S.firstDealer = (S.games++ + nPlayers - 1) % nPlayers;
+  buildBoard();
+  startRound();
+}
+
+function startRound() {
+  S.epoch++;
+  const n = nplayers();
+  S.size = S.deals[S.round - 1];
+  S.dealer = (S.firstDealer + S.round - 1) % n;
+  const deck = shuffle(buildDeck());
+  for (const p of S.players) { p.hand = deck.splice(0, S.size); p.bid = null; p.tricks = 0; p.gain = 0; }
+  S.turned = deck.length ? deck.shift() : null;
+  S.trump = S.turned ? S.turned.suit : -1;
+  S.out = deck;
+  S.trick = [];
+  S.lastTrick = null;
+  S.history = [];
+  S.sel = null;
+  S.bidSel = null;
+  S.logs = [];
+  S.phase = "idle";            // un "over" hérité bloquerait beginTurn()
+  S.busy = false;
+  const dealer = S.players[S.dealer];
+  log(`Manche ${S.round} : ${S.size === 1 ? "une carte, au front" : `${S.size} cartes`}, ${says(dealer, "distribues", "distribue")}.`);
+  log(S.turned ? `Atout ${SUIT_NAME[S.trump]} : ${cardLabel(S.turned)} retourné.` : "Tout est distribué : sans atout.");
+  S.current = (S.dealer + 1) % n;
+  beginTurn();
+}
+
+/* --------------------------------------------------------------- Tours */
+/* Le seul endroit où un tour commence : une annonce tant que tout le monde n'a
+   pas annoncé, une carte ensuite. Au front, personne ne choisit sa carte :
+   chacun pose celle qu'il a sur le front (phase "front"). */
+function beginTurn() {
+  if (S.phase === "over") return;
+  const p = S.players[S.current];
+  if (bidding()) {
+    if (p.ai) { S.phase = "ai"; render(); aiTurn(); return; }
+    S.phase = "bid";
+    S.bidSel = null;
+    render();
+    return;
+  }
+  if (fronton()) { S.phase = "front"; render(); aiTurn(); return; }
+  if (p.ai) { S.phase = "ai"; render(); aiTurn(); return; }
+  S.phase = "play";
+  S.sel = null;
+  render();
+}
+
+function doBid(seat, k) {
+  const p = S.players[seat];
+  p.bid = k;
+  log(says(p, `annonces ${plis(k)}.`, `annonce ${plis(k)}.`));
+  // Après le donneur, la main revient à son voisin, qui entame.
+  S.current = (seat + 1) % nplayers();
+  beginTurn();
+}
+
+function doPlay(seat, card) {
+  const p = S.players[seat];
+  p.hand.splice(p.hand.indexOf(card), 1);
+  S.trick.push({ seat, card });
+  S.lastTrick = null;
+  if (S.trick.length === nplayers()) { closeTrick(); return; }
+  S.current = (seat + 1) % nplayers();
+  beginTurn();
+}
+
+/* Le pli complet reste sur la table TRICK_MS, son gagnant entouré et annoncé,
+   avant d'être ramassé (phase "trick"). */
+async function closeTrick() {
+  const epoch = S.epoch;
+  S.phase = "trick";
+  S.busy = true;
+  render();
+  await sleep(TRICK_MS);
+  if (epoch !== S.epoch) return;
+  S.busy = false;
+  endTrick();
+}
+
+function endTrick() {
+  const winner = trickWinner(S.trick);
+  const w = S.players[winner];
+  w.tricks++;
+  const done = { cards: S.trick, winner };
+  S.history.push(done);
+  S.lastTrick = done;
+  log(`Pli pour ${winner === 0 ? "toi" : w.name} (${cardLabel(S.trick.find((t) => t.seat === winner).card)}).`);
+  S.trick = [];
+  if (!S.players[0].hand.length) { endRound(); return; }
+  S.current = winner;
+  beginTurn();
+}
+
+/* --------------------------------------------------------- Fin de manche */
+/* La manche est comptée tout de suite ; la feuille attend END_MS, le temps de
+   voir le dernier pli (une nouvelle manche lancée entre-temps l'annule). */
+async function endRound() {
+  for (const p of S.players) {
+    p.gain = contract(p.bid, p.tricks);
+    p.score += p.gain;
+    p.rounds.push({ bid: p.bid, tricks: p.tricks, gain: p.gain });
+  }
+  S.phase = "over";
+  S.busy = false;
+  render();
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores(S.round === S.deals.length);
+}
+
+function showScores(over) {
+  const best = Math.max(...S.players.map((p) => p.score));
+  let html = "<table><thead><tr><th>Joueur</th><th>Annonce</th><th>Plis</th><th>Manche</th><th>Total</th></tr></thead><tbody>";
+  for (const p of S.players) {
+    const win = over && p.score === best;
+    html += `<tr${win ? ' class="win"' : ""}><td>${p.name}${win ? " 🏆" : ""}</td><td>${p.bid}</td><td>${p.tricks}</td>`
+          + `<td class="${p.gain > 0 ? "pos" : "neg"}">${signed(p.gain)}</td><td>${p.score < 0 ? `−${-p.score}` : p.score}</td></tr>`;
+  }
+  html += "</tbody></table>";
+  if (over) {
+    const winners = S.players.filter((p) => p.score === best);
+    html += winners.length === 1 && !winners[0].ai
+      ? `<p class="next-round">🏆 <b>Tu l'emportes avec ${pts(best)} !</b></p>`
+      : `<p class="next-round">🏆 <b>${winners.map((p) => p.name).join(" et ")}</b> ${winners.length > 1 ? "l'emportent" : "l'emporte"} avec ${pts(best)}.</p>`;
+  } else {
+    const size = S.deals[S.round];
+    const dealer = S.players[(S.firstDealer + S.round) % nplayers()];
+    html += `<p class="next-round">Manche suivante (${S.round + 1} sur ${S.deals.length}) : <b>${size === 1 ? "une carte, au front" : `${size} cartes`}</b>,`
+          + ` ${dealer.ai ? `<b>${dealer.name}</b> distribue` : "<b>tu</b> distribues"}.</p>`;
+  }
+  el("scoreBody").innerHTML = html;
+  el("scoreTitle").textContent = over ? "Fin de la partie" : `Fin de la manche ${S.round} sur ${S.deals.length}`;
+  el("btnNext").textContent = over ? "Rejouer" : "Manche suivante";
+  el("btnNext").dataset.over = over ? "1" : "";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== ADVERSAIRES */
+
+/* Deux politiques interchangeables. Chacune expose :
+     bid(p, seat)  -> le nombre de plis annoncé
+     play(p, seat) -> la carte à jouer, prise dans p.hand
+   Hors du front, aucune ne consulte la main d'un autre joueur ni les cartes
+   jamais distribuées (S.out) : elles disposent de leur main, de la carte
+   retournée, des plis joués (S.history, S.trick), des annonces, des plis faits
+   et du nombre de cartes de chacun. Au front, c'est l'inverse : bid() voit la
+   carte des autres mais pas la sienne, et play() n'est jamais appelée — les
+   cartes tombent seules. */
+
+/* Déclarée en `function` : les tests la remplacent pour vérifier qu'aucune
+   politique ne triche. */
+function policyOf(p) { return POLICIES[p.policy] || sharpPolicy; }
+
+/* ---------------------------------------------- Cartes en entiers (id) */
+/* La couleur est id / 13, la valeur id % 13 : 0 pour le 2, 12 pour l'As. */
+const suitOf = (id) => (id / 13) | 0;
+const beatsId = (a, b, trump) => { const sa = suitOf(a); return sa === suitOf(b) ? a > b : sa === trump; };
+/* Pour trier : les atouts au-dessus de toutes les autres cartes. */
+const power = (id, trump) => (suitOf(id) === trump ? 13 : 0) + id % 13;
+const bits = (m) => (m & 1) + (m >> 1 & 1) + (m >> 2 & 1) + (m >> 3 & 1);
+
+/* Les plis qu'une main promet, à la louche : les gros atouts, les As, les Rois
+   dans une main assez longue. Sert d'annonce à la politique simple et de
+   modèle des annonces adverses à la redoutable. */
+function handStrength(ids, len, trump) {
+  let e = 0;
+  for (let i = 0; i < len; i++) {
+    const r = ids[i] % 13;
+    if (suitOf(ids[i]) === trump) e += r >= 10 ? 1 : r >= 7 ? 0.6 : 0.35;
+    else if (r === 12) e += 0.8;
+    else if (r === 11 && len >= 4) e += 0.4;
+  }
+  return e;
+}
+
+/* Le coup « au plus juste », sur des entiers. Qui veut encore des plis
+   (need > 0) prend le pli avec sa plus petite carte qui le prend, ou se
+   défausse de la plus faible ; qui n'en veut plus passe sous la carte qui tient
+   le pli avec sa plus forte carte qui ne prend pas — et, forcé de prendre,
+   prend avec la plus forte s'il joue le dernier, la plus faible sinon (on peut
+   encore passer dessus). Pour entamer : sa plus haute carte s'il veut des plis,
+   sa plus faible sinon. hand : les ids, sur `len` cases ; best : l'id qui tient
+   le pli, -1 pour entamer ; led : la couleur demandée. Renvoie un indice. */
+function greedyIdx(hand, len, best, led, trump, need, last) {
+  if (best < 0) {
+    let pick = 0;
+    for (let i = 1; i < len; i++) {
+      const a = hand[i], b = hand[pick];
+      if (need > 0 ? (a % 13) * 2 + (suitOf(a) === trump) > (b % 13) * 2 + (suitOf(b) === trump)
+                   : power(a, trump) < power(b, trump)) pick = i;
+    }
+    return pick;
+  }
+  let follow = false;
+  for (let i = 0; i < len; i++) if (suitOf(hand[i]) === led) { follow = true; break; }
+  let low = -1, winLow = -1, winHigh = -1, loseHigh = -1;
+  for (let i = 0; i < len; i++) {
+    const c = hand[i];
+    if (follow && suitOf(c) !== led) continue;
+    const pw = power(c, trump);
+    if (low < 0 || pw < power(hand[low], trump)) low = i;
+    if (beatsId(c, best, trump)) {
+      if (winLow < 0 || pw < power(hand[winLow], trump)) winLow = i;
+      if (winHigh < 0 || pw > power(hand[winHigh], trump)) winHigh = i;
+    } else if (loseHigh < 0 || pw > power(hand[loseHigh], trump)) loseHigh = i;
+  }
+  if (need > 0) return winLow >= 0 ? winLow : low;
+  if (loseHigh >= 0) return loseHigh;
+  return last ? winHigh : winLow;
+}
+
+/* Un coup légal tiré au hasard : le bruit du modèle adverse. */
+function randomIdx(hand, len, led) {
+  let k = 0;
+  if (led >= 0) for (let i = 0; i < len; i++) if (suitOf(hand[i]) === led) k++;
+  if (!k) return Math.floor(Math.random() * len);
+  let r = Math.floor(Math.random() * k);
+  for (let i = 0; i < len; i++) if (suitOf(hand[i]) === led && r-- === 0) return i;
+  return 0;
+}
+
+/* Joue la fin d'une manche, tout le monde au plus juste — les adversaires de
+   `me` au hasard une fois sur AI.noise. hands[s] : les ids de chacun (modifiés),
+   lens[s] : leur nombre ; TB[0..tlen) : les cartes déjà posées dans le pli en
+   cours, par leader, leader + 1… ; won[s] : les plis faits, complétés ici.
+   Appelée des milliers de fois par décision : rien n'y est alloué. */
+const TB = new Int8Array(8);
+function rollout(hands, lens, leader, tlen, won, bids, trump, me) {
+  const n = hands.length;
+  for (;;) {
+    let bestPos = 0;
+    for (let i = 1; i < tlen; i++) if (beatsId(TB[i], TB[bestPos], trump)) bestPos = i;
+    for (let i = tlen; i < n; i++) {
+      const s = (leader + i) % n, h = hands[s], len = lens[s];
+      const led = i ? suitOf(TB[0]) : -1;
+      const x = s !== me && AI.noise && Math.random() < AI.noise ? randomIdx(h, len, led)
+        : greedyIdx(h, len, i ? TB[bestPos] : -1, led, trump, bids[s] - won[s], i === n - 1);
+      const c = h[x];
+      h[x] = h[len - 1];
+      lens[s] = len - 1;
+      TB[i] = c;
+      if (i && beatsId(c, TB[bestPos], trump)) bestPos = i;
+    }
+    leader = (leader + bestPos) % n;
+    won[leader]++;
+    tlen = 0;
+    if (!lens[leader]) return;
+  }
+}
+
+/* Les cartes que `seat` ne voit pas : ni dans sa main, ni retournée, ni jouées. */
+function unknownIds(seat) {
+  const known = new Uint8Array(52);
+  for (const c of S.players[seat].hand) known[c.id] = 1;
+  if (S.turned) known[S.turned.id] = 1;
+  for (const h of S.history) for (const t of h.cards) known[t.card.id] = 1;
+  for (const t of S.trick) known[t.card.id] = 1;
+  const out = [];
+  for (let id = 0; id < 52; id++) if (!known[id]) out.push(id);
+  return out;
+}
+
+/* Les couleurs que chacun a montré ne plus avoir — il n'a pas fourni —, en
+   masque de bits par siège. */
+function voidsOf() {
+  const v = S.players.map(() => 0);
+  for (const trick of [...S.history.map((h) => h.cards), S.trick]) {
+    if (!trick.length) continue;
+    const led = trick[0].card.suit;
+    for (const { seat, card } of trick) if (card.suit !== led) v[seat] |= 1 << led;
+  }
+  return v;
+}
+
+/* Distribue au hasard les cartes inconnues aux sièges de `order` : need[s]
+   cartes chacun dans hands[s], jamais d'une couleur où il a renoncé. Les plus
+   contraints servent d'abord ; après trente impasses, on oublie les renonces. */
+function dealHidden(pool, hands, need, voids, order) {
+  const used = new Uint8Array(pool.length);
+  for (let attempt = 0; attempt < 30; attempt++) {
+    shuffle(pool);
+    used.fill(0);
+    let ok = true;
+    for (const s of order) {
+      let k = 0;
+      for (let i = 0; i < pool.length && k < need[s]; i++) {
+        if (used[i] || (voids[s] >> suitOf(pool[i])) & 1) continue;
+        used[i] = 1;
+        hands[s][k++] = pool[i];
+      }
+      if (k < need[s]) { ok = false; break; }
+    }
+    if (ok) return;
+  }
+  shuffle(pool);
+  let i = 0;
+  for (const s of order) for (let k = 0; k < need[s]; k++) hands[s][k] = pool[i++];
+}
+
+/* ---------------------------------------------------------------------------
+   Politique simple : annonce ce que sa main promet à la louche, joue au plus
+   juste (prendre tant qu'il manque des plis, passer dessous ensuite), et au
+   front annonce toujours 0. Les adversaires jouent toujours « sharp » ;
+   celle-ci ne sert que de référence au banc d'essai.
+   --------------------------------------------------------------------------- */
+const simplePolicy = {
+  bid(p, seat) {
+    const legal = legalBids(seat);
+    if (fronton()) return legal[0];
+    const ids = p.hand.map((c) => c.id);
+    const e = handStrength(ids, ids.length, S.trump);
+    return legal.reduce((a, b) => (Math.abs(b - e) < Math.abs(a - e) ? b : a));
+  },
+  play(p, seat) {
+    const ids = p.hand.map((c) => c.id);
+    const best = S.trick.length ? S.trick.find((t) => t.seat === trickWinner(S.trick)).card.id : -1;
+    const last = S.trick.length === nplayers() - 1;
+    return p.hand[greedyIdx(ids, ids.length, best, ledSuit(), S.trump, p.bid - p.tricks, last)];
+  },
+};
+
+/* ---------------------------------------------------------------------------
+   Politique « redoutable ». Elle simule : AI.samples fois, elle distribue aux
+   autres, au hasard, les cartes qu'elle ne voit pas — jamais d'une couleur où
+   un joueur a renoncé —, puis joue la fin de la manche, tout le monde au plus
+   juste vers son annonce. Chaque donne tirée compte d'autant moins qu'elle
+   explique mal les annonces faites (AI.fit) : qui a annoncé 0 a peu de gros
+   atouts. Elle garde l'annonce, puis à chaque pli la carte, qui lui rapporte le
+   plus en moyenne.
+   Au front, elle ne voit pas sa carte : elle essaie chacune de celles qu'elle
+   ne voit pas, et les annonces déjà faites — par des joueurs qui, eux, la
+   voient — rendent chacune plus ou moins vraisemblable (AI.trust).
+
+   Réglages mesurés au banc d'essai : contre la politique simple, tout se vaut
+   (elle gagne 83 à 88 % des parties quoi qu'on règle) ; entre redoutables,
+   120 tirages battent 60 (56 % contre 44 %), et sans AI.fit on perd un peu.
+   --------------------------------------------------------------------------- */
+const AI = {
+  samples: 120,    // donnes tirées par décision
+  noise: 0.15,     // part des coups adverses joués au hasard dans les simulations
+  fit: 0.6,        // poids d'une donne tirée, par pli d'écart entre ce qu'elle promet et l'annonce faite
+  spite: 0,        // part de la moyenne des points des autres retranchée aux siens
+  trust: 0.75,     // au front : confiance dans le modèle des annonces des autres
+};
+
+/* Ce que vaut une fin de manche simulée pour `seat`. */
+function worth(won, bids, seat) {
+  let others = 0;
+  for (let s = 0; s < bids.length; s++) if (s !== seat) others += contract(bids[s], won[s]);
+  return contract(bids[seat], won[seat]) - AI.spite * others / (bids.length - 1);
+}
+
+/* La vraisemblance d'une donne tirée : pour chaque annonce déjà faite, AI.fit
+   par pli d'écart avec ce que promettait la main de son auteur — les cartes
+   tirées plus celles qu'il a déjà jouées. */
+function plausibility(base, need, playedBy, seat) {
+  if (AI.fit >= 1) return 1;
+  let w = 1;
+  const full = new Int8Array(S.size);
+  S.players.forEach((q, s) => {
+    if (s === seat || q.bid === null) return;
+    let len = 0;
+    for (let k = 0; k < need[s]; k++) full[len++] = base[s][k];
+    for (const id of playedBy[s]) full[len++] = id;
+    w *= AI.fit ** Math.abs(handStrength(full, len, S.trump) - q.bid);
+  });
+  return w;
+}
+
+/* Le décor d'une simulation : les cartes inconnues, les renonces, l'ordre de
+   distribution (les plus contraints d'abord), ce que chacun a déjà joué. */
+function simSetup(seat) {
+  const voids = voidsOf();
+  const playedBy = S.players.map(() => []);
+  for (const trick of [...S.history.map((h) => h.cards), S.trick]) for (const { seat: s, card } of trick) playedBy[s].push(card.id);
+  return {
+    pool: unknownIds(seat), voids, playedBy,
+    order: S.players.map((_, s) => s).filter((s) => s !== seat).sort((a, b) => bits(voids[b]) - bits(voids[a])),
+    need: S.players.map((q) => q.hand.length),
+    base: S.players.map(() => new Int8Array(S.size)),
+    hands: S.players.map(() => new Int8Array(S.size)),
+  };
+}
+
+/* Au front : la carte de chacun se voit de tous, sauf de lui. Les chances de
+   `seat` de prendre l'unique pli, sur les cartes qu'il ne voit pas, chacune
+   pesée par les annonces de ceux qui ont parlé avant lui en la voyant. */
+function frontChance(seat) {
+  const n = nplayers(), trump = S.trump, leader = (S.dealer + 1) % n;
+  const turned = S.turned ? S.turned.id : -1;
+  const cards = S.players.map((q, s) => (s === seat ? -1 : q.hand[0].id));
+  const winner = () => {
+    let w = leader;
+    for (let i = 1; i < n; i++) { const s = (leader + i) % n; if (beatsId(cards[s], cards[w], trump)) w = s; }
+    return w;
+  };
+  // Les chances de `s` de prendre le pli, vues de `s` : sa carte est l'une
+  // de celles qu'il ne voit pas.
+  const chance = (s) => {
+    const save = cards[s];
+    let wins = 0, total = 0;
+    for (let id = 0; id < 52; id++) {
+      if (id === turned || cards.some((x, o) => o !== s && x === id)) continue;
+      cards[s] = id;
+      total++;
+      if (winner() === s) wins++;
+    }
+    cards[s] = save;
+    return wins / total;
+  };
+  const before = [];
+  for (let i = 0; i < n && (leader + i) % n !== seat; i++) before.push((leader + i) % n);
+  let mass = 0, winMass = 0;
+  for (let c = 0; c < 52; c++) {
+    if (c === turned || cards.includes(c)) continue;
+    cards[seat] = c;
+    let like = 1;
+    for (const o of before) like *= (chance(o) > 0.5 ? 1 : 0) === S.players[o].bid ? AI.trust : 1 - AI.trust;
+    mass += like;
+    if (winner() === seat) winMass += like;
+  }
+  return winMass / mass;
+}
+
+/* L'annonce au front : 1 pli vaut P × 11 − (1 − P), 0 pli (1 − P) × 10 − P. */
+function frontBid(seat) {
+  const P = frontChance(seat);
+  const value = (b) => (b ? P * 11 - (1 - P) : (1 - P) * 10 - P);
+  return legalBids(seat).reduce((a, b) => (value(b) > value(a) ? b : a));
+}
+
+const sharpPolicy = {
+  bid(p, seat) {
+    if (fronton()) return frontBid(seat);
+    const n = nplayers(), size = S.size, trump = S.trump;
+    const legal = legalBids(seat);
+    const st = simSetup(seat);
+    const mine = p.hand.map((c) => c.id);
+    const leader = (S.dealer + 1) % n;
+    const bids = new Array(n), lens = new Array(n), won = new Array(n);
+    const value = new Float64Array(size + 1);
+    for (let k = 0; k < AI.samples; k++) {
+      dealHidden(st.pool, st.base, st.need, st.voids, st.order);
+      const w = plausibility(st.base, st.need, st.playedBy, seat);
+      // Qui n'a pas encore annoncé annoncera ce que sa main promet.
+      for (const s of st.order) bids[s] = S.players[s].bid ?? Math.min(size, Math.round(handStrength(st.base[s], size, trump)));
+      for (const b of legal) {
+        for (let s = 0; s < n; s++) {
+          lens[s] = size;
+          won[s] = 0;
+          if (s === seat) st.hands[s].set(mine); else st.hands[s].set(st.base[s]);
+        }
+        bids[seat] = b;
+        rollout(st.hands, lens, leader, 0, won, bids, trump, seat);
+        value[b] += w * worth(won, bids, seat);
+      }
+    }
+    return legal.reduce((a, b) => (value[b] > value[a] ? b : a));
+  },
+
+  play(p, seat) {
+    const legal = legalCards(seat);
+    if (legal.length === 1) return legal[0];
+    const n = nplayers(), trump = S.trump;
+    const st = simSetup(seat);
+    const bids = S.players.map((q) => q.bid);
+    const leader = S.trick.length ? S.trick[0].seat : seat;
+    const tlen = S.trick.length;
+    const mine = p.hand.map((c) => c.id);
+    const lens = new Array(n), won = new Array(n);
+    const value = new Float64Array(legal.length);
+    for (let k = 0; k < AI.samples; k++) {
+      dealHidden(st.pool, st.base, st.need, st.voids, st.order);
+      const w = plausibility(st.base, st.need, st.playedBy, seat);
+      legal.forEach((card, i) => {
+        for (let s = 0; s < n; s++) {
+          won[s] = S.players[s].tricks;
+          if (s !== seat) { st.hands[s].set(st.base[s].subarray(0, st.need[s])); lens[s] = st.need[s]; }
+        }
+        let m = 0;
+        for (const id of mine) if (id !== card.id) st.hands[seat][m++] = id;
+        lens[seat] = m;
+        for (let t = 0; t < tlen; t++) TB[t] = S.trick[t].card.id;
+        TB[tlen] = card.id;
+        rollout(st.hands, lens, leader, tlen + 1, won, bids, trump, seat);
+        value[i] += w * worth(won, bids, seat);
+      });
+    }
+    let best = 0;
+    for (let i = 1; i < legal.length; i++) if (value[i] > value[best]) best = i;
+    return legal[best];
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+
+/* Une annonce et une carte de l'ordinateur, vérifiées. */
+function chooseBid(seat) {
+  const p = S.players[seat];
+  const k = policyOf(p).bid(p, seat);
+  return canBid(seat, k) ? k : legalBids(seat)[0];
+}
+function chooseCard(seat) {
+  const p = S.players[seat];
+  const card = policyOf(p).play(p, seat);
+  return card && canPlay(seat, card) ? card : legalCards(seat)[0];
+}
+
+/* ------------------------------------------------------------ Tour d'une IA */
+/* Une annonce ou une carte de l'ordinateur, après une pause. Au front, la
+   carte de chacun — la tienne comprise — tombe de la même façon. */
+async function aiTurn() {
+  const seat = S.current, epoch = S.epoch;
+  const bid = bidding();
+  S.busy = true;
+  await sleep(bid ? BID_MS : fronton() ? FRONT_MS : THINK_MS);
+  if (epoch !== S.epoch || S.current !== seat || (S.phase !== "ai" && S.phase !== "front")) return;
+  S.busy = false;
+  if (bid) doBid(seat, chooseBid(seat));
+  else doPlay(seat, fronton() ? S.players[seat].hand[0] : chooseCard(seat));
+}
+
+/* ================================================================= ENTRÉES */
+
+/* Un clic sur un nombre le choisit ; un second clic l'annonce. */
+function onBidClick(k) {
+  if (S.phase !== "bid" || S.busy || S.current !== 0 || !canBid(0, k)) return;
+  if (S.bidSel === k) { onAnnounceClick(); return; }
+  S.bidSel = k;
+  render();
+}
+
+function onAnnounceClick() {
+  if (S.phase !== "bid" || S.busy || S.current !== 0 || !canBid(0, S.bidSel)) return;
+  const k = S.bidSel;
+  S.bidSel = null;
+  doBid(0, k);
+}
+
+/* Un clic choisit la carte ; un second clic sur la même la joue. */
+function onCardClick(uid) {
+  if (S.phase !== "play" || S.busy || S.current !== 0) return;
+  const card = S.players[0].hand.find((c) => c.uid === uid);
+  if (!card || !canPlay(0, card)) return;
+  if (S.sel === uid) { onPlayClick(); return; }
+  S.sel = uid;
+  render();
+}
+
+function onPlayClick() {
+  if (S.phase !== "play" || S.busy || S.current !== 0) return;
+  const card = S.players[0].hand.find((c) => c.uid === S.sel);
+  if (!card || !canPlay(0, card)) return;
+  S.sel = null;
+  doPlay(0, card);
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function cardEl(c, extra) {
+  const cls = "card" + (!c ? " back" : (RED[c.suit] ? " red" : "") + (c.suit === S.trump ? " trump" : ""));
+  const b = mk("button", cls + (extra ? " " + extra : ""));
+  if (c) {
+    const corner = mk("span", "corner");
+    corner.appendChild(mk("b", null, rankLabel(c.rank)));
+    corner.appendChild(mk("i", null, SUIT_SYM[c.suit]));
+    b.appendChild(corner);
+    b.appendChild(mk("span", "pip", SUIT_SYM[c.suit]));
+  }
+  b.disabled = true;
+  return b;
+}
+
+/* Une carte dans une phrase : « R♥ », en rouge pour les cœurs et les carreaux. */
+const cardHtml = (c) => `<b${RED[c.suit] ? ' class="red"' : ""}>${cardLabel(c)}</b>`;
+
+function buildBoard() {
+  const host = el("opponents");
+  host.innerHTML = "";
+  S.players.forEach((p, pi) => {
+    if (pi === 0) return;
+    const box = mk("div", "player");
+    const name = mk("div", "name");
+    name.appendChild(mk("span", null, p.name));
+    const chip = mk("span", "chip");
+    const tag = mk("span", "tag", "");
+    name.appendChild(chip);
+    name.appendChild(tag);
+    box.appendChild(name);
+    const fan = mk("div", "fan");
+    box.appendChild(fan);
+    const bubble = mk("span", "bubble");
+    box.appendChild(bubble);
+    host.appendChild(box);
+    Object.assign(p, { _box: box, _chip: chip, _tag: tag, _fan: fan, _bubble: bubble });
+  });
+}
+
+let shownUids = new Set();
+
+/* L'annonce pendant les annonces ; ensuite plis faits / annonce, vert quand le
+   compte est juste, rouge quand le contrat ne peut plus être réussi. */
+function chipOf(p) {
+  if (p.bid === null) return { text: "", cls: "" };
+  if (bidding()) return { text: plis(p.bid), cls: "" };
+  const lost = p.tricks > p.bid || p.bid - p.tricks > p.hand.length;
+  return { text: `${p.tricks} / ${p.bid}`, cls: p.tricks === p.bid ? "ok" : lost ? "bad" : "" };
+}
+
+function setChip(node, p) {
+  const chip = chipOf(p);
+  node.textContent = chip.text;
+  node.className = "chip" + (chip.cls ? " " + chip.cls : "");
+}
+
+function statusHtml() {
+  const p = S.players[S.current];
+  const me = S.players[0];
+  switch (S.phase) {
+    case "bid": {
+      const f = forbiddenBid(0);
+      const no = f !== null ? ` <b>${f}</b> est interdit : le total tomberait juste.` : "";
+      if (fronton()) return `Au front : tu vois les cartes des autres, pas la tienne. Combien de plis ?${no}`;
+      return `Combien de plis feras-tu ?${no}`;
+    }
+    case "ai":
+      if (bidding()) return S.current === S.dealer ? `<b>${p.name}</b> distribue et annonce en dernier…` : `<b>${p.name}</b> annonce…`;
+      return `<b>${p.name}</b> réfléchit…`;
+    case "front":
+      return S.current === 0 ? "Ta carte tombe de ton front…" : `La carte de <b>${p.name}</b> tombe de son front…`;
+    case "play": {
+      const led = ledSuit();
+      const sel = me.hand.find((c) => c.uid === S.sel);
+      let first;
+      if (sel && !S.trick.length) first = `Tu entames avec ${cardHtml(sel)}.`;
+      else if (sel) {
+        const best = S.trick.find((t) => t.seat === trickWinner(S.trick)).card;
+        first = `Ton ${cardHtml(sel)} ${beats(sel, best) ? "prendrait le pli, pour l'instant" : "ne prendrait pas le pli"}.`;
+      } else if (!S.trick.length) first = "À toi d'entamer.";
+      else if (me.hand.some((c) => c.suit === led)) first = `À toi : fournis à ${SUIT_SYM[led]}.`;
+      else first = `À toi : pas de ${SUIT_SYM[led]}, coupe ou défausse-toi.`;
+      const need = me.bid - me.tricks;
+      const goal = need < 0 ? "Contrat dépassé."
+        : need > me.hand.length ? "Contrat hors d'atteinte."
+        : need === 0 ? "Tu as ton compte : ne prends plus rien."
+        : `Il te faut encore ${plis(need)}.`;
+      return `${first} ${goal}`;
+    }
+    case "trick": {
+      const w = trickWinner(S.trick);
+      const card = S.trick.find((t) => t.seat === w).card;
+      return `Pli pour ${w === 0 ? "<b>toi</b>" : `<b>${S.players[w].name}</b>`} avec ${cardHtml(card)}.`;
+    }
+    case "over": {
+      const head = S.round === S.deals.length ? "Fin de la partie" : "Fin de la manche";
+      if (me.tricks === me.bid) return `${head} : contrat réussi, <b>${signed(me.gain)}</b>.`;
+      return `${head} : ${plis(me.tricks)} pour ${me.bid} annoncé${me.bid > 1 ? "s" : ""}, <b>${signed(me.gain)}</b>.`;
+    }
+    default: return "";
+  }
+}
+
+/* La table : pendant les annonces, la carte retournée et les nombres à
+   annoncer (toujours là, actifs à ton tour : la table ne change pas de taille) ;
+   ensuite le pli en cours, ou le dernier ramassé en grisé. */
+function renderTable(next) {
+  const me = S.players[0];
+  const bids = bidding();
+  el("table").classList.toggle("bidding", bids);
+  el("deal").hidden = !bids;
+  el("bidPick").hidden = !bids;
+  el("trick").hidden = bids;
+
+  if (bids) {
+    const deal = el("deal");
+    deal.innerHTML = "";
+    deal.appendChild(S.turned ? cardEl(S.turned) : mk("div", "empty", "sans atout"));
+    const cap = mk("div", "caption");
+    cap.innerHTML = S.turned
+      ? `Atout <b>${SUIT_NAME[S.trump]}</b> : la carte retournée.`
+      : "Tout est distribué : la manche se joue <b>sans atout</b>.";
+    deal.appendChild(cap);
+
+    const pick = el("bidPick");
+    pick.innerHTML = "";
+    const mine = S.phase === "bid" && S.current === 0;
+    const f = mine ? forbiddenBid(0) : null;
+    for (let k = 0; k <= S.size; k++) {
+      const b = mk("button", null, String(k));
+      if (mine ? S.bidSel === k : me.bid === k) b.classList.add("sel");
+      if (k === f) b.classList.add("no");
+      b.disabled = !mine || k === f;
+      b.addEventListener("click", () => onBidClick(k));
+      pick.appendChild(b);
+    }
+  } else {
+    const host = el("trick");
+    host.innerHTML = "";
+    const old = !S.trick.length && !!S.lastTrick;
+    const cards = S.trick.length ? S.trick : old ? S.lastTrick.cards : [];
+    host.classList.toggle("old", old);
+    const n = nplayers();
+    const lead = cards.length ? cards[0].seat : S.current;
+    const win = S.phase === "trick" ? trickWinner(S.trick) : old ? S.lastTrick.winner : -1;
+    const ghost = S.phase === "play" && S.current === 0 ? me.hand.find((c) => c.uid === S.sel) : null;
+    for (let i = 0; i < n; i++) {
+      const seat = (lead + i) % n;
+      const slot = mk("div", "slot" + (i === 0 ? " lead" : ""));
+      const t = cards[i];
+      if (t) {
+        let cls = t.seat === win ? "win" : "";
+        if (!old && !shownUids.has(t.card.uid)) cls += " pop";
+        if (!old) next.add(t.card.uid);
+        slot.appendChild(cardEl(t.card, cls.trim()));
+      } else if (ghost && i === cards.length) {
+        slot.appendChild(cardEl(ghost, "ghost"));
+      } else {
+        slot.appendChild(mk("div", "empty"));
+      }
+      slot.appendChild(mk("span", "who", S.players[seat].name));
+      host.appendChild(slot);
+    }
+  }
+
+  const trump = el("trumpInfo");
+  trump.innerHTML = S.trump >= 0
+    ? `Atout <span${RED[S.trump] ? ' class="red"' : ""}>${SUIT_SYM[S.trump]}</span>`
+    : "Sans atout";
+  const total = S.players.reduce((t, p) => t + (p.bid || 0), 0);
+  el("bidsInfo").textContent = `Annonces : ${total} pour ${plis(S.size)}`;
+}
+
+function renderHand(next) {
+  const host = el("hand");
+  const me = S.players[0];
+  host.innerHTML = "";
+  host.style.setProperty("--n", me.hand.length);
+  if (fronton() && me.hand.length) {
+    // Au front, ta carte reste de dos : tu ne la vois pas.
+    const g = mk("div", "group");
+    g.appendChild(cardEl(null));
+    host.appendChild(g);
+    host.appendChild(mk("span", "note", "ta carte, sur ton front"));
+  } else {
+    const playing = S.phase === "play" && S.current === 0 && !S.busy;
+    // L'atout en tête, puis les autres couleurs dans l'ordre du cycle : le
+    // noir et le rouge alternent toujours.
+    const first = S.trump >= 0 ? S.trump : 0;
+    for (let k = 0; k < 4; k++) {
+      const suit = (first + k) % 4;
+      const cards = me.hand.filter((c) => c.suit === suit).sort((a, b) => b.rank - a.rank);
+      if (!cards.length) continue;
+      const g = mk("div", "group");
+      for (const c of cards) {
+        next.add(c.uid);
+        let cls = "";
+        if (playing) cls += canPlay(0, c) ? " pickable" : " dead";
+        if (playing && S.sel === c.uid) cls += " sel";
+        if (!shownUids.has(c.uid)) cls += " pop";
+        const b = cardEl(c, cls.trim());
+        if (cls.includes("pickable")) {
+          b.disabled = false;
+          b.addEventListener("click", () => onCardClick(c.uid));
+        }
+        g.appendChild(b);
+      }
+      host.appendChild(g);
+    }
+  }
+  setChip(el("myChip"), me);
+  el("myTag").textContent = pts(me.score) + (S.dealer === 0 ? " · tu distribues" : "");
+}
+
+/* Un seul bouton, toujours présent : la hauteur de la zone ne bouge pas d'un
+   tour à l'autre (sur téléphone, une zone vide se replie). */
+function renderActions() {
+  const host = el("actions");
+  host.innerHTML = "";
+  let label, fn, ok;
+  if (S.phase === "bid") {
+    ok = S.current === 0 && canBid(0, S.bidSel);
+    label = ok ? `Annoncer ${plis(S.bidSel)}` : "Annoncer";
+    fn = onAnnounceClick;
+  } else {
+    const card = S.phase === "play" && S.current === 0 && !S.busy ? S.players[0].hand.find((c) => c.uid === S.sel) : null;
+    ok = !!card;
+    label = card ? `Jouer ${cardLabel(card)}` : "Jouer";
+    fn = onPlayClick;
+  }
+  const b = mk("button", "primary", label);
+  b.disabled = !ok;
+  b.addEventListener("click", fn);
+  host.appendChild(b);
+}
+
+function render() {
+  if (!S.players.length) return;
+  const next = new Set();
+  const live = ["bid", "play", "ai", "front"].includes(S.phase);
+  // Adversaires
+  S.players.forEach((p, pi) => {
+    if (pi === 0 || !p._box) return;
+    p._box.classList.toggle("active", live && S.current === pi);
+    setChip(p._chip, p);
+    p._tag.textContent = pts(p.score);
+    p._fan.innerHTML = "";
+    p._fan.classList.toggle("front", fronton());
+    if (fronton()) {
+      // Au front, tu vois la carte des autres.
+      if (p.hand.length) p._fan.appendChild(cardEl(p.hand[0]));
+    } else {
+      const shown = Math.min(p.hand.length, 7);
+      for (let i = 0; i < shown; i++) p._fan.appendChild(cardEl(null));
+      if (p.hand.length > shown) p._fan.appendChild(mk("span", "more", `+${p.hand.length - shown}`));
+    }
+    const over = S.phase === "over";
+    const bubble = over ? signed(p.gain) : S.dealer === pi ? "donne" : "";
+    p._bubble.textContent = bubble;
+    p._bubble.hidden = !bubble;
+    p._bubble.className = "bubble" + (over ? (p.gain > 0 ? " pos" : " neg") : "");
+  });
+
+  renderTable(next);
+  renderHand(next);
+  shownUids = next;
+  renderActions();
+  el("me").classList.toggle("active", (S.phase === "bid" || S.phase === "play") && S.current === 0);
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
+  el("roundInfo").textContent = `Manche ${S.round}/${S.deals.length} · ${S.size === 1 ? "1 carte, au front" : `${S.size} cartes`}`;
+}
+
+/* ============================================================== Interface */
+/* Toujours quatre joueurs : toi et trois adversaires « sharp », 25 manches.
+   newGame() reste générique — les tests et le banc d'essai y asseyent
+   d'autres tablées par startGame(n). */
+const PLAYERS = 4;
+
+function startGame(nPlayers = PLAYERS) {
+  el("startOverlay").hidden = true;
+  el("scoreOverlay").hidden = true;
+  newGame(nPlayers);
+}
+el("btnStart").addEventListener("click", () => startGame());
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+
+el("btnNext").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  if (el("btnNext").dataset.over) { newGame(nplayers()); return; }
+  S.round++;
+  startRound();
+});
+</script>
+</body>
+</html>
