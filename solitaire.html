@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Solitaire</title>
+<link rel="stylesheet" href="cartes.css?v=a75e348d">
+<style>
+  /* Gabarit, en-tête, boutons, statut, journal, feuilles : cartes.css.
+     Ici : la teinte, les cartes, la rangée du haut (talon, défausse, quatre
+     fondations) et les sept colonnes. Ni adversaires ni main : on joue seul,
+     toute la partie est sur la table. */
+  :root {
+    --bg: #07170e;
+    --panel: #0f2a1b;
+    --line: #245238;
+    --text: #eef6f0;
+    --dim: #92b6a0;
+    --bg-top: #1b5634;
+    --btn: #133524;
+    --btn-hover: #1b4631;
+    --red: #c8322b;
+    --black: #1f2328;
+    --hint: #6fe3ff;
+    /* Navigateurs sans cqh : la carte se règle sur la fenêtre. */
+    --g: 8px;
+    --cw: clamp(30px, min((100vw - 48px) / 7.5, (100vh - 230px) / 5.6), 118px);
+  }
+
+  /* ----------------------------------------------------------------- Table */
+  /* La rangée du haut puis les sept colonnes, sur une même grille de sept
+     cartes de large. La carte se règle sur la table : sept de front en
+     largeur ; en hauteur, la rangée du haut (1.4 largeur), l'écart, et de quoi
+     montrer une colonne de cinq cartes cachées et sept visibles sans la
+     resserrer (4.2 largeurs) — 5.6 en tout. */
+  #table { flex-direction: column; justify-content: flex-start; gap: 0; touch-action: manipulation; }
+  @supports (width: 1cqh) {
+    #table {
+      --g: clamp(4px, 1.2cqw, 14px);
+      --cw: clamp(30px, min((100cqw - 6 * var(--g)) / 7, (100cqh - var(--g)) / 5.6), 118px);
+    }
+  }
+  #top, #tableau { display: grid; grid-template-columns: repeat(7, var(--cw)); column-gap: var(--g); }
+  #top { flex: none; }
+  #found { display: contents; }
+  #tableau { flex: 1 1 0; min-height: 0; margin-top: var(--g); }
+
+  .slot { position: relative; height: calc(var(--cw) * 1.4); cursor: pointer; }
+  #waste { grid-column: span 2; }
+  /* Un emplacement vide reste lisible : pointillés, et ce qu'il attend. */
+  .empty {
+    position: absolute; left: 0; top: 0;
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    border: 2px dashed var(--line); border-radius: calc(var(--cw) * .09);
+    display: grid; place-items: center;
+    color: #3a7553; font-size: calc(var(--cw) * .48); font-weight: 800; line-height: 1;
+  }
+  .empty.red { color: #8a4a48; }
+  #stock .count {
+    position: absolute; left: calc(var(--cw) / 2); bottom: 7%; transform: translateX(-50%);
+    padding: 0 .5em; border-radius: 999px;
+    background: rgba(0,0,0,.6); color: #fff;
+    font-size: clamp(10px, calc(var(--cw) * .18), 14px); font-weight: 700; line-height: 1.5;
+    pointer-events: none;
+  }
+
+  /* Les colonnes : les cartes cachées décalées de --dy, les visibles de --uy,
+     assez pour lire leur coin ; --uy-max part de la largeur d'une carte. */
+  .col {
+    position: relative; cursor: pointer;
+    --uy-max: .36;
+    --dy: calc(var(--cw) * .12);
+    --uy: calc(var(--cw) * .3);
+  }
+  @supports (width: 1cqh) {
+    /* Une colonne qui ne tiendrait plus se resserre : la hauteur de la table,
+       moins la rangée du haut, l'écart, la dernière carte et les cartes
+       cachées, partagée entre les autres visibles. */
+    .col { --uy: clamp(var(--cw) * .1, (100cqh - var(--cw) * 2.8 - var(--g) - var(--d, 0) * var(--dy)) / max(var(--u, 1) - 1, 1), var(--cw) * var(--uy-max)); }
+  }
+
+  /* -------------------------------------------------------------- Cartes */
+  .card {
+    position: absolute; left: 0; top: 0;
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    border: 0; padding: 0;
+    border-radius: calc(var(--cw) * .09);
+    --face: #fbf7ee;
+    background: var(--face);
+    color: var(--black);
+    box-shadow: 0 1px 0 rgba(0,0,0,.25), 0 2px 6px rgba(0,0,0,.4);
+    overflow: hidden;
+    font: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  /* Le survol des boutons de cartes.css repeindrait la carte. */
+  .card:hover:not(:disabled) { background: var(--face); }
+  .card.red { color: var(--red); }
+  /* Le coin sur une ligne : c'est tout ce qu'on voit d'une carte recouverte. */
+  .card .corner {
+    position: absolute; top: 4%; left: 7%;
+    display: flex; align-items: baseline;
+    font-size: calc(var(--cw) * .27); line-height: 1;
+  }
+  .card .corner b { font-weight: 900; letter-spacing: -.05em; }
+  .card .corner i { font-style: normal; font-size: .92em; margin-left: .04em; }
+  .card .pip {
+    position: absolute; inset: 28% 0 0;
+    display: grid; place-items: center;
+    font-size: calc(var(--cw) * .66); line-height: 1;
+  }
+  .card.back {
+    --face: repeating-linear-gradient(45deg, #7d2431 0 4px, #922c3b 4px 8px);
+    box-shadow: inset 0 0 0 calc(var(--cw) * .06) #f1e6d2, 0 1px 4px rgba(0,0,0,.45);
+  }
+  .col .card { top: calc(var(--a, 0) * var(--dy) + var(--b, 0) * var(--uy)); }
+  #waste .card { left: calc(var(--x, 0) * var(--cw) * .32); }
+
+  /* La carte choisie, les places où elle peut aller, et l'indice. */
+  .card.sel { box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgba(0,0,0,.55); }
+  .card.target, .empty.target { outline: 3px dashed var(--accent); outline-offset: 1px; }
+  @keyframes glow {
+    from { box-shadow: 0 0 0 2px var(--hint); }
+    to { box-shadow: 0 0 0 4px var(--hint), 0 0 16px var(--hint); }
+  }
+  /* Une carte qui vient d'arriver, une carte qui se retourne. */
+  @keyframes land { from { transform: translateY(calc(var(--cw) * -.14)) scale(1.04); filter: brightness(1.15); } }
+  @keyframes flip { from { transform: perspective(500px) rotateY(85deg); } }
+  .card.land { animation: land .2s ease-out; }
+  .card.flip { animation: flip .26s ease-out; }
+  .card.hint, .empty.hint { box-shadow: 0 0 0 3px var(--hint); animation: glow .75s ease-in-out infinite alternate; }
+
+  #status b.red, #log b.red { color: #ff7a70; }
+
+  /* -------------------------------------------------------------- Feuilles */
+  .next-round b { color: var(--text); }
+
+  /* ------------------------------------------------- Téléphone (portrait) */
+  @media (max-width: 560px) {
+    #table { padding: 2px 6px 0; }
+    /* Sept cartes de front laissent la moitié de la hauteur libre : les
+       colonnes s'étalent, chaque carte recouverte offre une bande plus large
+       sous le doigt. Elles se resserrent encore quand elles ne tiennent plus. */
+    .col { --uy-max: .56; --dy: calc(var(--cw) * .16); }
+    #actions button { max-width: 150px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card.land, .card.flip, .card.hint, .empty.hint { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SOLITAIRE</h1>
+  <span class="meta" id="roundInfo">Klondike</span>
+  <span class="spacer"></span>
+  <button id="btnRules">Règles</button>
+  <button id="btnNew">Nouvelle partie</button>
+</header>
+
+<main>
+  <div id="table">
+    <div id="top">
+      <div class="slot" id="stock"></div>
+      <div class="slot" id="waste"></div>
+      <div id="found"></div>
+    </div>
+    <div id="tableau"></div>
+  </div>
+  <div id="status"></div>
+  <div id="log"></div>
+  <div id="actions">
+    <button id="btnUndo">Annuler</button>
+    <button id="btnHint">Indice</button>
+  </div>
+</main>
+
+<!-- Écran de démarrage -->
+<div class="overlay" id="startOverlay">
+  <div class="sheet">
+    <h2>Solitaire</h2>
+    <p>Range les 52 cartes sur les quatre fondations, de l'<b>As au Roi</b>, couleur par couleur. Pour
+       les dégager, descends les colonnes en <b>alternant rouge et noir</b>.</p>
+    <p>Tu joues <b>seul</b>. Le talon se tire <b>trois cartes par trois</b>, et se retourne autant de
+       fois que tu veux.</p>
+    <p class="hint">Annuler sans limite, un indice si tu bloques, et les cartes montent seules à la fin.</p>
+    <div class="actions">
+      <button class="primary" id="btnStart">Commencer</button>
+      <button id="btnRules2">Voir les règles</button>
+    </div>
+  </div>
+</div>
+
+<!-- Règles -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet">
+    <h2>Règles</h2>
+    <p>Le <b>Klondike</b>, la plus jouée des patiences. Le but : ranger les <b>52 cartes</b> sur les
+       quatre <b>fondations</b>, une par couleur, de l'As au Roi.</p>
+    <h3>La donne</h3>
+    <p>Sept colonnes de 1 à 7 cartes face cachée, la dernière de chacune retournée. Les 24 cartes qui
+       restent forment le <b>talon</b>.</p>
+    <h3>Les colonnes</h3>
+    <p>On y descend en <b>alternant les couleurs</b> : un 7 rouge sur un 8 noir. Une carte se déplace
+       avec toutes celles qui sont posées dessus. Une colonne vide ne reçoit qu'un <b>Roi</b>, avec ce
+       qu'il porte. Une carte cachée qui se retrouve découverte se retourne d'elle-même.</p>
+    <h3>Le talon</h3>
+    <p>Touche-le pour retourner <b>trois cartes</b> sur la défausse, moins s'il en reste moins : seule
+       celle du dessus se joue. Le talon vide, la défausse se retourne pour en refaire un, dans le même
+       ordre, <b>autant de fois que tu veux</b>.</p>
+    <h3>Les fondations</h3>
+    <p>Chacune monte de l'As au Roi dans sa couleur. Une carte peut en <b>redescendre</b> sur une
+       colonne, si elle y a sa place.</p>
+    <h3>La fin</h3>
+    <p>La partie est gagnée quand les 52 cartes sont rangées. Dès que le talon et la défausse sont vides
+       et toutes les cartes retournées, elles <b>montent seules</b>. Certaines donnes ne se gagnent
+       pas : <b>Nouvelle partie</b> en distribue une autre.</p>
+    <h3>Jouer</h3>
+    <ul>
+      <li>Touche une carte pour la choisir : les places où elle peut aller s'entourent. Touche l'une
+          d'elles, ou touche la carte une seconde fois pour l'envoyer à la meilleure place, les
+          fondations d'abord.</li>
+      <li><b>Annuler</b> défait le dernier coup, autant de fois que tu veux.</li>
+      <li><b>Indice</b> montre un bon coup. Il ne regarde pas les cartes cachées : il ne sait que ce que
+          tu sais, les cartes du talon déjà vues comprises.</li>
+    </ul>
+    <p class="hint">Règle traditionnelle du Klondike, talon tiré par trois, retourné sans limite.</p>
+    <div class="actions"><button class="primary" id="btnCloseRules">Fermer</button></div>
+  </div>
+</div>
+
+<!-- Fin de partie -->
+<div class="overlay" id="scoreOverlay" hidden>
+  <div class="sheet">
+    <h2 id="scoreTitle">Gagné !</h2>
+    <div id="scoreBody"></div>
+    <div class="actions">
+      <button class="primary" id="btnNext">Nouvelle donne</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================================
+   SOLITAIRE — le Klondike, la plus jouée des patiences. On joue seul : c'est
+   le seul jeu de cartes de gamebox sans adversaires.
+
+   Règle traditionnelle, avec les choix de l'auteur : le talon se tire trois
+   cartes par trois et se retourne autant de fois qu'on veut ; une carte des
+   fondations peut redescendre sur une colonne ; Annuler sans limite, un indice
+   qui ne regarde pas les cartes cachées, et les cartes qui montent seules
+   quand tout est découvert. Le détail est dans le panneau des règles.
+   ========================================================================= */
+
+/* Couleurs 0 à 3, dans l'ordre des fondations : noires et rouges alternent. */
+const SUIT_SYM = ["♠", "♥", "♣", "♦"];
+const RED = [false, true, false, true];
+const RANK_SHORT = { 1: "A", 11: "V", 12: "D", 13: "R" };
+const DRAW = 3;                  // cartes retournées à chaque tirage du talon
+const AUTO_MS = 170;             // fin automatique : une carte monte toutes les AUTO_MS
+const END_MS = 2000;             // la victoire annoncée, la dernière carte en place, avant la feuille
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ------------------------------------------------------------------ Paquet */
+/* Valeurs 1 (As) à 13 (Roi). `up` : face visible. `seen` : le joueur l'a vue
+   au moins une fois ; retournée au talon ou recachée par Annuler, elle reste
+   connue. C'est tout ce que l'indice a le droit de savoir. */
+let uidSeq = 0;
+const mkCard = (suit, rank) => ({ uid: ++uidSeq, suit, rank, up: false, seen: false });
+
+function buildDeck() {
+  const d = [];
+  for (let s = 0; s < 4; s++) for (let r = 1; r <= 13; r++) d.push(mkCard(s, r));
+  return d;                                            // 4 × 13 = 52
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const rankLabel = (r) => RANK_SHORT[r] || String(r);
+const cardLabel = (c) => rankLabel(c.rank) + SUIT_SYM[c.suit];
+const cardHtml = (c) => `<b${RED[c.suit] ? ' class="red"' : ""}>${cardLabel(c)}</b>`;
+const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
+/* ------------------------------------------------------------------- État */
+const S = {
+  stock: [],          // le talon, face cachée ; la prochaine carte tirée en fin de tableau
+  waste: [],          // la défausse ; seule la dernière se joue
+  fan: 0,             // cartes du dernier tirage encore sur la défausse, montrées en éventail
+  found: [],          // quatre fondations, une par couleur (indice = couleur), de l'As au Roi
+  cols: [],           // sept colonnes ; les cartes cachées en tête, puis les visibles
+  phase: "idle",      // idle | play | auto (les cartes montent seules) | over
+  sel: null,          // la carte choisie : { at: "w" } | { at: "f", i } | { at: "c", i, k }
+  hint: null,         // l'indice affiché, jusqu'à l'action suivante : { mv, card, onto } | { none: true }
+  undo: [],           // un instantané avant chaque coup et chaque tirage
+  trail: [],          // empreintes des positions de la partie, tirages exclus : l'indice n'y revient pas
+  moves: 0,           // coups et tirages joués (un coup annulé ne compte plus)
+  passes: 0,          // fois où le talon a été retourné
+  idle: 0,            // tirages depuis le dernier déplacement de carte
+  hints: 0,           // indices demandés, pour la feuille de fin
+  undos: 0,           // coups annulés, pour la feuille de fin
+  t0: 0,              // début de la donne (Date.now())
+  time: 0,            // durée de la partie gagnée, en ms
+  games: 0,           // donnes distribuées depuis l'ouverture de la page
+  wins: 0,            // et donnes gagnées
+  logs: [],
+  epoch: 0,           // change à chaque donne : une fin automatique en vol s'arrête
+};
+
+const el = (id) => document.getElementById(id);
+const foundCount = () => S.found.reduce((t, f) => t + f.length, 0);
+
+function log(msg) {
+  S.logs.push(msg);
+  if (S.logs.length > 3) S.logs.shift();
+}
+
+/* --------------------------------------------------------------- Légalité */
+/* Une source : { at: "w" } le dessus de la défausse, { at: "f", i } le dessus
+   de la fondation i, { at: "c", i, k } la carte k de la colonne i avec toutes
+   celles posées dessus. Une destination : { at: "f", i } ou { at: "c", i }. */
+const DESTS = [0, 1, 2, 3].map((i) => ({ at: "f", i })).concat([0, 1, 2, 3, 4, 5, 6].map((i) => ({ at: "c", i })));
+
+/* Les cartes qu'une source déplace ; aucune si elle est vide ou cachée. Les
+   cartes visibles d'une colonne forment toujours une suite descendante
+   alternée : on n'y pose que des suites, et seule la dernière carte se
+   retourne. */
+function cardsAt(src) {
+  if (src.at === "w") return S.waste.length ? [S.waste[S.waste.length - 1]] : [];
+  if (src.at === "f") {
+    const f = S.found[src.i];
+    return f && f.length ? [f[f.length - 1]] : [];
+  }
+  const col = S.cols[src.i];
+  if (!col || !(src.k >= 0) || src.k >= col.length || !col[src.k].up) return [];
+  return col.slice(src.k);
+}
+
+/* Toute la règle des déplacements tient ici : le rendu, les clics, l'indice
+   et les tests passent par elle. Aux fondations, une carte seule, de sa
+   couleur, à la suite ; sur une colonne, une valeur de moins et l'autre
+   couleur, ou un Roi sur une colonne vide. */
+function canPlace(cards, dst, src) {
+  if (!cards.length || !dst) return false;
+  const c = cards[0];
+  if (dst.at === "f") {
+    return src.at !== "f" && cards.length === 1 && dst.i === c.suit && S.found[dst.i].length === c.rank - 1;
+  }
+  if (dst.at !== "c" || !S.cols[dst.i] || (src.at === "c" && src.i === dst.i)) return false;
+  const col = S.cols[dst.i];
+  if (!col.length) return c.rank === 13;
+  const top = col[col.length - 1];
+  return top.up && top.rank === c.rank + 1 && RED[top.suit] !== RED[c.suit];
+}
+const canMove = (src, dst) => canPlace(cardsAt(src), dst, src);
+const sameSrc = (a, b) => a.at === b.at && (a.at === "w" || (a.i === b.i && (a.at !== "c" || a.k === b.k)));
+
+/* La meilleure place d'une carte touchée deux fois : les fondations, puis une
+   colonne occupée, puis une colonne vide. */
+function bestTarget(src) {
+  const ok = DESTS.filter((d) => canMove(src, d));
+  return ok.find((d) => d.at === "f") || ok.find((d) => S.cols[d.i].length) || ok[0] || null;
+}
+
+/* La carte qui sera sur la défausse après d tirages, sans rien tirer. Le
+   talon et la défausse forment une seule suite T, dans l'ordre où les cartes
+   sortent ; p cartes sont sur la défausse. Un tirage avance p de trois, le
+   talon retourné le remet à 0. */
+function talonAfter(d) {
+  const T = S.waste.concat(S.stock.slice().reverse());
+  let p = S.waste.length;
+  for (let k = 0; k < d; k++) p = p === T.length ? 0 : Math.min(p + DRAW, T.length);
+  return p ? T[p - 1] : null;
+}
+
+/* Le talon a fait un tour entier sans qu'aucune carte ne bouge. */
+const stuck = () => S.passes > 0 && S.idle > Math.ceil((S.stock.length + S.waste.length) / DRAW) + 1;
+
+/* ================================================================= MOTEUR */
+
+function snapshot() {
+  return {
+    stock: S.stock.slice(), waste: S.waste.slice(), fan: S.fan,
+    found: S.found.map((f) => f.slice()), cols: S.cols.map((c) => c.slice()),
+    ups: S.cols.map((col) => col.map((c) => c.up)),
+    moves: S.moves, passes: S.passes, idle: S.idle, trail: S.trail.length,
+  };
+}
+
+/* Une carte recachée par Annuler garde `seen` : le joueur l'a vue. */
+function restore(s) {
+  S.stock = s.stock; S.waste = s.waste; S.fan = s.fan; S.found = s.found; S.cols = s.cols;
+  for (const c of S.stock) c.up = false;
+  for (const c of S.waste) c.up = true;
+  S.cols.forEach((col, i) => col.forEach((c, k) => { c.up = s.ups[i][k]; }));
+  S.moves = s.moves; S.passes = s.passes; S.idle = s.idle;
+  S.trail.length = s.trail;
+}
+
+/* Tirer : trois cartes du talon sur la défausse, moins s'il en reste moins.
+   Talon vide : la défausse se retourne, dans le même ordre. */
+function doDraw() {
+  if (S.phase !== "play" || (!S.stock.length && !S.waste.length)) return false;
+  S.undo.push(snapshot());
+  if (S.stock.length) {
+    const n = Math.min(DRAW, S.stock.length);
+    for (let k = 0; k < n; k++) {
+      const c = S.stock.pop();
+      c.up = true;
+      c.seen = true;
+      S.waste.push(c);
+    }
+    S.fan = n;
+  } else {
+    S.stock = S.waste.reverse();
+    for (const c of S.stock) c.up = false;
+    S.waste = [];
+    S.fan = 0;
+    S.passes++;
+    log(`Talon retourné (${S.passes + 1}ᵉ tour).`);
+  }
+  S.moves++;
+  S.idle++;
+  S.sel = null;
+  S.hint = null;
+  render();
+  return true;
+}
+
+function moveLine(cards, src, dst, under) {
+  const what = cards.length > 1 ? `Suite du ${cardHtml(cards[0])}` : cardHtml(cards[0]);
+  if (dst.at === "f") return `${what} aux fondations.`;
+  if (src.at === "f") return `${what} redescend sur ${cardHtml(under)}.`;
+  return under ? `${what} sur ${cardHtml(under)}.` : `${what} dans la colonne vide.`;
+}
+
+/* Un déplacement : la carte (ou la suite) passe de src à dst, et la carte
+   découverte dans la colonne quittée se retourne. */
+function doMove(src, dst) {
+  if (S.phase !== "play" || !canMove(src, dst)) return false;
+  S.undo.push(snapshot());
+  let cards;
+  if (src.at === "w") { cards = [S.waste.pop()]; if (S.fan > 0) S.fan--; }
+  else if (src.at === "f") cards = [S.found[src.i].pop()];
+  else cards = S.cols[src.i].splice(src.k);
+  const pile = dst.at === "f" ? S.found[dst.i] : S.cols[dst.i];
+  const under = pile[pile.length - 1];
+  pile.push(...cards);
+  let line = moveLine(cards, src, dst, under);
+  if (src.at === "c") {
+    const col = S.cols[src.i], top = col[col.length - 1];
+    if (top && !top.up) {
+      top.up = true;
+      top.seen = true;
+      line += ` On découvre ${cardHtml(top)}.`;
+    }
+  }
+  S.moves++;
+  S.idle = 0;
+  S.sel = null;
+  S.hint = null;
+  S.trail.push(stateKey());
+  log(line);
+  afterMove();
+  return true;
+}
+
+/* Après chaque déplacement : gagné, ou tout est découvert et les cartes
+   montent seules. Sinon on continue. */
+function afterMove() {
+  if (foundCount() === 52) { win(); return; }
+  if (!S.stock.length && !S.waste.length && S.cols.every((col) => col.every((c) => c.up))) { autoFinish(); return; }
+  render();
+}
+
+/* Tout est découvert, talon et défausse vides : chaque colonne descend, sa
+   dernière carte est donc sa plus petite, et la plus petite de toutes peut
+   toujours monter. Une carte à la fois, AUTO_MS d'écart. */
+async function autoFinish() {
+  const epoch = S.epoch;
+  S.phase = "auto";
+  S.sel = null;
+  S.hint = null;
+  log("Tout est découvert : les cartes montent seules.");
+  render();
+  while (foundCount() < 52) {
+    await sleep(AUTO_MS);
+    if (epoch !== S.epoch || S.phase !== "auto") return;
+    let from = -1;
+    S.cols.forEach((col, i) => {
+      const c = col[col.length - 1];
+      if (c && S.found[c.suit].length === c.rank - 1 && (from < 0 || c.rank < S.cols[from][S.cols[from].length - 1].rank)) from = i;
+    });
+    if (from < 0) { S.phase = "play"; render(); return; }   // impossible, voir plus haut : simple garde-fou
+    const c = S.cols[from].pop();
+    S.found[c.suit].push(c);
+    render();
+  }
+  win();
+}
+
+/* La victoire s'annonce dans le statut ; la feuille vient END_MS plus tard. */
+async function win() {
+  S.phase = "over";
+  S.sel = null;
+  S.hint = null;
+  S.wins++;
+  S.time = Date.now() - S.t0;
+  log("Les 52 cartes sont rangées !");
+  render();
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores();
+}
+
+/* Joue un coup d'une politique : les tirages qu'il demande, puis le
+   déplacement. C'est ainsi que les tests et le banc d'essai font jouer
+   l'ordinateur ; à l'écran, l'indice ne montre que la première étape. */
+function playMove(mv) {
+  if (mv.draw) return doDraw();
+  for (let k = 0; k < (mv.draws || 0); k++) doDraw();
+  return doMove(mv.src, mv.dst);
+}
+
+/* ================================================================ L'INDICE */
+/* Deux politiques derrière la même interface, pick() -> coup | null, choisies
+   par leur nom (policyOf). Un coup : { draw: true } (tirer, ou retourner le
+   talon), ou { src, dst, draws } : `draws` tirages d'abord (0 le plus
+   souvent), puis le déplacement. L'indice est toujours « sharp » ; « simple »
+   ne sert que de référence au banc d'essai.
+
+   Ni l'une ni l'autre ne lit une carte que le joueur n'a jamais vue : elles
+   passent par publicView(), où une telle carte vaut -1, et le test le
+   vérifie. Une carte y est un entier, 13 × couleur + valeur − 1. */
+const idOf = (c) => (c.seen ? c.suit * 13 + c.rank - 1 : -1);
+const rankOf = (id) => id % 13 + 1;
+const suitOf = (id) => (id / 13) | 0;
+const redOf = (id) => suitOf(id) & 1;         // ♥ et ♦ : couleurs 1 et 3
+
+/* Ce que voit le joueur. `down` : cartes cachées en tête de chaque colonne ;
+   `T` : talon et défausse dans l'ordre où les cartes sortent, `p` cartes sur
+   la défausse (voir talonAfter). */
+function publicView() {
+  const cols = S.cols.map((col) => col.map(idOf));
+  const down = S.cols.map((col) => { let d = 0; while (d < col.length && !col[d].up) d++; return d; });
+  const found = S.found.map((f) => f.length);
+  const T = S.waste.map(idOf);
+  for (let k = S.stock.length - 1; k >= 0; k--) T.push(idOf(S.stock[k]));
+  return { cols, down, found, T, p: S.waste.length };
+}
+
+/* L'empreinte d'une position : deux hachages de 32 bits réunis en un entier
+   exact de 53 bits. p = -1 quand l'avancée dans le talon ne compte pas (la
+   trace de la partie : tirer ne change rien d'autre). */
+function hashOf(cols, down, found, T, p) {
+  let a = 0x811c9dc5, b = 0x2545f491;
+  const mix = (v) => { a = Math.imul(a ^ v, 0x01000193); b = Math.imul(b ^ v, 0x5bd1e995) ^ (b >>> 15); };
+  for (let i = 0; i < 7; i++) {
+    mix(100 + down[i]);
+    const col = cols[i];
+    for (let k = 0; k < col.length; k++) mix(col[k] + 3);
+  }
+  for (let s = 0; s < 4; s++) mix(200 + found[s]);
+  mix(300);
+  for (let k = 0; k < T.length; k++) mix(T[k] + 3);
+  mix(400 + p);
+  return (a >>> 0) * 2097152 + ((b >>> 0) & 2097151);
+}
+
+function stateKey() {
+  const v = publicView();
+  return hashOf(v.cols, v.down, v.found, v.T, -1);
+}
+
+/* Politique « simple » : RÉFÉRENCE DU BANC D'ESSAI UNIQUEMENT, l'indice est
+   toujours « sharp ». Gloutonne, sans regarder plus loin que le coup : une
+   carte aux fondations, sinon une suite déplacée pour découvrir une carte (la
+   colonne la plus haute d'abord), sinon la défausse sur une colonne, sinon
+   tirer. Chacun de ces coups avance, elle ne boucle donc jamais ; le banc
+   l'arrête quand le talon a fait un tour sans coup (stuck). */
+const simplePolicy = {
+  pick() {
+    const v = publicView();
+    const toFound = (id) => id >= 0 && rankOf(id) === v.found[suitOf(id)] + 1;
+    const fits = (id, j) => {
+      const col = v.cols[j];
+      if (!col.length) return rankOf(id) === 13;
+      const t = col[col.length - 1];
+      return t >= 0 && rankOf(t) === rankOf(id) + 1 && redOf(t) !== redOf(id);
+    };
+    for (let i = 0; i < 7; i++) {
+      const col = v.cols[i];
+      if (col.length && toFound(col[col.length - 1])) {
+        return { src: { at: "c", i, k: col.length - 1 }, dst: { at: "f", i: suitOf(col[col.length - 1]) } };
+      }
+    }
+    const w = v.p ? v.T[v.p - 1] : -1;
+    if (toFound(w)) return { src: { at: "w" }, dst: { at: "f", i: suitOf(w) } };
+    const tall = [0, 1, 2, 3, 4, 5, 6].sort((x, y) => v.down[y] - v.down[x]);
+    for (const i of tall) {
+      if (!v.down[i]) continue;
+      const base = v.cols[i][v.down[i]];
+      for (let j = 0; j < 7; j++) if (j !== i && fits(base, j)) return { src: { at: "c", i, k: v.down[i] }, dst: { at: "c", i: j } };
+    }
+    if (w >= 0) for (let j = 0; j < 7; j++) if (fits(w, j)) return { src: { at: "w" }, dst: { at: "c", i: j } };
+    return v.T.length ? { draw: true } : null;
+  },
+};
+
+/* Politique « sharp » (l'indice). Dans l'ordre :
+     1. une carte qui monte sans risque aux fondations — un As, un 2, ou une
+        carte dont les deux couleurs adverses sont déjà au rang d'en dessous :
+        plus personne n'aura besoin de se poser dessus ;
+     2. tirer, tant que le talon cache des cartes jamais vues : tirer ne coûte
+        rien (on peut le retourner sans limite, et chaque carte vue au premier
+        tour revient au suivant), et toute la suite se décide mieux en
+        connaissant le talon ;
+     3. un plan : une recherche de quelques coups (AI.depth) sur ce qu'on
+        voit, notée par evalNode(). Une carte découverte pendant le plan reste
+        inconnue (-2) : rien ne s'y pose, elle ne bouge plus, et la colonne
+        compte comme creusée. Le talon se joue en entier : chaque carte qu'on
+        peut amener sur la défausse à force de tirages est un coup (talonReach).
+   On joue le premier coup du meilleur plan, s'il améliore la position, et on
+   recommence au coup suivant. Jamais un coup qui ramène à une position déjà
+   jouée dans la partie (S.trail) : la partie ne peut pas boucler. */
+const AI = {
+  found: 5,        // une carte de plus aux fondations
+  down: 10,        // une carte cachée de moins
+  tall: 1,         // et le carré des cartes cachées de chaque colonne : creuser d'abord la plus haute
+  empty: 5,        // une colonne vide
+  talon: 2,        // une carte de moins au talon
+  ahead: 3,        // par rang d'avance d'une fondation au-delà de deux sur les deux de l'autre couleur
+  step: 0.05,      // chaque coup du plan : à valeur égale, le plus court
+  click: 0.002,    // chaque tirage d'un coup du talon
+  depth: 6,        // coups d'affilée examinés au plus
+  nodes: 4000,     // positions examinées au plus par décision
+};
+
+/* Les cartes qu'on peut amener sur la défausse sans rien jouer, et le nombre
+   de tirages qu'il faut : celle du dessus, puis de trois en trois jusqu'au
+   bout, puis, le talon retourné, de nouveau de trois en trois. Paires
+   (q, tirages) à plat : la carte est T[q - 1]. */
+function talonReach(T, p) {
+  const out = [];
+  const len = T.length;
+  if (!len) return out;
+  const got = new Uint8Array(len + 1);
+  if (p > 0) { out.push(p, 0); got[p] = 1; }
+  let pos = p, clicks = 0, recycles = 0;
+  for (;;) {
+    if (pos === len) { pos = 0; recycles++; } else pos = Math.min(pos + DRAW, len);
+    clicks++;
+    if (recycles > 1 || (recycles && pos === p)) break;
+    if (pos > 0 && !got[pos]) { got[pos] = 1; out.push(pos, clicks); }
+  }
+  return out;
+}
+
+/* Les coups d'une position du plan. Types : 0 colonne → fondation, 1 talon →
+   fondation, 2 suite d'une colonne à l'autre, 3 talon → colonne, 4 fondation
+   → colonne. Élagage : une suite ne se coupe que si la carte qu'elle découvre
+   peut monter ou recevoir une carte qui attend ; une fondation ne redescend
+   que pour recevoir une carte qui attend ; un Roi ne va que dans la première
+   colonne vide, et jamais d'une colonne où il est seul en tête. */
+function genMoves(n) {
+  const out = [];
+  const { cols, down, found, T } = n;
+  const reach = talonReach(T, n.p);
+  const toFound = (id) => id >= 0 && rankOf(id) === found[suitOf(id)] + 1;
+  // Les cartes qui peuvent bouger : celles du talon qu'on peut amener, et les visibles des colonnes.
+  const avail = new Uint8Array(52);
+  for (let r = 0; r < reach.length; r += 2) { const c = T[reach[r] - 1]; if (c >= 0) avail[c] = 1; }
+  for (let i = 0; i < 7; i++) for (let k = down[i]; k < cols[i].length; k++) if (cols[i][k] >= 0) avail[cols[i][k]] = 1;
+  // Une carte qui pourrait se poser sur `id` (une de moins, l'autre couleur) attend-elle quelque part, `but` mis à part ?
+  const wanted = (id, but) => {
+    const r = rankOf(id);
+    if (r === 1) return false;
+    const s = suitOf(id);
+    const a = ((s + 1) & 3) * 13 + r - 2, b = ((s + 3) & 3) * 13 + r - 2;
+    return (avail[a] === 1 && a !== but) || (avail[b] === 1 && b !== but);
+  };
+  let firstEmpty = -1;
+  for (let j = 0; j < 7; j++) if (!cols[j].length) { firstEmpty = j; break; }
+  const accepts = (j, id) => {
+    const col = cols[j];
+    if (!col.length) return j === firstEmpty && rankOf(id) === 13;
+    const t = col[col.length - 1];
+    return col.length > down[j] && t >= 0 && rankOf(t) === rankOf(id) + 1 && redOf(t) !== redOf(id);
+  };
+
+  for (let i = 0; i < 7; i++) {
+    const col = cols[i];
+    if (col.length > down[i] && toFound(col[col.length - 1])) out.push({ t: 0, i, c: col[col.length - 1] });
+  }
+  for (let r = 0; r < reach.length; r += 2) {
+    const c = T[reach[r] - 1];
+    if (toFound(c)) out.push({ t: 1, q: reach[r], clicks: reach[r + 1], c });
+  }
+  for (let i = 0; i < 7; i++) {
+    const col = cols[i];
+    for (let k = down[i]; k < col.length; k++) {
+      const base = col[k];
+      if (base < 0) break;
+      if (k > down[i] && !toFound(col[k - 1]) && !wanted(col[k - 1], base)) continue;
+      for (let j = 0; j < 7; j++) {
+        if (j !== i && accepts(j, base) && !(k === 0 && !cols[j].length)) out.push({ t: 2, i, k, j });
+      }
+    }
+  }
+  for (let r = 0; r < reach.length; r += 2) {
+    const c = T[reach[r] - 1];
+    if (c < 0) continue;
+    for (let j = 0; j < 7; j++) if (accepts(j, c)) out.push({ t: 3, q: reach[r], clicks: reach[r + 1], j, c });
+  }
+  for (let s = 0; s < 4; s++) {
+    const r = found[s];
+    if (r < 3) continue;
+    const c = s * 13 + r - 1;
+    if (!wanted(c, -1)) continue;
+    for (let j = 0; j < 7; j++) if (cols[j].length && accepts(j, c)) out.push({ t: 4, s, j, c });
+  }
+  return out;
+}
+
+/* La position après un coup du plan ; celle d'avant reste intacte. */
+function applyMove(n, m) {
+  const cols = n.cols.slice(), down = n.down.slice(), found = n.found.slice();
+  let T = n.T, p = n.p;
+  const takeTalon = (q) => { T = T.slice(); T.splice(q - 1, 1); p = q - 1; };
+  const take = (i, k) => {
+    const col = cols[i], moved = col.slice(k), rest = col.slice(0, k);
+    if (rest.length && rest.length === down[i]) {
+      down[i]--;
+      if (rest[rest.length - 1] === -1) rest[rest.length - 1] = -2;   // découverte : inconnue jusqu'au vrai coup
+    }
+    cols[i] = rest;
+    return moved;
+  };
+  switch (m.t) {
+    case 0: take(m.i, cols[m.i].length - 1); found[suitOf(m.c)]++; break;
+    case 1: takeTalon(m.q); found[suitOf(m.c)]++; break;
+    case 2: cols[m.j] = cols[m.j].concat(take(m.i, m.k)); break;
+    case 3: takeTalon(m.q); cols[m.j] = cols[m.j].concat([m.c]); break;
+    case 4: found[m.s]--; cols[m.j] = cols[m.j].concat([m.c]); break;
+  }
+  return { cols, down, found, T, p };
+}
+
+/* La valeur d'une position : cartes rangées, cartes cachées (la colonne la
+   plus haute pèse le plus), colonnes vides, talon, et l'avance d'une
+   fondation sur l'autre couleur — elle prive de places les cartes qui restent. */
+function evalNode(n) {
+  let v = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = n.down[i];
+    v -= AI.down * d + AI.tall * d * d;
+    if (!n.cols[i].length) v += AI.empty;
+  }
+  const f = n.found;
+  v += AI.found * (f[0] + f[1] + f[2] + f[3]);
+  for (let s = 0; s < 4; s++) {
+    const lead = f[s] - Math.min(f[(s + 1) & 3], f[(s + 3) & 3]) - 2;
+    if (lead > 0) v -= AI.ahead * lead;
+  }
+  return v - AI.talon * n.T.length;
+}
+
+/* La meilleure valeur qu'on peut atteindre en `depth` coups au plus (on peut
+   s'arrêter à tout moment). La table `tt` garde chaque position vue : une
+   position déjà sur le chemin ne vaut que sa propre valeur, ce qui coupe les
+   allers-retours. */
+function search(n, depth, ctx) {
+  ctx.nodes++;
+  const h = hashOf(n.cols, n.down, n.found, n.T, n.p);
+  const hit = ctx.tt.get(h);
+  if (hit !== undefined && hit.depth >= depth) return hit.value;
+  let best = evalNode(n);
+  ctx.tt.set(h, { depth, value: best });
+  if (depth > 0 && ctx.nodes < ctx.budget) {
+    let done = true;
+    for (const m of genMoves(n)) {
+      const v = search(applyMove(n, m), depth - 1, ctx) - AI.step;
+      if (v > best) best = v;
+      if (ctx.nodes >= ctx.budget) { done = false; break; }
+    }
+    ctx.tt.set(h, { depth: done ? depth : 0, value: best });
+  }
+  return best;
+}
+
+/* Le premier coup du meilleur plan, par approfondissement : tous les coups à
+   un de profondeur, puis à deux… tant que le budget le permet ; une
+   profondeur laissée inachevée ne compte pas. null : aucun coup n'améliore la
+   position. */
+function plan(root) {
+  const trail = new Set(S.trail);
+  const moves = [], kids = [];
+  for (const m of genMoves(root)) {
+    const c = applyMove(root, m);
+    if (trail.has(hashOf(c.cols, c.down, c.found, c.T, -1))) continue;
+    moves.push(m);
+    kids.push(c);
+  }
+  if (!moves.length) return null;
+  const ctx = { nodes: 0, budget: AI.nodes, tt: new Map() };
+  ctx.tt.set(hashOf(root.cols, root.down, root.found, root.T, root.p), { depth: Infinity, value: -Infinity });
+  let values = kids.map(evalNode);
+  for (let d = 1; d < AI.depth && ctx.nodes < ctx.budget; d++) {
+    const next = [];
+    for (const c of kids) {
+      next.push(search(c, d, ctx));
+      if (ctx.nodes >= ctx.budget) break;
+    }
+    if (next.length < kids.length) break;
+    values = next;
+  }
+  let best = -1, bestV = evalNode(root) + 1e-6;
+  moves.forEach((m, i) => {
+    const v = values[i] - AI.step - (m.clicks || 0) * AI.click;
+    if (v > bestV) { bestV = v; best = i; }
+  });
+  return best < 0 ? null : moves[best];
+}
+
+/* Un coup du plan, dans la langue du moteur. */
+function toMove(m, n) {
+  switch (m.t) {
+    case 0: return { src: { at: "c", i: m.i, k: n.cols[m.i].length - 1 }, dst: { at: "f", i: suitOf(m.c) }, draws: 0 };
+    case 1: return { src: { at: "w" }, dst: { at: "f", i: suitOf(m.c) }, draws: m.clicks };
+    case 2: return { src: { at: "c", i: m.i, k: m.k }, dst: { at: "c", i: m.j }, draws: 0 };
+    case 3: return { src: { at: "w" }, dst: { at: "c", i: m.j }, draws: m.clicks };
+    default: return { src: { at: "f", i: m.s }, dst: { at: "c", i: m.j }, draws: 0 };
+  }
+}
+
+const sharpPolicy = {
+  pick() {
+    const root = publicView();
+    const trail = new Set(S.trail);
+    const f = root.found;
+    const safe = (id) => {
+      const r = rankOf(id), s = suitOf(id);
+      return r <= 2 || Math.min(f[(s + 1) & 3], f[(s + 3) & 3]) >= r - 1;
+    };
+    for (const m of genMoves(root)) {
+      if (m.t > 1 || m.clicks || !safe(m.c)) continue;
+      const c = applyMove(root, m);
+      if (!trail.has(hashOf(c.cols, c.down, c.found, c.T, -1))) return toMove(m, root);
+    }
+    if (root.T.some((c) => c < 0)) return { draw: true };
+    const m = plan(root);
+    return m ? toMove(m, root) : null;
+  },
+};
+
+const POLICIES = { simple: simplePolicy, sharp: sharpPolicy };
+function policyOf(name) { return POLICIES[name]; }
+
+/* Le coup d'une politique, vérifié : null si elle n'en trouve pas, ou si
+   elle en propose un illégal (le test vérifie que ça n'arrive pas). */
+function chooseMove(name) {
+  const mv = policyOf(name).pick();
+  if (!mv) return null;
+  if (mv.draw) return S.stock.length || S.waste.length ? { draw: true } : null;
+  if (!mv.draws) return canMove(mv.src, mv.dst) ? mv : null;
+  const c = talonAfter(mv.draws);
+  return mv.src.at === "w" && c && canPlace([c], mv.dst, mv.src) ? mv : null;
+}
+
+/* L'indice affiché : le coup, la carte qui bouge (pour un coup du talon,
+   celle qu'on va faire venir : le joueur l'a déjà vue) et celle qui la reçoit. */
+function hintOf(mv) {
+  if (mv.draw) return { mv };
+  const card = mv.draws ? talonAfter(mv.draws) : cardsAt(mv.src)[0];
+  const col = mv.dst.at === "c" ? S.cols[mv.dst.i] : null;
+  return { mv, card, onto: col && col.length ? col[col.length - 1] : null };
+}
+
+/* ================================================================= ENTRÉES */
+
+/* Où est une carte : la défausse (toute carte de l'éventail vaut celle du
+   dessus), le dessus d'une fondation, une colonne, ou le talon. */
+function locate(uid) {
+  if (S.waste.some((c) => c.uid === uid)) return { at: "w" };
+  for (let s = 0; s < 4; s++) {
+    const f = S.found[s];
+    if (f.length && f[f.length - 1].uid === uid) return { at: "f", i: s };
+  }
+  for (let i = 0; i < 7; i++) {
+    const k = S.cols[i].findIndex((c) => c.uid === uid);
+    if (k >= 0) return { at: "c", i, k };
+  }
+  return S.stock.some((c) => c.uid === uid) ? { at: "s" } : null;
+}
+
+/* Un clic choisit la carte (avec celles posées dessus) ; un clic sur une
+   place entourée l'y pose ; un second clic sur la même l'envoie à la
+   meilleure place. Une carte cachée ne se choisit pas. */
+function onCardClick(uid) {
+  if (S.phase !== "play") return;
+  const loc = locate(uid);
+  if (!loc) return;
+  if (loc.at === "s") { onStockClick(); return; }
+  if (S.sel) {
+    if (sameSrc(S.sel, loc)) {
+      const dst = bestTarget(S.sel);
+      if (dst) { doMove(S.sel, dst); return; }
+      S.sel = null;
+      render();
+      return;
+    }
+    const dst = loc.at === "w" ? null : { at: loc.at, i: loc.i };
+    if (dst && canMove(S.sel, dst)) { doMove(S.sel, dst); return; }
+  }
+  S.hint = null;
+  S.sel = cardsAt(loc).length ? loc : null;
+  render();
+}
+
+/* Un clic sur une place (colonne, fondation vide) : on y pose la carte
+   choisie si on peut, sinon on la lâche. */
+function onSlotClick(dst) {
+  if (S.phase !== "play") return;
+  if (S.sel && canMove(S.sel, dst)) { doMove(S.sel, dst); return; }
+  if (S.sel) { S.sel = null; render(); }
+}
+
+function onStockClick() {
+  if (S.phase !== "play") return;
+  doDraw();
+}
+
+function onUndoClick() {
+  if (S.phase !== "play" || !S.undo.length) return;
+  restore(S.undo.pop());
+  S.undos++;
+  S.sel = null;
+  S.hint = null;
+  log("Coup annulé.");
+  render();
+}
+
+function onHintClick() {
+  if (S.phase !== "play") return;
+  S.sel = null;
+  S.hints++;
+  const mv = chooseMove("sharp");
+  S.hint = mv ? hintOf(mv) : { none: true };
+  render();
+}
+
+/* ================================================================== RENDU */
+
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/* Une carte ; `click` : elle répond elle-même (sinon le clic va à sa place). */
+function cardEl(c, cls, click) {
+  const b = mk("button", "card" + (c.up ? (RED[c.suit] ? " red" : "") : " back") + (cls ? " " + cls : ""));
+  if (c.up) {
+    const corner = mk("span", "corner");
+    corner.appendChild(mk("b", null, rankLabel(c.rank)));
+    corner.appendChild(mk("i", null, SUIT_SYM[c.suit]));
+    b.appendChild(corner);
+    b.appendChild(mk("span", "pip", SUIT_SYM[c.suit]));
+  }
+  if (click) b.addEventListener("click", (e) => { if (e) e.stopPropagation(); onCardClick(c.uid); });
+  return b;
+}
+
+function hintText(h) {
+  if (h.none) return "Indice : je ne vois plus de coup utile. Annule, ou redistribue avec Nouvelle partie.";
+  const mv = h.mv;
+  if (mv.draw) {
+    return S.stock.length ? "Indice : tire le talon — mieux vaut connaître ses cartes avant de jouer." : "Indice : retourne le talon.";
+  }
+  const where = mv.dst.at === "f" ? "aux fondations" : h.onto ? `sur ${cardHtml(h.onto)}` : "dans la colonne vide";
+  if (mv.draws) {
+    const times = mv.draws > 1 ? ` ${mv.draws} fois` : "";
+    return `Indice : tire le talon${times} pour faire venir ${cardHtml(h.card)}, puis ${mv.dst.at === "f" ? "range-la" : "pose-la"} ${where}.`;
+  }
+  const n = cardsAt(mv.src).length;
+  const what = n > 1 ? `la suite du ${cardHtml(h.card)}` : cardHtml(h.card);
+  const verb = mv.src.at === "f" ? "redescends" : mv.dst.at === "f" ? "range" : n > 1 ? "déplace" : "pose";
+  return `Indice : ${verb} ${what} ${where}.`;
+}
+
+function statusHtml() {
+  switch (S.phase) {
+    case "play": {
+      if (S.hint) return hintText(S.hint);
+      if (S.sel) {
+        const cards = cardsAt(S.sel);
+        const what = cards.length > 1 ? `La suite du ${cardHtml(cards[0])}` : cardHtml(cards[0]);
+        return bestTarget(S.sel)
+          ? `${what} : touche où la poser, ou touche-la encore pour l'envoyer à la meilleure place.`
+          : `${what} ne peut aller nulle part pour l'instant.`;
+      }
+      if (stuck()) return "Le talon a fait un tour sans que rien ne bouge. Un indice, ou une nouvelle partie ?";
+      if (S.stock.length) return "Déplace une carte, ou tire le talon.";
+      return S.waste.length ? "Déplace une carte, ou retourne le talon." : "Déplace une carte.";
+    }
+    case "auto": return "Tout est découvert : les cartes montent seules aux fondations…";
+    case "over": return `<b>Gagné</b> en ${plural(S.moves, "coup")} !`;
+    default: return "";
+  }
+}
+
+/* Où chaque carte était au rendu précédent, et lesquelles étaient visibles :
+   une carte qui a changé de place arrive (land), une carte retournée sur
+   place se retourne (flip). Le rendu reconstruit toute la table. */
+let lastPlace = new Map();
+let lastUp = new Set();
+
+function render() {
+  if (!S.cols.length) return;
+  const next = new Map(), up = new Set();
+  const live = S.phase === "play";
+  const targets = live && S.sel ? DESTS.filter((d) => canMove(S.sel, d)) : [];
+  const isTarget = (at, i) => targets.some((d) => d.at === at && d.i === i);
+  const hint = live && S.hint && S.hint.mv ? S.hint.mv : null;
+  const hintTalon = !!hint && (hint.draw || hint.draws > 0);
+  const hSrc = hint && !hintTalon ? hint.src : null;
+  const hDst = hint && !hintTalon ? hint.dst : null;
+  const track = (c, place, extra) => {
+    let cls = extra || "";
+    const before = lastPlace.get(c.uid);
+    if (before !== undefined && before !== place) cls += " land";
+    else if (c.up && before === place && !lastUp.has(c.uid)) cls += " flip";
+    next.set(c.uid, place);
+    if (c.up) up.add(c.uid);
+    return cls.trim();
+  };
+
+  // Le talon : son dessus et le nombre de cartes ; vide, ↻ s'il reste une défausse à retourner.
+  const stock = el("stock");
+  stock.innerHTML = "";
+  S.stock.forEach((c, k) => { if (k < S.stock.length - 1) next.set(c.uid, "s"); });
+  if (S.stock.length) {
+    const c = S.stock[S.stock.length - 1];
+    stock.appendChild(cardEl(c, track(c, "s", hintTalon ? "hint" : ""), false));
+    stock.appendChild(mk("span", "count", String(S.stock.length)));
+  } else {
+    stock.appendChild(mk("div", "empty" + (hintTalon ? " hint" : ""), S.waste.length ? "↻" : ""));
+  }
+
+  // La défausse : les cartes du dernier tirage en éventail, celle du dessus jouable.
+  const waste = el("waste");
+  waste.innerHTML = "";
+  const fan = S.waste.length ? Math.min(S.waste.length, Math.max(1, S.fan)) : 0;
+  S.waste.forEach((c, k) => { if (k < S.waste.length - fan) next.set(c.uid, "w"); });
+  for (let k = 0; k < fan; k++) {
+    const c = S.waste[S.waste.length - fan + k];
+    let extra = "";
+    if (k === fan - 1 && S.sel && S.sel.at === "w") extra += " sel";
+    if (k === fan - 1 && hSrc && hSrc.at === "w") extra += " hint";
+    const b = cardEl(c, track(c, "w", extra), true);
+    b.style.setProperty("--x", k);
+    waste.appendChild(b);
+  }
+  if (!fan) waste.appendChild(mk("div", "empty"));
+
+  // Les fondations, une par couleur.
+  const found = el("found");
+  found.innerHTML = "";
+  S.found.forEach((f, s) => {
+    const slot = mk("div", "slot");
+    let extra = isTarget("f", s) ? " target" : "";
+    if (hDst && hDst.at === "f" && hDst.i === s) extra += " hint";
+    f.forEach((c, k) => { if (k < f.length - 1) next.set(c.uid, "f" + s); });
+    if (f.length) {
+      const c = f[f.length - 1];
+      if (S.sel && S.sel.at === "f" && S.sel.i === s) extra += " sel";
+      if (hSrc && hSrc.at === "f" && hSrc.i === s) extra += " hint";
+      slot.appendChild(cardEl(c, track(c, "f" + s, extra), true));
+    } else {
+      slot.appendChild(mk("div", "empty" + (RED[s] ? " red" : "") + extra, SUIT_SYM[s]));
+    }
+    slot.addEventListener("click", () => onSlotClick({ at: "f", i: s }));
+    found.appendChild(slot);
+  });
+
+  // Les sept colonnes.
+  const tab = el("tableau");
+  tab.innerHTML = "";
+  S.cols.forEach((col, i) => {
+    const box = mk("div", "col");
+    let d = 0;
+    while (d < col.length && !col[d].up) d++;
+    box.style.setProperty("--d", d);
+    box.style.setProperty("--u", col.length - d);
+    let extra = isTarget("c", i) ? " target" : "";
+    if (hDst && hDst.at === "c" && hDst.i === i) extra += " hint";
+    if (!col.length) box.appendChild(mk("div", "empty" + extra, "R"));
+    col.forEach((c, k) => {
+      let cls = k === col.length - 1 ? extra : "";
+      if (S.sel && S.sel.at === "c" && S.sel.i === i && k >= S.sel.k) cls += " sel";
+      if (hSrc && hSrc.at === "c" && hSrc.i === i && k >= hSrc.k) cls += " hint";
+      const b = cardEl(c, track(c, "c" + i, cls), true);
+      b.style.setProperty("--a", Math.min(k, d));
+      b.style.setProperty("--b", Math.max(0, k - d));
+      box.appendChild(b);
+    });
+    box.addEventListener("click", () => onSlotClick({ at: "c", i }));
+    tab.appendChild(box);
+  });
+
+  lastPlace = next;
+  lastUp = up;
+  el("status").innerHTML = statusHtml();
+  el("log").innerHTML = S.logs.map((l) => `<div>${l}</div>`).join("");
+  el("btnUndo").disabled = !live || !S.undo.length;
+  el("btnHint").disabled = !live;
+  el("roundInfo").textContent = `${foundCount()}/52 rangées · ${plural(S.moves, "coup")} · donne ${S.games}`;
+}
+
+function showScores() {
+  const min = Math.floor(S.time / 60000), sec = Math.floor(S.time / 1000) % 60;
+  const rows = [
+    ["Coups", S.moves],
+    ["Durée", min ? `${min} min ${sec} s` : `${sec} s`],
+    ["Tours de talon", S.passes + 1],
+    ["Indices demandés", S.hints],
+    ["Coups annulés", S.undos],
+  ];
+  el("scoreTitle").textContent = "Gagné !";
+  el("scoreBody").innerHTML =
+    `<table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table>` +
+    `<p class="next-round">Donnes gagnées depuis l'ouverture de la page : <b>${S.wins}</b> sur ${S.games}.</p>`;
+  el("btnNext").dataset.over = "1";
+  el("scoreOverlay").hidden = false;
+}
+
+/* ============================================================== Interface */
+/* On joue seul : pas de tablée à asseoir. newGame(deck) prend un paquet déjà
+   ordonné, que le banc d'essai fixe pour comparer les politiques sur les
+   mêmes donnes ; on distribue colonne par colonne, rangée après rangée, en
+   tirant du bout du paquet. */
+function newGame(deck = shuffle(buildDeck())) {
+  S.epoch++;
+  S.games++;
+  S.cols = Array.from({ length: 7 }, () => []);
+  for (let row = 0; row < 7; row++) for (let i = row; i < 7; i++) S.cols[i].push(deck.pop());
+  for (const c of deck) { c.up = false; c.seen = false; }
+  for (const col of S.cols) {
+    col.forEach((c) => { c.up = false; c.seen = false; });
+    const top = col[col.length - 1];
+    top.up = true;
+    top.seen = true;
+  }
+  S.stock = deck;
+  S.waste = [];
+  S.fan = 0;
+  S.found = [[], [], [], []];
+  S.phase = "play";
+  S.sel = null;
+  S.hint = null;
+  S.undo = [];
+  S.moves = 0;
+  S.passes = 0;
+  S.idle = 0;
+  S.hints = 0;
+  S.undos = 0;
+  S.t0 = Date.now();
+  S.time = 0;
+  S.logs = [];
+  S.trail = [stateKey()];
+  lastPlace = new Map();
+  lastUp = new Set();
+  log("Nouvelle donne.");
+  render();
+}
+
+function startGame() {
+  el("startOverlay").hidden = true;
+  el("scoreOverlay").hidden = true;
+  newGame();
+}
+el("btnStart").addEventListener("click", () => startGame());
+el("btnNew").addEventListener("click", () => {
+  el("scoreOverlay").hidden = true;
+  el("startOverlay").hidden = false;
+});
+el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
+el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
+el("stock").addEventListener("click", onStockClick);
+el("btnUndo").addEventListener("click", onUndoClick);
+el("btnHint").addEventListener("click", onHintClick);
+el("btnNext").addEventListener("click", () => startGame());
+</script>
+</body>
+</html>

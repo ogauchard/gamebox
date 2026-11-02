@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gamebox</title>
-<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish, 6 qui prend, le Rikiki, le 5000 et le Killer, jouables directement dans le navigateur.">
+<meta name="description" content="Asteroids, Skyjo, Uno, Les Cinq Rois, Trou du cul, Turkish, 6 qui prend, le Rikiki, le Solitaire, le 5000 et le Killer, jouables directement dans le navigateur.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
 <style>
   :root {
@@ -322,6 +322,46 @@
     box-shadow: 0 2px 6px rgba(0,0,0,.5);
   }
 
+  /* Solitaire : une colonne qui descend en alternant les couleurs, un As sur
+     sa fondation, et le 9♠ choisi qui vient sur le 10♦. Même principe qu'Uno :
+     une boîte étroite, les cartes placées par rapport à son centre. */
+  .p-sol { background: radial-gradient(ellipse at 50% 20%, #1b5634 0%, #07170e 75%); }
+  .sol-art { position: relative; width: 60px; height: 110px; --s: 1.15; }
+  .so {
+    --cw: 44px;
+    position: absolute; left: 50%; top: 0;
+    width: var(--cw); height: calc(var(--cw) * 1.4);
+    margin-left: calc(var(--cw) * -.5);
+    border-radius: calc(var(--cw) * .09);
+    background: #fbf7ee; color: #1f2328;
+    box-shadow: 0 2px 6px rgba(0,0,0,.5);
+    overflow: hidden;
+  }
+  .so.red { color: #c8322b; }
+  .so s {
+    position: absolute; top: 4%; left: 8%;
+    text-decoration: none; font-weight: 900; line-height: 1; letter-spacing: -.04em;
+    font-size: calc(var(--cw) * .3);
+  }
+  .so b {
+    position: absolute; inset: 28% 0 0;
+    display: grid; place-items: center;
+    font-size: calc(var(--cw) * .62); font-weight: 400; line-height: 1;
+  }
+  .so.back {
+    background: repeating-linear-gradient(45deg, #7d2431 0 4px, #922c3b 4px 8px);
+    box-shadow: inset 0 0 0 3px #f1e6d2, 0 2px 6px rgba(0,0,0,.5);
+  }
+  .so.sel { box-shadow: 0 0 0 2px #ffce3a, 0 6px 12px rgba(0,0,0,.6); }
+  .so:nth-child(1) { transform: translate(-34px, -6px); }
+  .so:nth-child(2) { transform: translate(-34px, 0); }
+  .so:nth-child(3) { transform: translate(-34px, 6px); }
+  .so:nth-child(4) { transform: translate(-34px, 22px); }
+  .so:nth-child(5) { transform: translate(-34px, 38px); }
+  .so:nth-child(6) { transform: translate(-34px, 54px); }
+  .so:nth-child(7) { transform: translate(40px, -6px); }
+  .so:nth-child(8) { transform: translate(30px, 52px) rotate(9deg); }
+
   /* 5000 : un brelan de 5 mis de côté, un 1 et un 6 qui roulent encore. Même
      principe qu'Uno : une boîte étroite, les dés placés par rapport à son centre. */
   .p-dice { background: radial-gradient(ellipse at 50% 20%, #2f1a33 0%, #170f18 75%); }
@@ -391,7 +431,7 @@
 <main>
   <header>
     <h1>GAMEBOX</h1>
-    <p>Dix jeux, directement dans le navigateur.</p>
+    <p>Onze jeux, directement dans le navigateur.</p>
   </header>
 
   <nav class="games">
@@ -527,6 +567,26 @@
       <div class="info">
         <h2>Rikiki</h2>
         <p>Annonce le nombre exact de plis que tu feras, d'une carte à treize et retour. Contre 3 adversaires.</p>
+        <span class="play">Jouer →</span>
+      </div>
+    </a>
+
+    <a class="game" href="solitaire.html">
+      <div class="preview p-sol" aria-hidden="true">
+        <div class="art sol-art">
+          <div class="so back"></div>
+          <div class="so back"></div>
+          <div class="so"><s>R♠</s><b>♠</b></div>
+          <div class="so red"><s>D♥</s><b>♥</b></div>
+          <div class="so"><s>V♣</s><b>♣</b></div>
+          <div class="so red"><s>10♦</s><b>♦</b></div>
+          <div class="so red"><s>A♥</s><b>♥</b></div>
+          <div class="so sel"><s>9♠</s><b>♠</b></div>
+        </div>
+      </div>
+      <div class="info">
+        <h2>Solitaire</h2>
+        <p>Le Klondike, la patience classique : range les 52 cartes de l'As au Roi, talon tiré par trois. Tu joues seul, avec un indice si tu bloques.</p>
         <span class="play">Jouer →</span>
       </div>
     </a>

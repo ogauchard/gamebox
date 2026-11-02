@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Ten **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
-except that the seven card games and the two dice games load one shared stylesheet, [cartes.css](cartes.css), for their
+Eleven **independent** games that share no game code. Each is one HTML file with its markup, CSS, and JS inline —
+except that the eight card games and the two dice games load one shared stylesheet, [cartes.css](cartes.css), for their
 common layout (see *Shared layout* below). No build step, no dependencies, no package manager, no framework. Open any file directly
 (`cmd //c start "" asteroids.html`); `file://` works, no server needed. UI strings are French.
 
@@ -24,13 +24,16 @@ common layout (see *Shared layout* below). No build step, no dependencies, no pa
 - [rikiki.html](rikiki.html) — *Rikiki* (l'Ascenseur), the trick-taking game where you bid the exact number of tricks
   you'll take: 25 rounds from 1 card to 13 and back, the turned card gives trump, the dealer can't make the bids add
   up, the one-card rounds played on the forehead. Rules from the French Wikipedia article. DOM/CSS rendering.
+- [solitaire.html](solitaire.html) — *Solitaire*, the Klondike patience, played **alone** — the only game without
+  opponents: the talon drawn three at a time and turned over without limit, Undo, a hint that never looks at a hidden
+  card, the cards going up by themselves at the end. DOM/CSS rendering.
 - [cinq-mille.html](cinq-mille.html) — *5000*, the French dice game (a Farkle cousin): five dice, rules from the French
   Wikipedia article plus fixed house rules (scoring, three ballots back to zero, gains in hundreds, the next player
   may take over a banked turn), exactly 5000. DOM/CSS rendering, dice drawn in CSS.
 - [killer.html](killer.html) — *Killer*, the French dice game of attacks and hit points: aim under 11 or over 24 with
   five dice for an attack, last survivor wins. Base rules from the French Wikipedia article, 25 HP for everyone.
   DOM/CSS rendering, dice drawn in CSS.
-- [cartes.css](cartes.css) — the card games' shared layout and components (both dice games use it too); each game keeps its
+- [cartes.css](cartes.css) — the card games' shared layout and components (both dice games and the Solitaire use it too); each game keeps its
   tint, card faces and table contents inline.
 - [tests/](tests/) — Node test harness, the only shared code. A new game means a new HTML file plus its own
   `tests/<game>.test.js`; keep the games' logic independent of each other. The **`nouveau-jeu` skill**
@@ -43,8 +46,10 @@ and **one AI level**, the strongest ("Redoutable") — the owner removed the pla
 choices. Only Uno (format, house rules) and Turkish (number of deals, which the owner asked to keep as a choice) have
 options. The engines stayed generic: `newGame(n)` still seats 2–6, and `startGame(n = PLAYERS)` — what the
 "Commencer" button calls — lets tests and benches seat other tables. The weaker policies Skyjo, Cinq Rois, Trou du
-cul, Turkish, 6 qui prend, Rikiki, 5000 and Killer still contain are **benchmark baselines only**, never dealt to a player; Uno had no
-bench, so its weak policy was deleted.
+cul, Turkish, 6 qui prend, Rikiki, Solitaire, 5000 and Killer still contain are **benchmark baselines only**, never dealt to a player; Uno had no
+bench, so its weak policy was deleted. **The Solitaire is the one exception to the four players**: a patience is
+played alone (the owner chose that over four players racing on the same deal), so it has no opponents, no `PLAYERS`,
+and its AI is the hint.
 
 ## Hosting
 
@@ -59,7 +64,7 @@ hash (`cartes.css?v=<hash>`), kept in step by `node tests/cartes.test.js --fix`.
 ## Verifying changes
 
 ```
-node tests/run-all.js          # les onze suites (~9300 assertions, le total varie — cartes et dés sont tirés au hasard)
+node tests/run-all.js          # les douze suites (~9700 assertions, le total varie — cartes et dés sont tirés au hasard)
 node tests/skyjo.test.js       # règles de Skyjo seules
 node tests/uno.test.js         # règles d'Uno seules
 node tests/cinq-rois.test.js   # règles et moteur de combinaisons des Cinq Rois seuls
@@ -67,11 +72,12 @@ node tests/trou-du-cul.test.js # règles du Trou du cul seules
 node tests/turkish.test.js     # règles du Turkish seules
 node tests/six-qui-prend.test.js # règles du 6 qui prend seules
 node tests/rikiki.test.js      # règles du Rikiki seules
+node tests/solitaire.test.js   # règles du Solitaire et de son indice seules
 node tests/cinq-mille.test.js  # règles et barème du 5000 seuls
 node tests/killer.test.js      # règles du Killer seules
 node tests/asteroids.test.js   # logique d'Asteroids seule
 node tests/cartes.test.js      # gabarit commun : liens vers cartes.css, empreinte, teintes
-node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 9 liens
+node tests/cartes.test.js --fix  # après toute retouche de cartes.css : met l'empreinte à jour dans les 10 liens
 ```
 
 No linter and no dependencies — the tests are plain Node, nothing to install. If `node` isn't on PATH (a shell opened
@@ -128,8 +134,12 @@ the dice to keep, `onStopClick` and `onTargetClick(seat)` — the attack, the re
 alone (`await` a few ticks); other seats: `doThrow`/`doKeep(seat, uids)`/`doStop`/`doAttack(seat, target)`, with
 `rollDie()` replaced as for 5000. Rikiki through `onBidClick(k)` (a second click on the same number, or
 `onAnnounceClick`, bids) and `onCardClick(uid)` (likewise a second click, or `onPlayClick`, plays); other seats:
-`doBid`/`doPlay`; a one-card round plays itself (phase `"front"`, your card included). `loadDomGame(file)` in the
-harness loads any of the seven card games and the two dice games.
+`doBid`/`doPlay`; a one-card round plays itself (phase `"front"`, your card included). Solitaire through
+`onCardClick(uid)` (a first click selects the card and what lies on it; a click on any card of a target column, or a
+second click on the same card, moves it), `onSlotClick({ at, i })` for an empty column or a foundation,
+`onStockClick`, `onUndoClick`, `onHintClick`; the computer plays through `chooseMove(name)` then `playMove(mv)`. A
+position posed by hand needs a face-down card or a talon card, or its first move starts the auto-finish (that bit while
+writing the suite). `loadDomGame(file)` in the harness loads any of the eight card games and the two dice games.
 
 `Math.random` is **not** seeded in the Asteroids harness, so any check that samples short-lived state at a single
 instant is flaky — the saucer's ~1.15 s enemy bullets were the classic trap (`la soucoupe tire` failed ~18 % of runs
@@ -144,14 +154,15 @@ reaches the draw-pile reshuffle or a non-positive finisher total — those are t
 
 ## Shared layout — cartes.css
 
-The seven card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend, Rikiki — and the two dice games, 5000 and
+The eight card games — Skyjo, Uno, Cinq Rois, Trou du cul, Turkish, 6 qui prend, Rikiki, Solitaire — and the two dice games, 5000 and
 Killer, look alike on
 purpose, on desktop as on phones; Asteroids and the landing page stay independent.
 [cartes.css](cartes.css) holds everything that used to be copied four times: base styles, header, buttons, opponent
 panels (`.player`, `.fan`), status, log, actions, the player's area, overlays and sheets, and the phone and short-screen
 rules. Each game links it **before** its own `<style>`, which keeps only what is the game's own: its tint, its card
 faces, the contents of its table, its hand. The DOM is the same skeleton everywhere — `header`, then in `main`:
-`#opponents`, `#table`, `#status`, `#log`, optional `#actions`, `#me` (`.name` + the hand or grid).
+`#opponents`, `#table`, `#status`, `#log`, optional `#actions`, `#me` (`.name` + the hand or grid). The Solitaire,
+played alone, has neither `#opponents` nor `#me`: the whole game is the table.
 
 - **One layout at every width**: opponents on top, the hand at the bottom, and `#table` in between as
   `flex: 1 1 0; container-type: size`, so it takes exactly the height left. Each game sizes its table cards in
@@ -168,9 +179,9 @@ faces, the contents of its table, its hand. The DOM is the same skeleton everywh
 - **Phones** (`max-width: 560px`): the three opponents become a grid with one equal column each, overlays become
   bottom-anchored sheets.
 
-After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the nine links,
+After editing `cartes.css`, run `node tests/cartes.test.js --fix`: it stamps the new content hash into the ten links,
 and the suite fails until they match. Measure any sizing change with the `capture` skill's `fit.js` sweep (laptop
-1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all nine games fit with no scroll at every one
+1366×650 to 1920×950, phones 375×667 to 412×915, small and big hands): all ten games fit with no scroll at every one
 of those sizes (Turkish's only exception: a 30-card hand on an iPhone SE scrolls a little). `fit.js` switches CSS
 animations off before measuring: headless Edge doesn't advance them in virtual time, and a card frozen at the start of
 its `pop` (24 px lower) reads as a false overflow. Landscape phones fall outside the 560 px query and get the desktop layout.
@@ -205,6 +216,8 @@ height. What each game shows:
 - **Rikiki** was written paced: an AI bid shows `BID_MS` (« Nora annonce… », ringed) and a card `THINK_MS`; a full
   trick stays `TRICK_MS` with its winner ringed and named in the status before it is gathered; in a one-card round each
   card falls `FRONT_MS` apart, yours too.
+- **Solitaire** has no computer turn. What moves by itself is the auto-finish, one card every `AUTO_MS`, announced in
+  the status; the hint stays ringed and written in the status until your next action.
 
 Some engine functions became asynchronous, so a targeted test awaits a few ticks after them: Turkish's failing
 `doBlind`, Cinq Rois' `afterDiscard` on a going out, Trou du cul's closing `doPlay` and `nextGive`, Uno's
@@ -908,6 +921,107 @@ colour cycle from it, so black and red always alternate; trumps carry a gold inn
 darkened (`filter`). `#actions` always holds one button (« Annoncer » / « Jouer »). Card sizes in `cqh`/`cqw`;
 `#table.bidding` sizes the turned card leaving room for two rows of numbers. The `fit.js` sweep fits at every size,
 13-card bidding on an iPhone SE included.
+
+## Architecture — solitaire.html
+
+### Rules as implemented
+
+Traditional Klondike with the owner's choices, all fixed — no option on the start screen — and all stated in the rules
+panel. **Played alone**: the only game here without opponents (the owner chose the real patience over four players
+racing on the same deal), so there is no `#opponents`, no `#me`, no `PLAYERS`; `startGame()` just deals.
+
+- 52 cards: seven columns of 1 to 7 cards, the last one face up, 24 in the talon. Four foundations, Ace to King, and
+  **the foundation index is the suit** (♠ ♥ ♣ ♦, the order of `SUIT_SYM`).
+- Columns build down in alternating colours; a face-up card moves with everything on it; an empty column takes only a
+  King, with its run. A card left uncovered turns over by itself (`doMove`).
+- **The talon is drawn by three** and only the top of the waste plays; empty, the waste turns back into a talon in the
+  same order, **without limit** (owner's choice: the traditional three, unlimited passes). `doDraw()` moves the cards
+  one at a time onto the waste, which is the order a packet of three turned over gives.
+- A foundation card **may come back down** onto a column (the usual reading).
+- **Aids** (owner's choice): Undo without limit, a hint, and the auto-finish. The auto-finish starts when talon and
+  waste are empty and every card is face up: each column then descends, so its last card is its smallest, and the
+  smallest of all can always go up — always winnable. It waits for an empty talon because with cards left there the
+  draw-by-three order can keep one out of reach.
+- Won when the 52 cards are up. Nothing else ends a deal — some deals can't be won, « Nouvelle partie » deals another;
+  after a full turn of the talon with nothing moved (`stuck()`) the status says so. No score: the win sheet gives the
+  moves, the time, the talon turns, the hints asked, the undos, and the deals won since the page opened.
+
+### Flow and input
+
+`S.phase`: `play` → `auto` (one card up every `AUTO_MS`) → `over` (the sheet after `END_MS`). Two actions,
+`doDraw()` and `doMove(src, dst)`, each pushing a `snapshot()` on `S.undo` first. A source is `{ at: "w" }` (the
+waste's top), `{ at: "f", i }` (a foundation's top) or `{ at: "c", i, k }` (card k of column i and everything on it);
+a destination is `{ at: "f", i }` or `{ at: "c", i }`. `canPlace`/`canMove` is the only rule: the renderer, the clicks,
+the hint and the tests all go through it. A click selects (`S.sel`) and rings the possible places; a click on one of
+them — any card of a target column, or the empty slot — moves there; a second click on the same card sends it to
+`bestTarget()`: the foundations, then an occupied column, then an empty one.
+
+Each card carries `seen`: the player has seen it once (drawn from the talon, or hidden again by Undo). Undo restores
+piles, faces and counters, never `seen` — the player saw the card. `S.trail` holds a hash of each position reached
+(draws excluded), truncated by Undo.
+
+### The hint (the AI)
+
+The hint is `chooseMove("sharp")`. A policy returns `{ draw: true }` or `{ src, dst, draws }`: draw `draws` times,
+then move. `playMove()` plays all of it at once for the tests and the bench; on screen the hint only shows the first
+step (the talon ringed, « tire le talon 2 fois pour faire venir 7♥, puis pose-la sur 8♠ »). Policies read only
+`publicView()`, where a card never seen is −1; talon and waste are one sequence `T`, in the order the cards come out,
+`p` of them on the waste (`talonAfter()`, `talonReach()`).
+
+- `simple` (bench baseline): a card to the foundations, else a run that uncovers a card (the tallest column first),
+  else the waste onto a column, else draw. Every move advances, so it can't loop; the bench stops it after a full turn
+  of the talon with nothing moved.
+- `sharp`: (1) a **safe** foundation move — an Ace, a 2, or a card whose two opposite-colour foundations already reach
+  the rank below, so nothing will ever need to go on it; (2) **draw while the talon hides cards never seen**: with
+  unlimited passes drawing costs nothing (every card seen in the first pass comes back at the same place in the next),
+  and the rest is better decided knowing the talon; (3) a **plan**: an iterative-deepening search over the public
+  position (`AI.depth` moves, `AI.nodes` positions, a transposition table that also cuts the back-and-forths), scored by
+  `evalNode()`: cards up, hidden cards (plus `tall` × hidden² per column, to dig the tallest first), empty columns,
+  talon size, and a foundation more than two ranks ahead of the other colour. A card uncovered during the plan is
+  unknown (−2): nothing goes on it, it doesn't move, and the column counts as dug. Talon moves are whole: every talon
+  card that drawing alone can bring to the top is a move, with its number of draws. `genMoves` prunes: a run is split
+  only if the card it uncovers can go up or take a card that is waiting; a foundation card comes down only to take
+  one; a King goes only to the first empty column, never from a column it already heads. `sharp` plays the first move
+  of the best plan if it beats the current position, and **never a move back to a position already in `S.trail`** —
+  so a game can't loop: every card move reaches a new position, and draws alone happen only while unseen cards remain.
+
+Neither policy may read a card never seen: the test turns every unseen card into a counting `Proxy` during each policy
+call (`up` and `seen` stay free), and checks that the policies change nothing and never call `Math.random`.
+
+```
+node tests/solitaire-bench.js 400        # sharp et simple sur les mêmes 400 donnes
+node tests/solitaire-bench.js sweep 150  # réglages de l'objet AI, sur les mêmes donnes
+node tests/solitaire-bench.js stall 300  # sharp seul : terminaison, longueur des parties, temps de décision
+```
+
+There is no table, so the bench deals the same seeded decks to every policy and compares them deal by deal (« +x /
+−y donnes contre le livré »), far less noisy than two separate win rates. A deal counts as won as soon as the
+auto-finish starts.
+
+Reference points at the shipped settings, 400 deals: **`sharp` wins 36.0 %**, 20.5 cards up on average, 88 moves;
+`simple` 2.0 %, 6.1 cards — it never wins a deal `sharp` loses (8 won by both, 136 by `sharp` alone). A decision takes
+about 15 ms in Node, 70 ms at worst (a hint on a phone: several times that, on a click). The sweep, 150 deals (shipped
+40.0 % on those): no setting beats the shipped one. `depth 4` loses 9 points (+8 / −22 deals), `nodes 1500` 5;
+`depth 8` and `nodes 10000` gain nothing (39.3 %, 38.0 %) at twice the time; `tall 0` loses 8 (digging the tallest
+column first matters), `ahead 0` 6, `talon 4` 7, `found` 3 or 8 four or five; `talon 1`, `empty` 2 or 9, `tall 2`,
+`down 15` land within a deal or two. The weights were first guesses, not fitted to those deals. A worst decision time
+of minutes in a sweep is the machine sleeping, not the search: replayed, the same deals (seeded, `sharp` is
+deterministic) never pass 184 ms. `stall`, 300 deals: none reaches the 3000-move guard, the longest game is 179 moves.
+
+### Rendering and layout
+
+The shared layout with only `#table`, `#status`, `#log` and `#actions` (« Annuler », « Indice », always there). The
+table is a grid seven cards wide: the top row — the talon with its count (↻ when only the waste is left), the waste
+over two columns with the last draw fanned, the four foundations showing their suit when empty — then the seven
+columns. `--cw` is the smaller of seven across the width and `(100cqh − gap) / 5.6` (the top row plus a column of five
+hidden and seven visible cards), at most 118 px. Column cards are absolutely positioned: `--a` hidden and `--b`
+visible cards above them, offsets `--dy` and `--uy`; `--uy` shrinks (`clamp` on `100cqh`) when a column wouldn't fit,
+so even six hidden cards under a King-to-2 run fits a 1366×650 laptop, corners tight. On phones seven cards across
+leave half the height free, so `--uy-max` goes from .36 to .56 of a card: a wider strip under the finger. The corner
+index is on one line, all that shows of a covered card. Cards are `<button>`s with `touch-action: manipulation` (two
+quick taps must not zoom), and `.card:hover` puts back their own face (`--face`), which the shared button hover would
+paint over. The hint ring is static plus a glow animation: `fit.js` switches animations off, and an animation-only ring
+vanished from the captures. The `fit.js` sweep fits at every size, the worst column included.
 
 ## Architecture — cinq-mille.html
 

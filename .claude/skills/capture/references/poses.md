@@ -208,3 +208,34 @@ aiTurn();` après le clic, `--budget 2000000` (une partie entre quatre redoutabl
 virtuel, 22 pour neuf sur dix). L'annonce d'une attaque, puis son résultat (« −9 » sur la cible) : un lancer de 8,
 `stopAim(); doAttack(1, 2);` après avoir gelé l'IA et donné le tour au siège 1, `--budget 600` pour l'annonce,
 `--budget 5500` pour le résultat (dés de l'attaque posés dans `seq`).
+
+## Solitaire : partie avancée, indice, colonne extrême
+
+On y joue seul : rien à geler. Pour une partie avancée, laisser l'indice jouer quelques dizaines de coups, puis
+choisir une carte (les places possibles s'entourent) ou demander l'indice :
+
+```js
+el("btnStart").click();
+for (let i = 0; i < 40 && S.phase === "play"; i++) { const mv = chooseMove("sharp"); if (!mv) break; playMove(mv); }
+onHintClick();            // ou : onCardClick(S.cols[k][j].uid) sur une carte visible
+```
+
+Le pire cas de hauteur, six cartes cachées sous une suite du Roi au 2 (la colonne se resserre) :
+
+```js
+el("btnStart").click();
+const run = Array.from({ length: 12 }, (_, k) => { const c = mkCard(k % 2 ? 1 : 0, 13 - k); c.up = c.seen = true; return c; });
+S.cols[6] = Array.from({ length: 6 }, () => mkCard(2, 5)).concat(run);
+render();
+```
+
+Une victoire réelle (la feuille de fin) : rejouer des donnes avec l'indice jusqu'à en gagner une, `--budget 30000`.
+
+```js
+el("btnStart").click();
+for (let t = 0; t < 30; t++) {
+  for (let i = 0; i < 400 && S.phase === "play"; i++) { const mv = chooseMove("sharp"); if (!mv) break; playMove(mv); }
+  if (S.phase !== "play") break;
+  newGame();
+}
+```

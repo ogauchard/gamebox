@@ -5,7 +5,7 @@ description: Ajoute un nouveau jeu à gamebox de bout en bout — page HTML auto
 
 # Ajouter un jeu à gamebox
 
-Dix jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
+Onze jeux ont déjà été faits ainsi ; chacun a buté sur un piège différent, et la liste ci-dessous les récapitule.
 Le fil conducteur : **un fichier HTML autonome, des règles écrites noir sur blanc, des IA qui ne trichent pas, et une
 suite de tests qui joue des parties entières sous invariants.** Ne rien partager entre les jeux : copier un motif
 d'un autre fichier, oui ; l'importer, non.
@@ -23,7 +23,10 @@ Ces décisions appartiennent à l'utilisateur : poser les questions ensemble (As
 - Source des règles (règle officielle, article Wikipédia FR…) et nom affiché en français.
 - Format (manche unique, objectif de points, nombre de manches) — en en choisissant **un** : l'auteur veut des jeux
   simples à lancer. Le nombre de joueurs n'est pas une question : c'est toujours **4** (toi et 3 adversaires), avec
-  un seul niveau d'IA, le plus fort. Si les règles officielles ne se jouent pas à 4, le signaler.
+  un seul niveau d'IA, le plus fort. Si les règles officielles ne se jouent pas à 4, le signaler. Un jeu qui se joue
+  seul (le Solitaire) : le faire trancher. Le propriétaire a choisi la vraie patience, sans adversaires ; l'IA y
+  devient l'indice, avec la même interdiction de lire une carte cachée, et le banc compare les politiques sur les
+  mêmes donnes (`tests/solitaire-bench.js`).
 - Chaque point ambigu, avec la lecture proposée et pourquoi.
 - Variantes au choix sur l'écran de départ, ou règles maison fixes ? Par défaut, fixes : l'auteur a retiré les choix
   de nombre de joueurs, de niveau et de durée de tous les jeux de cartes, et le Trou du cul n'a plus aucune option.
