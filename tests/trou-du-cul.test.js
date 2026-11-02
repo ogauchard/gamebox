@@ -177,6 +177,7 @@ async function playGame(n, level) {
   while (guard++ < 300000) {
     await tick();
     if (S.phase === "over") {
+      for (let i = 0; i < 3; i++) await tick();   // la feuille attend END_MS
       checkRound(n);
       if (byId.get("btnNext").dataset.over) { cov.games++; return; }
       byId.get("btnNext").click();
@@ -248,8 +249,15 @@ function checkRound(n) {
   ok(g("globalThis._peeks") === 0, "aucune IA ne lit la main d'un autre joueur");
 }
 
-/* ============== 2. Cas ciblés — synchrones, IA neutralisées ============== */
-function targetedTests() {
+/* Un pli arrêté (TRICK_MS), un échange (GIVE_MS) ou la feuille de fin (END_MS)
+   attendent une pause : l'horloge du bac à sable la déclenche à la tâche
+   suivante. On attend que `cond` soit vrai, quelques tâches au plus. */
+async function until(cond) {
+  for (let i = 0; i < 50 && !cond(); i++) await tick();
+}
+
+/* ============== 2. Cas ciblés — IA neutralisées ============== */
+async function targetedTests() {
   g("aiTurn = async function () {};");
 
   const clashes = globalClashes("trou-du-cul.html");
@@ -262,7 +270,8 @@ function targetedTests() {
   ok(deck.filter((c) => c.rank === 16).length === 2, "plus deux jokers");
 
   /* Table posée à la main. Seul le siège 0 se pilote au clic ; les autres
-     jouent par doPlay/doPass. Tous humains : rien ne part en asynchrone. */
+     jouent par doPlay/doPass. Tous humains : seuls un pli arrêté et la fin de
+     manche partent en asynchrone (closed() attend la fin de la pause). */
   const C = (spec) => (spec === "JK" ? g("mkJoker()") : mkCard(spec.slice(-1), Number(spec.slice(0, -1))));  // "9P", "15C" (le 2), "JK"
   const table = (n, hands) => {
     g("startGame")(n);                 // le moteur sait toujours jouer à 5 ou 6
@@ -272,6 +281,12 @@ function targetedTests() {
     S.trick = g("emptyTrick()"); S.lastTrick = null; S.passed = new Set();
     S.finished = []; S.offenders = []; S.revolution = false;
     S.busy = false; S.current = 0; S.phase = "play";
+  };
+  // Un pli arrêté reste d'abord sur la table (phase "close"), puis se ramasse.
+  const closed = async () => {
+    ok(S.phase === "close" && S.busy && S.trick.rank !== null && byId.get("status").innerHTML.includes("le pli avec"),
+       `le pli arrêté reste sur la table, annoncé, avant d'être ramassé (${byId.get("status").innerHTML})`);
+    await until(() => S.phase !== "close");
   };
   const find = (seat, s) => S.players[seat].hand.find((c) => (s === "JK" ? c.rank === 16 : `${c.rank}${c.suit}` === s));
   const doPlay = (seat, specs) => {
@@ -367,6 +382,7 @@ function targetedTests() {
   onCardClick(find(0, "5P").uid);
   onPlayClick();
   doPlay(1, ["15C"]);
+  await closed();
   ok(S.trick.rank === null && S.lastTrick.closed && S.lastTrick.by === 1 && S.current === 1,
      "un 2 arrête le pli : son auteur ramasse et rouvre aussitôt");
 
@@ -374,6 +390,7 @@ function targetedTests() {
   onCardClick(find(0, "5P").uid);
   onPlayClick();
   doPlay(1, ["JK"]);
+  await closed();
   ok(S.trick.rank === null && S.lastTrick.closed && S.current === 1, "un joker seul arrête le pli");
 
   table(4, [["5P", "5C", "3P"], ["9C", "JK", "4C"], ["6K", "5K"], ["7T", "6T"]]);
@@ -385,6 +402,7 @@ function targetedTests() {
   table(4, [["15P", "15C", "15K", "15T", "3P"], ["5C"], ["6K"], ["7T"]]);
   S.sel = new Set(S.players[0].hand.filter((c) => c.rank === 15).map((c) => c.uid));
   onPlayClick();
+  await closed();
   ok(S.revolution && S.lastTrick.closed && S.current === 0, "un carré de 2 arrête le pli, et fait la révolution");
 
   table(4, [["4P", "3P", "8P"], ["3C", "15C", "4C"], ["15K", "5K"], ["7T", "6T"]]);
@@ -392,6 +410,7 @@ function targetedTests() {
   onCardClick(find(0, "4P").uid);
   onPlayClick();
   doPlay(1, ["3C"]);
+  await closed();
   ok(S.lastTrick && S.lastTrick.closed && S.current === 1, "révolution : c'est le 3 qui arrête le pli");
   doPlay(1, ["15C"]);
   ok(S.trick.rank === 15 && S.current === 2, "révolution : le 2 n'arrête rien");
@@ -408,6 +427,7 @@ function targetedTests() {
   sel = S.players[0].hand.filter((c) => S.sel.has(c.uid));
   ok(sel.length === 2 && sel.every((c) => c.rank === 16), "un clic sur un joker sans sélection prend deux jokers pour une paire");
   onPlayClick();
+  await closed();
   ok(S.lastTrick && S.lastTrick.closed && S.current === 0, "deux jokers arrêtent le pli");
 
   table(4, [["9P", "9C", "JK", "3P"], ["10C"], ["11K"], ["12T"]]);
@@ -435,6 +455,7 @@ function targetedTests() {
   onCardClick(S.players[0].hand[0].uid);
   onPlayClick();
   ok(S.offenders.join() === "0" && S.finished.length === 0 && S.players[0].offense === "un 2", "finir sur un 2 est relevé");
+  await closed();
   ok(S.current === 1 && S.lastTrick.closed, "le pli est arrêté, le voisin rouvre");
 
   table(4, [["9P", "JK"], ["7P", "3C"], ["6P", "4C"], ["8P", "3T"]]);
@@ -457,6 +478,7 @@ function targetedTests() {
   table(5, [["15P"], ["7P", "3C"], ["6P"], ["8P", "3T"], ["9P", "4T"]]);
   onCardClick(S.players[0].hand[0].uid);
   onPlayClick();                                   // fautif, le pli s'arrête : le siège 1 rouvre
+  await closed();
   doPlay(1, ["7P"]); doPass(2); doPass(3); doPass(4);
   ok(S.current === 1, "pli ramassé");
   doPlay(1, ["3C"]);                               // 1er
@@ -490,6 +512,10 @@ function targetedTests() {
   S.players.forEach((p, i) => { p.role = ["P", "VP", "VT", "T"][i]; p.ai = i > 0; });
   S.round = 2;
   g("startRound()");
+  ok(S.phase === "gives" && S.busy && S.give.forced && S.give.from === 3 && S.players[0].hand.length === 15
+     && byId.get("status").innerHTML.startsWith("<b>Yuki</b> (Trou du cul) te donne d'office ses 2 meilleures cartes : <b>"),
+     `chaque échange s'annonce, le premier d'office : le Trou du cul te donne ses 2 meilleures (${byId.get("status").innerHTML})`);
+  await until(() => S.phase === "give");
   ok(S.phase === "give" && S.give.from === 0 && S.give.k === 2, "le Président humain choisit 2 cartes à rendre");
   ok(S.players[0].hand.length === 15 && S.gifts.size === 2, "…après avoir reçu les 2 meilleures du Trou du cul, surlignées");
   const gifts = S.players[0].hand.filter((c) => S.gifts.has(c.uid)).map((c) => c.rank).sort((a, b) => b - a);
@@ -503,6 +529,9 @@ function targetedTests() {
   ok(S.sel.size === 2, "on ne sélectionne pas plus de cartes que demandé");
   onGiveClick();
   ok(S.players.every((p) => p.hand.length === 13), "après les échanges, chacun a de nouveau 13 cartes");
+  ok(S.phase === "gives" && byId.get("status").innerHTML === "<b>Nora</b> (Vice-président) rend une carte à <b>Elias</b> (Vice-trou du cul).",
+     `le dernier échange s'annonce aussi (${byId.get("status").innerHTML})`);
+  await until(() => S.phase !== "gives");
   ok(S.current === 3 && S.phase === "ai", "le Trou du cul ouvre la manche");
 
   /* ---------------------------------------------------- Politiques d'IA */
@@ -544,7 +573,7 @@ function targetedTests() {
   for (let i = 0; i < 12; i++) await playGame(4, "sharp");
   for (let i = 0; i < 4; i++) await playGame(4, "simple");
   Object.assign(cov, g("globalThis._cov"));
-  targetedTests();
+  await targetedTests();
   console.log("Couverture :", JSON.stringify(cov), `(${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   report("Trou du cul");
 })();

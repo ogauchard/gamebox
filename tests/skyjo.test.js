@@ -29,7 +29,26 @@ g(`
   clearColumns = function (p) { const r = _clearColumns(p); if (r !== null) globalThis._cols++; return r; };
 `);
 
-const cov = { rounds: 0, columns: 0, doubles: 0, noDouble: 0, reshuffles: 0 };
+const cov = { rounds: 0, columns: 0, doubles: 0, noDouble: 0, reshuffles: 0, picks: 0, hiddenPicks: 0 };
+
+/* Avant de jouer une case, l'ordinateur la montre : entourée à l'écran, et
+   retournée si c'est une carte cachée qu'il remplace — sans que sa valeur ait
+   encore changé. Relevé à l'instant où elle est montrée. */
+const ctx = g("globalThis");
+const pickWrong = [];
+const _showPick = ctx.showPick;
+ctx.showPick = function (p, idx, replace, epoch) {
+  const cell = p.grid[idx], wasUp = cell.up, v = cell.v, held = S.held;
+  const r = _showPick(p, idx, replace, epoch);
+  const shown = p._host.querySelectorAll(".card")[idx].classList.contains("picked");
+  if (!shown || cell.v !== v || S.held !== held || cell.up !== (wasUp || replace)
+      || !byId.get("status").innerHTML.includes(replace ? (wasUp ? `remplace son <b>${v}</b>` : `un <b>${v}</b>`) : "retourne une carte")) {
+    pickWrong.push({ name: p.name, idx, replace, wasUp, shown, status: byId.get("status").innerHTML });
+  }
+  cov.picks++;
+  if (replace && !wasUp) cov.hiddenPicks++;
+  return r;
+};
 
 /* ------------------------------------------------------------ Invariants */
 const refCount = new Map();
@@ -122,6 +141,8 @@ async function playGame(nPlayers) {
     await tick();
 
     if (S.phase === "over") {
+      // La feuille s'ouvre après une pause (END_MS), le temps de voir les cartes se retourner.
+      for (let i = 0; i < 3; i++) await tick();
       checkRound();
       if (byId.get("btnNext").dataset.over) return;
       byId.get("btnNext").click();
@@ -283,6 +304,8 @@ function targetedTests() {
   for (const n of [2, 3]) await playGame(n);
   await revealTest();
   targetedTests();
+  ok(pickWrong.length === 0 && cov.picks > 0 && cov.hiddenPicks > 0,
+     `l'ordinateur montre chaque case qu'il joue, et retourne d'abord la carte cachée qu'il remplace (${JSON.stringify(pickWrong[0] || "")})`);
 
   cov.columns = g("globalThis._cols");
   cov.reshuffles = g("globalThis._reshuffle");

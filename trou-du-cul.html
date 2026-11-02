@@ -304,6 +304,8 @@ const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
 const THINK_MS = 700;            // réflexion d'un adversaire
 const FAST_MS = 280;             // quand l'humain a fini : on n'attend pas les autres
 const TRICK_MS = 900;            // temps de lecture de la dernière carte avant de ramasser le pli
+const GIVE_MS = 1300;            // chaque échange du début de manche, annoncé avant le suivant
+const END_MS = 2000;             // la dernière pose et la fin de manche annoncée, avant la feuille
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -505,9 +507,8 @@ function startRound() {
     const [pres, vp, vt, tdc] = ["P", "VP", "VT", "T"].map(seat);
     // Les perdants donnent d'office leurs meilleures cartes ; les gagnants
     // rendent ensuite celles de leur choix.
-    giveCards(tdc, pres, bestCards(tdc, 2));
-    giveCards(vt, vp, bestCards(vt, 1));
-    S.gives = [{ from: pres, to: tdc, k: 2 }, { from: vp, to: vt, k: 1 }];
+    S.gives = [{ from: tdc, to: pres, k: 2, forced: true }, { from: vt, to: vp, k: 1, forced: true },
+               { from: pres, to: tdc, k: 2 }, { from: vp, to: vt, k: 1 }];
     S.leader = tdc;
   }
   nextGive();
@@ -529,7 +530,10 @@ function giveCards(from, to, cards) {
   else log(`${a.name} donne ${n} à ${b.name}.`);
 }
 
-function nextGive() {
+/* Les échanges, un à un. Ceux d'office (les meilleures cartes des perdants)
+   et ceux de l'ordinateur se font seuls, et chacun reste annoncé GIVE_MS
+   (phase "gives") ; l'humain qui rend des cartes les choisit (phase "give"). */
+async function nextGive() {
   const g = S.gives.shift();
   if (!g) {
     S.give = null;
@@ -539,8 +543,16 @@ function nextGive() {
   }
   S.give = g;
   const p = S.players[g.from];
-  if (p.ai) {
-    giveCards(g.from, g.to, policyOf(p).give(p, g.k));
+  if (g.forced || p.ai) {
+    g.cards = g.forced ? bestCards(g.from, g.k) : policyOf(p).give(p, g.k);
+    giveCards(g.from, g.to, g.cards);
+    const epoch = S.epoch;
+    S.phase = "gives";
+    S.busy = true;
+    render();
+    await sleep(GIVE_MS);
+    if (epoch !== S.epoch) return;
+    S.busy = false;
     nextGive();
     return;
   }
@@ -591,7 +603,7 @@ function doPlay(seat, cards) {
   }
   if (p.hand.length === 0) finish(seat, cards, top);
   if (activeSeats().length <= 1) { endRound(); return; }
-  if (top) { endTrick(true); return; }
+  if (top) { closeTrick(); return; }
 
   let next = nextTurn(seat);
   if (equal && next !== null) {
@@ -610,6 +622,19 @@ function doPass(seat) {
   if (next === null) { endTrick(false); return; }
   S.current = next;
   beginTurn();
+}
+
+/* La plus forte valeur arrête le pli : on la laisse lire avant de ramasser,
+   comme un pli que tout le monde a passé (phase "close"). */
+async function closeTrick() {
+  const epoch = S.epoch;
+  S.phase = "close";
+  S.busy = true;
+  render();
+  await sleep(S.players[0].hand.length ? TRICK_MS : FAST_MS);
+  if (epoch !== S.epoch) return;
+  S.busy = false;
+  endTrick(true);
 }
 
 /* Le dernier à avoir posé ramasse et rouvre — ou, s'il est sorti, son voisin.
@@ -642,7 +667,7 @@ function finish(seat, cards, top) {
 /* --------------------------------------------------------- Fin de manche */
 const roleFor = (pos, n) => (pos === 0 ? "P" : pos === 1 ? "VP" : pos === n - 1 ? "T" : pos === n - 2 ? "VT" : "N");
 
-function endRound() {
+async function endRound() {
   const n = nplayers();
   // Classement : les sortis dans l'ordre, le dernier à tenir des cartes, puis
   // ceux qui ont fini sur une carte interdite — le premier fautif tout en bas.
@@ -654,11 +679,14 @@ function endRound() {
     p.score += p.gain;
     p.rounds.push(p.gain);
   });
+  // La dernière pose reste sur la table ; la feuille attend END_MS (une
+  // nouvelle manche lancée entre-temps l'annule).
   S.phase = "over";
   S.busy = false;
-  S.trick = emptyTrick();
   render();
-  showScores(S.players.some((p) => p.score >= S.target));
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores(S.players.some((p) => p.score >= S.target));
 }
 
 function showScores(over) {
@@ -1028,6 +1056,29 @@ function statusHtml() {
       if (t.rank !== null && S.passed.has(0)) return `Tu as passé : tu rejoues au prochain pli. <b>${p.name}</b> réfléchit…`;
       if (t.skipped === 0) return `Même valeur : tu sautes ton tour. <b>${p.name}</b> réfléchit…`;
       return `<b>${p.name}</b> réfléchit…`;
+    case "close": {
+      const by = S.players[t.by];
+      return `${by.ai ? `<b>${by.name}</b> arrête` : "Tu arrêtes"} le pli avec <b>${playName(t.rank, t.count)}</b> : `
+           + "personne ne peut ni battre ni égaler.";
+    }
+    case "gives": {
+      const g = S.give, a = S.players[g.from], b = S.players[g.to];
+      const name = (q) => `<b>${q.name}</b> (${ROLE_NAME[q.role]})`;
+      const cards = `<b>${g.cards.map(cardLabel).join(" et ")}</b>`;
+      const best = (one, many) => (g.k === 1 ? `${one} meilleure carte` : `${many} ${g.k} meilleures cartes`);
+      if (g.forced) {
+        if (!a.ai) return `Tu donnes d'office ${best("ta", "tes")} à ${name(b)}.`;
+        if (!b.ai) return `${name(a)} te donne d'office ${best("sa", "ses")} : ${cards}.`;
+        return `${name(a)} donne d'office ${best("sa", "ses")} à ${name(b)}.`;
+      }
+      if (!b.ai) return `${name(a)} te rend ${cards}.`;
+      return `${name(a)} rend ${g.k === 1 ? "une carte" : `${g.k} cartes`} à ${name(b)}.`;
+    }
+    case "over": {
+      const role = (r) => S.order.map((seat) => S.players[seat]).find((q) => q.role === r);
+      const label = (q) => (q.ai ? `<b>${q.name}</b>` : "<b>toi</b>");
+      return `Fin de la manche : ${label(role("P"))} Président, ${label(role("T"))} Trou du cul.`;
+    }
     case "play": {
       if (t.rank === null) return "À toi d'ouvrir : choisis une ou plusieurs cartes de même valeur.";
       const what = playName(t.rank, t.count);

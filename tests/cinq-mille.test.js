@@ -298,6 +298,12 @@ function humanAct() {
 /* Toujours 4 joueurs par l'écran de départ, adversaires « sharp ». La
    politique simple ne sert plus que de référence au banc d'essai : on la fait
    jouer aussi, pour qu'elle reste légale et pure. */
+/* La feuille de fin s'ouvre après une pause (END_MS) : la partie est déjà
+   jouée, on attend qu'elle s'affiche. */
+async function sheet() {
+  for (let i = 0; i < 20 && byId.get("scoreOverlay").hidden; i++) await tick();
+}
+
 async function playGame(level) {
   byId.get("btnStart").click();
   okOnce(S.players.length === 4 && S.players.slice(1).every((p) => p.ai && p.policy === "sharp") && !S.players[0].ai,
@@ -306,7 +312,7 @@ async function playGame(level) {
   let guard = 0;
   while (guard++ < 300000) {
     await tick();
-    if (S.phase === "over") { checkGame(); return; }
+    if (S.phase === "over") { await sheet(); checkGame(); return; }
     if (myTurn()) humanAct();
   }
   ok(false, "la partie se termine sans blocage (garde-fou atteint)");
@@ -525,8 +531,11 @@ async function targetedTests() {
   roll([1, 1, 2, 3, 4]);
   onBankClick();
   ok(S.phase === "over" && S.winner === 0 && me().score === 5000, "5000 tout juste en encaissant : victoire aussitôt");
+  ok(byId.get("scoreOverlay").hidden && byId.get("status").innerHTML.includes("<b>tu gagnes !</b>"),
+     "la feuille de fin attend : le statut annonce la victoire, le tour gagnant reste sur la table");
+  await sheet();
   ok(byId.get("btnNext").dataset.over === "1" && byId.get("scoreBody").innerHTML.includes("<b>Tu l'emportes</b>"),
-     "la feuille de fin de partie s'ouvre et nomme le gagnant");
+     "puis la feuille de fin de partie s'ouvre et nomme le gagnant");
   onRollClick();
   ok(S.phase === "over", "la partie finie, plus rien ne répond");
 
@@ -750,6 +759,7 @@ async function targetedTests() {
   await turn;
   for (let i = 0; i < 20 && S.phase !== "over"; i++) await tick();
   ok(S.phase === "over" && S.winner === 1 && S.players[1].score === 5000, "l'ordinateur à 4800 garde ses deux 1 et gagne");
+  await sheet();
   ok(byId.get("scoreBody").innerHTML.includes("<b>Nora</b> l'emporte"), "la feuille nomme le gagnant");
 
   ok(illegal.length === 0, `cas ciblés : rien d'irrégulier (${JSON.stringify(illegal[0] || "")})`);

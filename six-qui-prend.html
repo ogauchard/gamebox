@@ -303,6 +303,7 @@ const THINK_MS = 350;            // un adversaire choisit sa carte
 const REVEAL_MS = 900;           // lecture des cartes révélées avant de les poser
 const PLACE_MS = 600;            // une carte posée
 const TAKE_MS = 1400;            // une rangée ramassée : on la laisse voir
+const END_MS = 2000;             // la fin de la manche annoncée, les rangées encore là, avant la feuille
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -537,7 +538,9 @@ function placeCard(seat, card, row) {
 }
 
 /* ------------------------------------------------------------ Fin de manche */
-function endRound() {
+/* La manche est comptée tout de suite ; la feuille attend END_MS, le temps de
+   voir la dernière carte posée (une nouvelle manche lancée entre-temps l'annule). */
+async function endRound() {
   for (const p of S.players) {
     p.last = sumHeads(p.pile);
     p.score += p.last;
@@ -546,7 +549,9 @@ function endRound() {
   S.phase = "over";
   S.busy = false;
   render();
-  showScores(S.players.some((p) => p.score >= S.target));
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores(S.players.some((p) => p.score >= S.target));
 }
 
 function showScores(over) {
@@ -906,6 +911,10 @@ function statusHtml() {
     }
     case "row":
       return `Ton ${S.queue[0].card.n} est trop petit : <b>choisis la rangée à ramasser</b>.`;
+    case "over":
+      return S.players.some((p) => p.score >= S.target)
+        ? `Fin de la partie : quelqu'un a atteint <b>${S.target} têtes</b>.`
+        : "Fin de la manche : chacun compte ses têtes de bœuf…";
     default: return "";
   }
 }

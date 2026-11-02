@@ -325,6 +325,8 @@ const JOKERS = 6;
 const TURN_CAP = 400;            // garde-fou : une manche ne dépasse jamais ce nombre de tours
 const THINK_MS = 650;            // temps de « réflexion » d'un adversaire
 const PLAY_MS = 550;             // pause entre sa prise et sa défausse
+const OUT_MS = 1800;             // une sortie annoncée, avant les derniers tours
+const END_MS = 2000;             // la dernière défausse et la fin de manche annoncée, avant la feuille
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -624,13 +626,21 @@ function discardCard(p, card) {
   log(`${src} et ${p.ai ? "défausse" : "défausses"} ${cardName(card)}.`);
 }
 
-/* Après chaque défausse : sortie éventuelle, puis tour suivant. */
-function afterDiscard() {
+/* Après chaque défausse : sortie éventuelle, puis tour suivant. Une sortie
+   lance les derniers tours : elle reste annoncée OUT_MS (phase "out"). */
+async function afterDiscard() {
   const p = S.players[S.current];
   S.drawnUid = null;
   if (S.finisher === null && arrange(p.hand, false).cost === 0) {
     S.finisher = S.current;
     log(says(p, "sors ! Chacun joue un dernier tour.", "sort ! Chacun joue un dernier tour."));
+    const epoch = S.epoch;
+    S.phase = "out";
+    S.busy = true;
+    render();
+    await sleep(OUT_MS);
+    if (epoch !== S.epoch) return;
+    S.busy = false;
   }
   endTurn();
 }
@@ -650,7 +660,9 @@ function endTurn() {
 }
 
 /* --------------------------------------------------------- Fin de manche */
-function endRound() {
+/* La manche est comptée tout de suite ; la feuille attend END_MS, le temps de
+   voir la dernière défausse (une nouvelle manche lancée entre-temps l'annule). */
+async function endRound() {
   S.phase = "over";
   S.busy = false;
   for (const p of S.players) {
@@ -659,7 +671,9 @@ function endRound() {
     p.score += p.result.cost;
   }
   render();
-  showScores(S.round >= ROUNDS);
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores(S.round >= ROUNDS);
 }
 
 function showScores(over) {
@@ -969,6 +983,11 @@ function statusHtml() {
           : "Tu peux sortir : défausse une carte <b>entourée de vert</b>.";
       }
       return last ? "<b>Dernier tour</b> : défausse une carte." : "Défausse une carte.";
+    case "out": return `${p.ai ? `<b>${p.name}</b> sort` : "<b>Tu sors</b>"} ! Les autres jouent un dernier tour.`;
+    case "over": {
+      const f = S.players[S.finisher];
+      return `Fin de la manche ${S.round} : ${!f ? "on compte les mains en l'état" : f.ai ? `<b>${f.name}</b> a tout posé` : "tu as tout posé"}…`;
+    }
     default: return "";
   }
 }

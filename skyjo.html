@@ -84,7 +84,16 @@
   .v-mid  { background: #f0c22c; color: #4a3800; }
   .v-high { background: #d94a3f; color: #fff; }
 
-  .card.removed { visibility: hidden; }
+  /* Une colonne de trois cartes pareilles : on la voit complète, entourée,
+     avant qu'elle ne s'efface. La classe n'arrive qu'une fois, quand la
+     colonne part : l'animation ne se rejoue pas aux rendus suivants. */
+  .card.removed { animation: column 1.4s ease-in forwards; pointer-events: none; }
+  @keyframes column {
+    0%, 55% { visibility: visible; opacity: 1; box-shadow: 0 0 0 3px #fff; }
+    100% { visibility: hidden; opacity: 0; transform: scale(.85); }
+  }
+  /* La case que l'ordinateur va remplacer ou retourner. */
+  .card.picked { box-shadow: 0 0 0 3px var(--accent); }
   /* L'anneau et le survol portent sur la carte, pas sur .inner, dont la
      transformation 3D sert déjà au retournement. */
   .card.selectable { cursor: pointer; box-shadow: 0 0 0 3px var(--accent); }
@@ -132,6 +141,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .card .inner { transition: none; }
+    .card.removed { animation: none; visibility: hidden; }
   }
 </style>
 </head>
@@ -231,6 +241,8 @@ const EV_HIDDEN = 5.07;          // espérance d'une carte inconnue (760 / 150)
 const AI_NAMES = ["Nora", "Elias", "Yuki"];
 const TARGET = 100;              // fin de partie dès qu'un joueur atteint ce total
 const REVEAL_MS = 950;           // temps de lecture d'une carte cachée remplacée
+const PICK_MS = 600;             // la case que l'ordinateur va remplacer ou retourner, entourée
+const END_MS = 2400;             // toutes les cartes retournées en fin de manche, avant la feuille
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -274,6 +286,8 @@ const S = {
   round: 1,
   logs: [],
   busy: false,
+  pick: null,         // la case que l'ordinateur va jouer, montrée avant : { p, idx }
+  epoch: 0,           // change à chaque manche : un tour en vol d'une manche passée s'arrête
 };
 
 const el = (id) => document.getElementById(id);
@@ -329,6 +343,8 @@ function newGame(nPlayers) {
 }
 
 function startRound() {
+  S.epoch++;
+  S.pick = null;
   S.draw = shuffle(buildDeck());
   S.discard = [];
   S.held = null;
@@ -414,8 +430,11 @@ function placeCard(p, idx, value) {
 }
 
 /* --------------------------------------------------------- Fin de manche */
-function endRound() {
+/* La manche est comptée tout de suite ; la feuille attend END_MS, le temps de
+   voir toutes les cartes cachées se retourner — elles comptent. */
+async function endRound() {
   S.phase = "over";
+  S.pick = null;
   for (const p of S.players) for (const c of p.grid) if (!c.removed) c.up = true;
 
   const totals = S.players.map(trueSum);
@@ -430,8 +449,11 @@ function endRound() {
   S.players.forEach((p, i) => { p.rounds.push(totals[i]); p.total += totals[i]; });
 
   const over = S.players.some((p) => p.total >= TARGET);
+  setStatus(`Fin de la ${over ? "partie" : "manche"} : toutes les cartes se retournent et se comptent…`);
   render();
-  showScores(doubled, over);
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores(doubled, over);
 }
 
 function showScores(doubled, over) {
@@ -673,8 +695,10 @@ const POLICIES = { greedy: greedyPolicy, counting: countingPolicy };
 async function aiTurn() {
   const p = S.players[S.current];
   const policy = POLICIES[p.policy] || countingPolicy;
+  const epoch = S.epoch;
   S.busy = true;
   await sleep(650);
+  if (epoch !== S.epoch) return;       // partie relancée pendant la réflexion
 
   const top = S.discard[S.discard.length - 1];
   const takeIdx = top === undefined ? null : policy.chooseDiscard(p, top);
@@ -684,11 +708,12 @@ async function aiTurn() {
     S.heldFrom = "discard";
     render();
     await sleep(600);
+    if (epoch !== S.epoch || !(await showPick(p, takeIdx, true, epoch))) return;
     const { old, cleared } = placeCard(p, takeIdx, S.held);
-    log(`${p.name} prend le ${S.held} de la défausse et jette un ${old}.`
+    say(`${p.name} prend le ${S.held} de la défausse et jette un ${old}.`
         + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
     S.held = null;
-    finishAiTurn();
+    finishAiTurn(epoch);
     return;
   }
 
@@ -696,27 +721,55 @@ async function aiTurn() {
   S.heldFrom = "draw";
   render();
   await sleep(700);
+  if (epoch !== S.epoch) return;
 
   const act = policy.afterDraw(p, S.held);
+  if (!(await showPick(p, act.idx, act.kind === "place", epoch))) return;
   if (act.kind === "place") {
     const { old, cleared } = placeCard(p, act.idx, S.held);
-    log(`${p.name} pioche un ${S.held} et jette un ${old}.`
+    say(`${p.name} pioche un ${S.held} et jette un ${old}.`
         + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
   } else {
     S.discard.push(S.held);
     p.grid[act.idx].up = true;
     const cleared = clearColumns(p);
-    log(`${p.name} défausse un ${S.held} et retourne un ${p.grid[act.idx].v}.`
+    say(`${p.name} défausse un ${S.held} et retourne un ${p.grid[act.idx].v}.`
         + (cleared !== null ? ` Colonne de ${cleared} retirée !` : ""));
   }
   S.held = null;
-  finishAiTurn();
+  finishAiTurn(epoch);
 }
 
-async function finishAiTurn() {
+/* Avant que l'ordinateur joue une case, elle est entourée ; s'il remplace une
+   carte cachée, elle se retourne d'abord — comme pour toi, on lit la carte
+   qu'il sacrifie. Renvoie false si une autre manche a commencé entre-temps. */
+async function showPick(p, idx, replace, epoch) {
+  const cell = p.grid[idx];
+  const reveal = replace && !cell.up;
+  if (reveal) cell.up = true;
+  S.pick = { p, idx };
+  setStatus(!replace ? `<b>${p.name}</b> défausse le <b>${S.held}</b> et retourne une carte…`
+          : reveal ? `<b>${p.name}</b> remplace une carte cachée : un <b>${cell.v}</b>…`
+          : `<b>${p.name}</b> remplace son <b>${cell.v}</b> par le <b>${S.held}</b>…`);
+  render();
+  await sleep(reveal ? REVEAL_MS : PICK_MS);
+  if (epoch !== S.epoch) return false;
+  S.pick = null;
+  return true;
+}
+
+/* Ce que l'ordinateur vient de faire : dans le journal et dans le statut, que
+   le journal masqué des écrans courts ne le cache pas. */
+function say(msg) {
+  log(msg);
+  setStatus(msg);
+}
+
+async function finishAiTurn(epoch) {
   S.heldFrom = null;
   render();
   await sleep(550);
+  if (epoch !== S.epoch) return;
   S.busy = false;
   endTurn();
 }
@@ -856,6 +909,7 @@ function render() {
       const b = cards[i];
       b.classList.toggle("up", cell.up);
       b.classList.toggle("removed", cell.removed);
+      b.classList.toggle("picked", !!S.pick && S.pick.p === p && S.pick.idx === i);
       const front = b.querySelector(".front");
       front.textContent = cell.v;
       front.className = "face front " + colorClass(cell.v);

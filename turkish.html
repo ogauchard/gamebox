@@ -107,6 +107,7 @@
   #pileCards { display: flex; min-height: calc(var(--cw) * 1.4); padding-left: calc(var(--cw) * .5); }
   #pileCards .card { margin-left: calc(var(--cw) * -.5); }
   #pileCards .card.under { filter: brightness(.62); }
+  #pileCards .card.fail { box-shadow: 0 0 0 3px #e0473f, 0 6px 14px rgba(0,0,0,.5); }
   #pileCards.old { opacity: .38; }
   /* Pli vide : un emplacement en pointillés plutôt qu'un trou. */
   #pileCards:empty::before {
@@ -313,6 +314,8 @@ const RANK_SHORT = { 11: "V", 12: "C", 13: "D", 14: "R", 15: "A" };
 const RANK_NAME = { 11: "Valet", 12: "Cavalier", 13: "Dame", 14: "Roi", 15: "As" };
 const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
 const THINK_MS = 650;            // réflexion d'un adversaire
+const BLIND_MS = 1500;           // une carte cachée qui ne passe pas, montrée sur le pli avant de partir avec lui
+const END_MS = 2000;             // la dernière carte et la fin de donne annoncée, avant la feuille
 const TURN_CAP = 1500;           // garde-fou : une donne qui n'en finit pas s'arrête là
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -370,6 +373,7 @@ const S = {
   logs: [],
   busy: false,
   epoch: 0,           // change à chaque donne : un tour d'IA en vol d'une donne passée s'arrête
+  blind: null,        // une carte cachée retournée qui ne passe pas, montrée sur le pli : { by, card }
 };
 
 const el = (id) => document.getElementById(id);
@@ -433,6 +437,7 @@ function newGame(nPlayers) {
 
 function startRound() {
   S.epoch++;
+  S.blind = null;
   const n = nplayers();
   const deck = shuffle(buildDeck());
   // Triée : l'ordre de la donne n'y transparaît pas.
@@ -497,12 +502,22 @@ function doPlay(seat, cards) {
 }
 
 /* Une carte cachée, jouée sans la regarder. Elle passe si elle descend (ou
-   balaie) ; sinon elle compte comme la carte montrée et part avec le pli. */
-function doBlind(seat, idx = 0) {
+   balaie) ; sinon elle compte comme la carte montrée et part avec le pli —
+   après être restée BLIND_MS sur le pli, qu'on la voie. */
+async function doBlind(seat, idx = 0) {
   const p = S.players[seat];
   const c = p.down.splice(Math.min(idx, p.down.length - 1), 1)[0];
   p.started = true;
   if (c.rank === TEN || S.top === null || c.rank <= S.top.rank) { place(seat, [c], true); return; }
+  const epoch = S.epoch;
+  S.blind = { by: seat, card: c };
+  S.phase = "blind";
+  S.busy = true;
+  render();
+  await sleep(BLIND_MS);
+  if (epoch !== S.epoch) return;
+  S.blind = null;
+  S.busy = false;
   S.roundTurns++;
   if (isSevenD(c)) S.dir = -S.dir;
   const cards = [...S.pile, c];
@@ -581,8 +596,10 @@ function finishRound(seat) {
 
 const handPoints = (p) => [...p.hand, ...p.up, ...p.down].reduce((t, c) => t + cardPoints(c), 0);
 
-/* Sans gagnant (garde-fou atteint), tout le monde compte ce qui lui reste. */
-function endRound() {
+/* Sans gagnant (garde-fou atteint), tout le monde compte ce qui lui reste. La
+   donne est comptée tout de suite ; la feuille attend END_MS, le temps de voir
+   la dernière carte (une nouvelle donne lancée entre-temps l'annule). */
+async function endRound() {
   for (const p of S.players) {
     p.last = S.players[S.finisher] === p ? 0 : handPoints(p);
     p.score += p.last;
@@ -591,7 +608,9 @@ function endRound() {
   S.phase = "over";
   S.busy = false;
   render();
-  showScores(S.round >= S.rounds);
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores(S.round >= S.rounds);
 }
 
 function showScores(over) {
@@ -911,6 +930,16 @@ function statusHtml() {
   switch (S.phase) {
     case "ai": return `<b>${p.name}</b> réfléchit…`;
     case "show": return "Montre une carte de ta main pour ramasser.";
+    case "blind": {
+      const b = S.players[S.blind.by];
+      return `${b.ai ? `<b>${b.name}</b> retourne` : "Tu retournes"} <b>${cardLabel(S.blind.card)}</b>, qui ne passe pas : `
+           + `le pli part dans ${b.ai ? "sa" : "ta"} main.`;
+    }
+    case "over": {
+      const f = S.players[S.finisher];
+      return !f ? "Fin de la donne : chacun compte ses cartes."
+           : f.ai ? `<b>${f.name}</b> n'a plus de cartes : fin de la donne.` : "Plus aucune carte : <b>tu gagnes la donne !</b>";
+    }
     case "play": {
       if (!S.pile.length) {
         if (!me.started) return "À toi d'ouvrir, avec une carte de ta main.";
@@ -1012,14 +1041,18 @@ function render() {
   // Table : le pli en cours (la dernière pose en avant), ou le dernier fermé en grisé.
   const pc = el("pileCards");
   pc.innerHTML = "";
-  const cards = S.pile.length ? S.pile : S.last ? S.last.cards : [];
-  pc.classList.toggle("old", !S.pile.length);
+  // Une carte cachée qui ne passe pas se pose sur le pli, entourée de rouge, avant de partir avec lui.
+  const b = S.blind;
+  const cards = b ? [...S.pile, b.card] : S.pile.length ? S.pile : S.last ? S.last.cards : [];
+  pc.classList.toggle("old", !S.pile.length && !b);
   const SHOW = 8;
-  const fresh = S.pile.length ? S.top.count : 0;
-  cards.slice(-SHOW).forEach((c, i, arr) => pc.appendChild(cardEl(c, i < arr.length - fresh ? "under" : "")));
+  const fresh = b ? 1 : S.pile.length ? S.top.count : 0;
+  cards.slice(-SHOW).forEach((c, i, arr) => pc.appendChild(cardEl(c, i < arr.length - fresh ? "under" : b ? "fail" : "")));
   const cap = el("pileCaption");
   const who = (seat, cap1) => (seat === 0 ? (cap1 ? "Toi" : "toi") : S.players[seat].name);
-  if (S.pile.length) {
+  if (b) {
+    cap.innerHTML = `<b>${who(b.by, true)}</b> : ${cardLabel(b.card)} cachée, ne passe pas`;
+  } else if (S.pile.length) {
     cap.innerHTML = `<b>${who(S.top.by, true)}</b> : ${playName(S.top.rank, S.top.count)}`;
   } else if (S.last && S.phase !== "over") {
     cap.innerHTML = S.last.kind === "sweep"

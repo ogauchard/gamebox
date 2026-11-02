@@ -169,6 +169,39 @@ of those sizes (Turkish's only exception: a 30-card hand on an iPhone SE scrolls
 animations off before measuring: headless Edge doesn't advance them in virtual time, and a card frozen at the start of
 its `pop` (24 px lower) reads as a false overflow. Landscape phones fall outside the 560 px query and get the desktop layout.
 
+## Pacing — every step on screen
+
+The owner found the computer's turns too quick to follow, first at Killer (its own *Pacing* paragraph), then asked
+for the same review everywhere: a step the AI takes must never change two things in one frame, and what happens
+without a card being laid must be **said in the status line** with a pause — the log is hidden under 700 px of
+height. What each game shows:
+
+- **Every game but Killer delays its score sheet**: the round is scored at once and `S.phase` turns `"over"` (the
+  status says how it ended), but `showScores()` waits `END_MS` (2 s; Skyjo 2.4 s, so the hidden cards can be seen
+  turning over — they count), guarded by `S.epoch` so a new game started meanwhile cancels it. Trou du cul keeps the
+  last play on the table for it. **Tests and benches must wait a few ticks after `phase === "over"`** before reading
+  `btnNext.dataset.over` (the harness clock fires the pause on the next tick) — a bench that clicked « Manche
+  suivante » straight away would cancel the sheet and never see the game end.
+- **Skyjo**: before the AI lays a card, `showPick()` rings the cell (`S.pick`, `PICK_MS`) and, if it is a hidden card
+  being replaced, turns it over first (`REVEAL_MS`, as for you) — it used to change in place with no hint. A
+  completed column is seen whole, ringed, before it fades (`.card.removed` is now a 1.4 s animation, played once since
+  the class comes once). The AI's move is written to the status too (`say()`).
+- **Uno**: `announce(text, seat, then)` (phase `"event"`, `EVENT_MS`, the player ringed `.hit`) for a skipped turn
+  (« Passe : Nora passe son tour. » — not even logged before), cards drawn on a +2/+4, both steps of a +4 challenge
+  (the challenge, then the verdict), and the 7-0 swaps. A joker's announced colour shows with the card.
+- **Cinq Rois**: going out is announced (`OUT_MS`) before the last turns.
+- **Trou du cul**: a trick closed by the top value stays bright `TRICK_MS` (`closeTrick()`); each exchange of the
+  round start is announced `GIVE_MS`.
+- **Turkish**: a face-down card that doesn't pass sits on the pile, ringed red, `BLIND_MS` (phase `"blind"`).
+- **5000**: a throw reads 1 s, its 0.45 s animation included (it was 0.75 s); the kept dice already moved aside in
+  their own step.
+- **6 qui prend** was already paced (reveal, each card laid, a row taken in red); only the end changed.
+
+Some engine functions became asynchronous, so a targeted test awaits a few ticks after them: Turkish's failing
+`doBlind`, Cinq Rois' `afterDiscard` on a going out, Trou du cul's closing `doPlay` and `nextGive`, Uno's
+`takePending`, `doChallenge`, skips and swaps. Uno's `table()` bumps `S.epoch`: a +2 turned up at the opening would
+otherwise end the hand-posed turn in mid-test.
+
 ## Architecture — asteroids.html
 
 ### Virtual world and scaling
@@ -411,7 +444,8 @@ equal to the deal size is wild that round (`S.wildRank = S.round + 2`). A turn i
 discard one. Deliberate readings, all stated in the in-game rules panel:
 
 - **Going out is automatic**: after any discard, if the remaining hand arranges with zero leftover points,
-  `afterDiscard()` sets `S.finisher`. Going out is never worse than not, so there is no button.
+  `afterDiscard()` sets `S.finisher`. Going out is never worse than not, so there is no button. It is announced
+  (phase `"out"`, `OUT_MS`, « Nora sort ! Les autres jouent un dernier tour. ») before the last turns start.
 - **The discard is mandatory**, even when all n + 1 cards already form melds — so a hand of exactly two 3-card
   melds after drawing *cannot* go out. The engine models this (see below); don't "simplify" it away.
 - Every other player gets exactly one final turn; `endTurn()` ends the round when play returns to the finisher.
@@ -539,7 +573,9 @@ and the long game; the old `VAR` object and its tests are gone). All stated in t
 - Round 1 is opened by the holder of the queen of hearts (seat 0 if it was set aside); later rounds by the previous
   **Trou du cul**. Exchanges at the start of every later round: the Trou du cul's 2 best (jokers first) and the
   Vice-trou du cul's best card go automatically; then the Président gives back 2 and the Vice-président 1 **of their
-  choice**. `S.gives` is the queue; `nextGive()` pauses in `phase = "give"` when the giver is the human.
+  choice**. `S.gives` is the queue, the forced gives included (`forced: true`); `nextGive()` makes a forced or an
+  AI give itself and announces it `GIVE_MS` (phase `"gives"`, the cards named when they are yours), and pauses in
+  `phase = "give"` when the human gives back.
 - Not implemented: the putsch.
 
 ### Legality and flow
@@ -550,8 +586,9 @@ strength is legal because the top value never stays on the table. The suite asse
 `S.current`, and never by a seat that passed or was just skipped; every `endTrick` either closed on the top value or
 had all the others passed or skipped.
 
-`doPlay` → optional revolution → `finish` if the hand is empty → `endRound` if one holder is left → `endTrick(true)`
-on the top value → skip on an equal value → `nextTurn()`. `doPass` → `nextTurn()` or `endTrick(false)`. `aiTurn()`
+`doPlay` → optional revolution → `finish` if the hand is empty → `endRound` if one holder is left → on the top value
+`closeTrick()` (phase `"close"`: the closing cards stay bright `TRICK_MS`, like a trick everyone passed) then
+`endTrick(true)` → skip on an equal value → `nextTurn()`. `doPass` → `nextTurn()` or `endTrick(false)`. `aiTurn()`
 checks `S.epoch` like the other games, and when its pass is the one that ends the trick it adds itself to
 `S.passed` early and pauses `TRICK_MS` with its "passe" bubble shown, so the winning cards can be read before they are
 cleared — which is why the test does not assert "not already passed" on `doPass`. The cleared trick stays on the
@@ -631,7 +668,8 @@ face-up on them (`p.up`) and 8 in hand.
 
 ### Flow
 
-`S.phase`: `play` (your turn), `show` (choosing the card to show after "Ramasser"), `ai`, `over`. Three moves, each
+`S.phase`: `play` (your turn), `show` (choosing the card to show after "Ramasser"), `ai`, `blind` (a face-down card
+that doesn't pass, shown on the pile `BLIND_MS` before it goes with it), `over`. Three moves, each
 re-checked by the click handlers: `doPlay(seat, cards)`, `doBlind(seat, idx)`, `doPickup(seat, shown)`; `place()`
 handles laying (sweep, direction, going out), `take()` a pickup. After a sweep or a pickup the same seat leads.
 `TURN_CAP` (1500) ends a deal in place, everyone counting their cards; it is a guarantee only, see below.

@@ -187,6 +187,7 @@ async function playGame(sc) {
     await tick();
 
     if (S.phase === "over") {
+      await settle();                            // la feuille attend END_MS
       checkRound();
       if (byId.get("btnNext").dataset.over) return;
       byId.get("btnNext").click();
@@ -243,15 +244,20 @@ function checkRound() {
   cov.rounds++;
 }
 
-/* ============== Cas ciblés — synchrones, IA neutralisées ================== */
-/* À partir d'ici, aucun `await` : les tours d'IA sont remplacés par des
-   fonctions vides, donc plus aucune temporisation ne reste en vol et rien ne
-   peut muter l'état entre deux vérifications. */
+/* ============== Cas ciblés — IA neutralisées ============================== */
+/* Les tours d'IA sont remplacés par des fonctions vides : seules restent en
+   vol les annonces du jeu (un tour sauté, des cartes piochées, un verdict, des
+   mains échangées, EVENT_MS) et la feuille de fin (END_MS). settle() les
+   laisse se jouer : l'horloge du bac à sable les déclenche à la tâche suivante. */
 function stopAI() {
   g("aiTurn = async function () {}; aiPenalty = async function () {};");
 }
 
-function targetedTests() {
+async function settle() {
+  for (let i = 0; i < 3; i++) await tick();
+}
+
+async function targetedTests() {
   /* -------------------------------------------- Compatibilité navigateur */
   const clashes = globalClashes("uno.html");
   ok(clashes.length === 0,
@@ -306,6 +312,9 @@ function targetedTests() {
      bout (pénalités comprises) et de façon synchrone. */
   const table = (nb, vars) => {
     start({ n: nb, format: "match", vars });
+    // Un +2 retourné en ouverture a lancé l'annonce de sa pioche : elle ne doit
+    // pas jouer sur la table posée ici (une nouvelle manche fait de même).
+    S.epoch++; S.event = null;
     for (const p of S.players) p.ai = false;
     S.busy = false; S.pending = 0; S.pendingKind = null; S.wild4 = null;
     S.dir = 1; S.current = 0; S.phase = "play"; S.drawn = null;
@@ -319,7 +328,12 @@ function targetedTests() {
   table(3, {});
   let card = mkCard("R", "skip");
   S.players[0].hand = [card, mkCard("V", "num", 1)];
+  S.players[1].ai = true;                          // sauté, il n'a rien à jouer : son nom s'affiche
   onHandClick(card.uid);
+  ok(S.phase === "event" && S.busy && S.event.seat === 1 && byId.get("status").innerHTML === "Passe : <b>Nora</b> passe son tour."
+     && S.players[1]._host.classList.contains("hit"),
+     `le tour sauté s'annonce, le joueur sauté entouré (${byId.get("status").innerHTML})`);
+  await settle();
   ok(S.current === 2, `le Passe saute le joueur suivant (courant ${S.current}, attendu 2)`);
 
   // Sens interdit à 3 joueurs : le sens s'inverse, la main revient au précédent.
@@ -334,7 +348,10 @@ function targetedTests() {
   table(2, {});
   card = mkCard("R", "rev");
   S.players[0].hand = [card, mkCard("V", "num", 1)];
+  S.players[1].ai = true;
   onHandClick(card.uid);
+  ok(byId.get("status").innerHTML === "Sens interdit à deux joueurs : <b>Nora</b> passe son tour.", "à deux joueurs, le tour sauté s'annonce aussi");
+  await settle();
   ok(S.current === 0, "à deux joueurs, le Sens interdit rend la main au poseur");
   ok(S.dir === 1, "à deux joueurs, le Sens interdit ne change pas le sens");
 
@@ -344,6 +361,9 @@ function targetedTests() {
   S.players[0].hand = [card, mkCard("V", "num", 1)];
   onHandClick(card.uid);
   ok(S.players[1].hand.length === 4, `+2 : le suivant pioche 2 cartes (${S.players[1].hand.length})`);
+  ok(S.phase === "event" && S.event.seat === 1 && byId.get("status").innerHTML.includes("<b>2 cartes</b> et passes ton tour."),
+     `les cartes piochées s'annoncent avant que le tour passe (${byId.get("status").innerHTML})`);
+  await settle();
   ok(S.current === 2, "+2 sans cumul : le suivant passe son tour");
   ok(S.pending === 0, "+2 : la pénalité est soldée");
 
@@ -356,6 +376,7 @@ function targetedTests() {
   onColorPick("V");
   ok(S.color === "V", "la couleur annoncée devient la couleur active");
   ok(S.players[1].hand.length === 6, `+4 : le suivant pioche 4 cartes (${S.players[1].hand.length})`);
+  await settle();
   ok(S.current === 2, "+4 sans cumul : le suivant passe son tour");
 
   /* ------------------------------------------------------ Cumul des +2/+4 */
@@ -385,6 +406,9 @@ function targetedTests() {
   S.pending = 6; S.pendingKind = "draw2";
   beginTurn();
   ok(S.players[0].hand.length === 7, `cumul : sans surenchère, on pioche le total (${S.players[0].hand.length})`);
+  ok(byId.get("status").innerHTML === "Tu pioches <b>6 cartes</b> et passes ton tour." && byId.get("me").classList.contains("hit"),
+     "tes cartes piochées s'annoncent, « Toi » marqué");
+  await settle();
   ok(S.current === 1 && S.pending === 0, "cumul : la pénalité soldée, le tour passe");
 
   // Cumul désactivé : la pénalité tombe sans laisser le choix.
@@ -393,7 +417,8 @@ function targetedTests() {
   S.pending = 2; S.pendingKind = "draw2";
   beginTurn();
   ok(S.players[0].hand.length === 4, "sans cumul : le joueur visé pioche sans pouvoir surenchérir");
-  ok(S.current === 1, "sans cumul : son tour est sauté");
+  await settle();
+  ok(S.current === 1, `sans cumul : son tour est sauté (courant ${S.current}, phase ${S.phase}, ${S.event && S.event.text})`);
 
   /* ---------------------------------------------------------- Contestation */
   table(2, { challenge: true });
@@ -403,9 +428,14 @@ function targetedTests() {
   S.wild4 = { by: 1, colorBefore: "R", bluff: true };
   beginTurn();
   ok(S.phase === "challenge", "contestation proposée face à un +4 isolé");
+  S.players[1].ai = true;                          // l'accusé : son nom s'affiche
   onChallengeClick();
+  ok(S.phase === "event" && S.players[1].hand.length === 2 && byId.get("status").innerHTML === "Tu contestes le +4 de <b>Nora</b> : du rouge dans sa main ?",
+     `la contestation s'annonce d'abord, le verdict ensuite (${byId.get("status").innerHTML})`);
+  await settle();
   ok(S.players[1].hand.length === 6, `bluff démasqué : le tricheur pioche 4 (${S.players[1].hand.length})`);
   ok(S.players[0].hand.length === 1, "bluff démasqué : la victime ne pioche rien");
+  await settle();
   ok(S.current === 0 && S.phase === "play", "bluff démasqué : la victime joue son tour normalement");
 
   table(2, { challenge: true });
@@ -415,8 +445,10 @@ function targetedTests() {
   S.wild4 = { by: 1, colorBefore: "R", bluff: false };
   beginTurn();
   onChallengeClick();
+  await settle();
   ok(S.players[0].hand.length === 7, `contestation ratée : 6 cartes piochées (${S.players[0].hand.length})`);
   ok(S.players[1].hand.length === 1, "contestation ratée : l'accusé ne pioche rien");
+  await settle();
   ok(S.current === 1, "contestation ratée : le tour est perdu");
 
   // Refuser de contester ramène au traitement normal de la pénalité.
@@ -427,7 +459,8 @@ function targetedTests() {
   beginTurn();
   onSubmitClick();
   ok(S.players[0].hand.length === 5, "contestation refusée : la victime pioche les 4 cartes");
-  ok(S.current === 1, "contestation refusée : son tour est sauté");
+  await settle();
+  ok(S.current === 1, `contestation refusée : son tour est sauté (courant ${S.current}, phase ${S.phase}, ${S.event && S.event.text})`);
 
   // Sur un cumul, plus de contestation possible.
   table(3, { challenge: true, stack: true });
@@ -508,7 +541,7 @@ function targetedTests() {
 /* ------------------------------ Ouverture de manche ---------------------- */
 /* Un joker +4 ne doit jamais ouvrir la défausse (règle officielle) ; les autres
    cartes spéciales agissent bien sur le premier joueur. */
-function openingTests() {
+async function openingTests() {
   let wild4 = 0;
   for (let i = 0; i < 150; i++) {
     start({ format: "match", vars: {} });
@@ -522,7 +555,9 @@ function openingTests() {
       okOnce(S.current === 1, "Passe en ouverture : le premier joueur saute son tour");
     }
     if (S.discard[0].kind === "draw2") {
-      // Le premier joueur est l'humain : beginTurn() solde la pénalité aussitôt.
+      // Le premier joueur est l'humain : beginTurn() solde la pénalité aussitôt,
+      // et l'annonce faite, le tour passe.
+      await settle();
       okOnce(dealt === 30 && S.pending === 0 && S.current === 1,
              "+2 en ouverture : le premier joueur pioche 2 cartes et passe son tour");
     }
@@ -555,8 +590,8 @@ const scenarios = [
     for (let i = 0; i < (sc.format === "single" ? 8 : 2); i++) await playGame(sc);
   }
   stopAI();
-  openingTests();
-  targetedTests();
+  await openingTests();
+  await targetedTests();
 
   cov.reshuffles = g("globalThis._reshuffles");
   cov.blocked = g("globalThis._blocked");

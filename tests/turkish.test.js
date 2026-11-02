@@ -36,15 +36,20 @@ g(`
   };
 
   const _doBlind = doBlind;
-  doBlind = function (seat, idx) {
+  doBlind = async function (seat, idx) {
     const p = S.players[seat];
     if (seat !== S.current || !downAllowed(p)) globalThis._bad.push({ blind: seat, current: S.current });
-    const top = S.top, before = p.hand.length + S.pile.length;
+    const top = S.top, before = p.hand.length + S.pile.length, epoch = S.epoch;
     const card = p.down[Math.min(idx || 0, p.down.length - 1)];
     const passes = card.rank === TEN || top === null || card.rank <= top.rank;
     passes ? globalThis._cov.blindOk++ : globalThis._cov.blindKo++;
     if (card.rank === TEN && total(p) === 1) globalThis._cov.blindTenOut++;
-    _doBlind(seat, idx);
+    const shown = _doBlind(seat, idx);
+    // Une carte qui ne passe pas reste d'abord sur le pli, le temps qu'on la voie.
+    if (!passes && (S.phase !== "blind" || !S.blind || S.blind.card !== card || p.hand.includes(card)
+                    || !document.getElementById("status").innerHTML.includes("qui ne passe pas"))) globalThis._bad.push({ blindKoShown: seat });
+    await shown;
+    if (S.epoch !== epoch) return;
     // Une carte qui ne passe pas part dans la main avec tout le pli.
     if (!passes && S.phase !== "over" && !p.hand.includes(card)) globalThis._bad.push({ blindKoLost: seat });
     if (!passes && S.phase !== "over" && p.hand.length !== before + 1) globalThis._bad.push({ blindKoCount: seat });
@@ -160,6 +165,13 @@ function humanAct() {
   }
 }
 
+/* Une carte cachée qui ne passe pas (BLIND_MS) et la feuille de fin de donne
+   (END_MS) attendent une pause : l'horloge du bac à sable la déclenche à la
+   tâche suivante. */
+async function pause() {
+  for (let i = 0; i < 3; i++) await tick();
+}
+
 async function playGame(level, rounds) {
   g(`chosenRounds = ${rounds}`);
   byId.get("btnStart").click();
@@ -174,6 +186,7 @@ async function playGame(level, rounds) {
   while (guard++ < 500000) {
     await tick();
     if (S.phase === "over") {
+      await pause();
       checkRound();
       if (byId.get("btnNext").dataset.over) { cov.games++; return; }
       byId.get("btnNext").click();
@@ -213,7 +226,7 @@ function checkRound() {
 }
 
 /* ============== 2. Cas ciblés — synchrones, IA neutralisées ============== */
-function targetedTests() {
+async function targetedTests() {
   g("aiTurn = async function () {};");
 
   const clashes = globalClashes("turkish.html");
@@ -341,6 +354,10 @@ function targetedTests() {
   table([{ hand: ["3C"], up: [], down: ["13C", "6P"] }, { hand: ["6T"] }]);
   pile(["9P", "5K"], 1);
   onDownClick(0);
+  ok(S.phase === "blind" && S.busy && S.pile.length === 2 && S.blind.card.rank === 13 && !me().hand.some((c) => c.rank === 13)
+     && byId.get("pileCaption").innerHTML.includes("ne passe pas"),
+     "une carte cachée qui ne passe pas reste d'abord sur le pli, entourée, le temps qu'on la voie");
+  await pause();
   ok(S.pile.length === 0 && me().hand.length === 4 && me().hand.some((c) => c.rank === 13) && S.current === 0,
      "une carte cachée qui ne passe pas est ramassée avec le pli, et on rouvre");
 
@@ -399,7 +416,7 @@ function C(spec) {
   for (let i = 0; i < 3; i++) await playGame("simple", 4);
   await playGame("sharp", 8);
   Object.assign(cov, g("globalThis._cov"));
-  targetedTests();
+  await targetedTests();
   console.log("Couverture :", JSON.stringify(cov), `(${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   report("Turkish");
 })();

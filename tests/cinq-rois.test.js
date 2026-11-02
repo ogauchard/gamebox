@@ -256,6 +256,12 @@ function humanAct() {
    simple ne sert plus que de référence au banc d'essai : on la fait jouer
    aussi, pour qu'elle reste légale et honnête. Le premier tour d'IA n'a pas
    encore consulté sa politique quand on la remplace (il attend son sleep). */
+/* Une sortie (OUT_MS) et la feuille de fin de manche (END_MS) attendent une
+   pause : l'horloge du bac à sable la déclenche à la tâche suivante. */
+async function settleEnd() {
+  for (let i = 0; i < 3; i++) await tick();
+}
+
 async function playGame(n, level) {
   if (n === 4) byId.get("btnStart").click();
   else g("startGame")(n);
@@ -266,6 +272,7 @@ async function playGame(n, level) {
   while (guard++ < 400000) {
     await tick();
     if (S.phase === "over") {
+      await settleEnd();
       checkRound(n);
       if (byId.get("btnNext").dataset.over) { cov.games++; return; }
       byId.get("btnNext").click();
@@ -313,7 +320,7 @@ function checkRound(n) {
 }
 
 /* ============== 3. Cas ciblés — synchrones, IA neutralisées ============== */
-function targetedTests() {
+async function targetedTests() {
   g("aiTurn = async function () {};");
 
   const clashes = globalClashes("cinq-rois.html");
@@ -364,6 +371,9 @@ function targetedTests() {
      "piocher ajoute à la main la carte du dessus de la pioche");
   onHandClick(find(0, "C10").uid);
   ok(S.finisher === 0, "une défausse qui laisse une main entièrement combinée fait sortir");
+  ok(S.phase === "out" && S.busy && S.current === 0 && byId.get("status").innerHTML === "<b>Tu sors</b> ! Les autres jouent un dernier tour.",
+     "la sortie s'annonce, et le jeu attend avant les derniers tours");
+  await settleEnd();
   ok(S.current === 1 && S.phase === "draw", "le joueur suivant joue alors son dernier tour");
 
   S.draw.push(C("T6"));
@@ -404,6 +414,7 @@ function targetedTests() {
   onDrawClick();
   onHandClick(find(0, "P12").uid);
   ok(S.finisher === 0, "le 5 de cœur, joker de la manche, complète un brelan de 8 : sortie");
+  await settleEnd();
 
   S.draw.push(C("P11"));
   turn(1, "draw", "T9");
@@ -470,6 +481,8 @@ function targetedTests() {
   table(3, 1);
   S.players.forEach((p) => { p.ai = false; });
   g("endRound()");
+  ok(byId.get("status").innerHTML.startsWith("Fin de la manche 1"), "la fin de manche s'annonce avant la feuille");
+  await settleEnd();
   ok(byId.get("btnNext").dataset.over === "", "après la manche 1, la partie continue");
   byId.get("btnNext").click();
   ok(S.round === 2 && S.wildRank === 4 && S.players.every((p) => p.hand.length === 4),
@@ -477,6 +490,7 @@ function targetedTests() {
   S.round = 11;
   S.wildRank = 13;
   g("endRound()");
+  await settleEnd();
   ok(byId.get("btnNext").dataset.over === "1", "la onzième manche termine la partie");
   byId.get("btnNext").click();
   ok(S.round === 1 && S.players.every((p) => p.score === 0 && p.rounds.length === 0),
@@ -491,7 +505,7 @@ function targetedTests() {
   for (const [n, level] of [[4, "sharp"], [4, "sharp"], [4, "sharp"], [4, "sharp"], [4, "simple"], [2, "sharp"]]) {
     await playGame(n, level);
   }
-  targetedTests();
+  await targetedTests();
   cov.reshuffles = g("globalThis._reshuffles");
   console.log("Couverture :", JSON.stringify(cov), `(${((Date.now() - t0) / 1000).toFixed(1)} s)`);
   report("Les Cinq Rois");

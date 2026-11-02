@@ -56,6 +56,14 @@ identiques : la feuille commune, le harnais, le banc d'essai et le skill `captur
   `S.phase === "over"`, et `startRound()` remet la phase à `"idle"` (sinon la manche suivante ne démarre jamais — bug
   déjà livré dans Uno). `aiTurn()` est `async`, rythmé par `sleep()`, met `S.busy`, capture `S.epoch` et abandonne
   après chaque `await` si l'époque a changé (nouvelle manche ou partie lancée entre-temps).
+- **Rythme : chaque étape se voit.** Le propriétaire a trouvé les tours de l'ordinateur trop rapides dans tous les
+  jeux, et il manquait des étapes partout : un coup de l'IA ne doit jamais changer deux choses dans la même image.
+  Montrer avant d'agir (la case qu'elle remplace, les dés qu'elle garde, l'arrêt de sa visée, sa cible) ; annoncer
+  dans le statut, avec une pause, ce qui arrive sans carte posée (tour sauté, cartes piochées, verdict, échange,
+  sortie) — le journal est masqué sous 700 px de haut ; et **différer la feuille des scores** d'une pause `END_MS`
+  (environ 2 s, statut de fin de manche, garde `S.epoch`), sinon le dernier coup n'est jamais vu. Les tests et le banc
+  attendent alors quelques tâches après `phase === "over"` avant de lire `btnNext.dataset.over`. CLAUDE.md, section
+  *Pacing*, détaille ce que chaque jeu montre.
 - **Légalité** : une seule fonction (`canPlay`, `canPlayCards`…) que le rendu, les clics et les IA consultent tous.
 - **Journal** : `says(p, second, third)` — tutoiement pour l'humain, troisième personne pour les IA. Jamais
   « il »/« elle » : les noms des IA n'ont pas de genre. 3 entrées gardées, rendues une `<div>` par entrée (jamais

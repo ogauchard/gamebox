@@ -32,6 +32,8 @@ async function playGame(policies) {
   while (guard++ < 400000) {
     await tick();
     if (S.phase !== "over") continue;
+    // La feuille de fin s'ouvre après une pause (END_MS) : on la laisse s'afficher.
+    for (let i = 0; i < 3; i++) await tick();
     if (byId.get("btnNext").dataset.over) {
       return S.players.map((p, i) => ({ policy: policies[i], total: p.score, rounds: p.rounds }));
     }

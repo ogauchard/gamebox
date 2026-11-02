@@ -145,6 +145,7 @@ async function playGame(level) {
     await tick();
     if (S.phase === "over") {
       rounds++;
+      await sheet();
       checkRound();
       if (byId.get("btnNext").dataset.over) {
         cov.games++;
@@ -160,6 +161,13 @@ async function playGame(level) {
     }
   }
   ok(false, "la partie se termine sans blocage (garde-fou atteint)");
+}
+
+/* La feuille de fin de manche s'ouvre après une pause (END_MS) : la manche
+   est déjà comptée, on attend qu'elle s'affiche — l'horloge du bac à sable
+   déclenche la pause à la tâche suivante. */
+async function sheet() {
+  for (let i = 0; i < 3; i++) await tick();
 }
 
 function checkRound() {
@@ -297,6 +305,8 @@ async function targetedTests() {
   await turn([45, 21, 31, 11]);
   ok(S.phase === "over", "après le dernier tour, la manche se compte");
   ok(S.players[0].last === 11 && S.players[0].score === 71, `on ajoute les têtes ramassées au total (+${S.players[0].last})`);
+  ok(byId.get("status").innerHTML.includes("Fin de la partie"), "le statut annonce la fin de la partie");
+  await sheet();
   ok(byId.get("btnNext").dataset.over === "1" && byId.get("scoreTitle").textContent === "Fin de la partie",
      "66 têtes atteintes : la partie s'arrête");
   ok(byId.get("scoreBody").innerHTML.includes("<b>Nora</b> l'emporte"), "le plus petit total gagne");
@@ -304,6 +314,7 @@ async function targetedTests() {
   table([[10], [20], [30], [40]], [[11], [21], [31], [41]]);
   S.players.forEach((p, i) => { p.score = [12, 40, 12, 65][i]; });
   await turn([11, 21, 31, 41]);
+  await sheet();
   ok(S.phase === "over" && !byId.get("btnNext").dataset.over, "personne à 66 : la partie continue");
   byId.get("btnNext").click();
   ok(S.round === 2 && S.phase === "pick" && S.players.every((p) => p.hand.length === 10) && S.rows.every((l) => l.length === 1),

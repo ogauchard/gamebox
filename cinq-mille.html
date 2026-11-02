@@ -309,9 +309,10 @@ const BRELAN = [0, 700, 200, 300, 400, 500, 600];
 const SUITE = 1000;
 const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
 const THINK_MS = 550;            // avant un lancer de l'ordinateur
-const ROLL_MS = 750;             // lecture d'un lancer
-const KEEP_MS = 900;             // les dés qu'il garde, montrés avant qu'il relance ou encaisse ; ou le tour qu'il reprend, ou non
+const ROLL_MS = 1000;            // lecture d'un lancer, ses 0,45 s d'animation comprises
+const KEEP_MS = 1000;            // les dés qu'il garde, montrés avant qu'il relance ou encaisse ; ou le tour qu'il reprend, ou non
 const BALLOT_MS = 1500;          // un tour perdu : on le laisse voir
+const END_MS = 2000;             // la victoire annoncée, le dernier tour sur la table, avant la feuille de fin
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -647,12 +648,16 @@ function wantsResume(seat) {
 }
 
 /* ------------------------------------------------------------ Fin de partie */
-function endGame(seat) {
+/* La partie est jouée tout de suite ; la feuille attend END_MS, le temps de
+   voir le tour gagnant (une nouvelle partie lancée entre-temps l'annule). */
+async function endGame(seat) {
   S.phase = "over";
   S.winner = seat;
   S.busy = false;
   render();
-  showScores();
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores();
 }
 
 function showScores() {

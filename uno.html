@@ -104,6 +104,9 @@
 
   /* ------------------------------------------------------------ Adversaires */
   .player.pickable { cursor: pointer; box-shadow: 0 0 0 3px var(--accent); }
+  /* Le joueur à qui arrive ce que le jeu annonce : tour sauté, cartes piochées, verdict. */
+  .player.hit { border-color: #e0473f; box-shadow: 0 0 0 2px #e0473f inset; }
+  #me.hit .name > :first-child { color: #ff6b5e; }
   .player .name .uno {
     font-size: 11px; font-weight: 900; font-style: italic; letter-spacing: 1px;
     color: var(--ink); background: var(--accent);
@@ -354,6 +357,8 @@ const TARGET = 500;              // fin de partie dès qu'un joueur atteint ce t
 const THINK_MS = 620;            // temps de « réflexion » d'un adversaire
 const PLAY_MS = 480;             // pause après la pose d'une carte
 const DRAW_MS = 800;             // temps de lecture d'une carte piochée injouable
+const EVENT_MS = 1400;           // un tour sauté, des cartes piochées, un verdict, des mains échangées : annoncé avant la suite
+const END_MS = 2000;             // la dernière carte et la manche gagnée, avant la feuille
 
 /* Règles retenues pour la partie en cours (voir l'écran de démarrage). */
 const VAR = { stack: false, challenge: false, sevenZero: false, match: true };
@@ -412,6 +417,8 @@ const S = {
   drawn: null,        // carte tout juste piochée par l'humain
   chosen: null,       // joker posé, en attente du choix de couleur
   swapSkip: 0,        // saut en attente pendant le choix d'échange (règle du 7)
+  event: null,        // ce que le jeu annonce avant de continuer (phase "event") : { text, seat }
+  epoch: 0,           // change à chaque manche : une annonce en vol d'une manche passée s'arrête
   round: 1,
   roundTurns: 0,
   deadPasses: 0,      // tours passés sans pouvoir jouer ni piocher (manche bloquée)
@@ -479,6 +486,8 @@ function newGame(nPlayers) {
 
 /* `starter` : qui reçoit le premier tour (le gagnant de la manche précédente). */
 function startRound(starter) {
+  S.epoch++;
+  S.event = null;
   S.draw = shuffle(buildDeck());
   S.discard = [];
   S.dir = 1;
@@ -589,6 +598,25 @@ function endTurn(extraSkip = 0) {
   beginTurn();
 }
 
+/* Ce qui arrive à un joueur sans qu'il pose de carte — un tour sauté, des
+   cartes piochées, un verdict, des mains échangées — s'annonce : dans le
+   statut, le joueur concerné entouré, EVENT_MS, puis `then` continue. */
+async function announce(text, seat, then) {
+  const epoch = S.epoch;
+  S.event = { text, seat };
+  S.phase = "event";
+  S.busy = true;
+  render();
+  await sleep(EVENT_MS);
+  if (epoch !== S.epoch) return;
+  S.event = null;
+  S.busy = false;
+  then();
+}
+
+/* Le sujet d'une annonce : « <b>Nora</b> pioche », « Tu pioches ». */
+const who = (p, second, third) => (p.ai ? `<b>${p.name}</b> ${third}` : `Tu ${second}`);
+
 function takePending() {
   const p = S.players[S.current];
   const n = S.pending;
@@ -598,7 +626,7 @@ function takePending() {
   S.pending = 0;
   S.pendingKind = null;
   S.wild4 = null;
-  endTurn();
+  announce(`${who(p, "pioches", "pioche")} <b>${cards}</b> et ${p.ai ? "passe son" : "passes ton"} tour.`, S.current, () => endTurn());
 }
 
 /* ------------------------------------------------------------- Pioche */
@@ -660,19 +688,27 @@ function resolvePlay(pi, card, color) {
     if (card.n === 0) {
       rotateHands();
       log(`Le 0 fait tourner toutes les mains.`);
+      announce("Le 0 fait tourner <b>toutes les mains</b> dans le sens du jeu.", pi, () => concludePlay(pi, skip));
+      return;
     } else if (card.n === 7) {
       const others = S.players.map((_, i) => i).filter((i) => i !== pi);
-      if (others.length === 1) swapHands(pi, others[0]);
-      else if (p.ai) swapHands(pi, policyOf(p).swapTarget(pi));
-      else { S.swapSkip = skip; S.phase = "swap"; render(); return; }
+      if (others.length === 1) { swapAndGo(pi, others[0], skip); return; }
+      if (p.ai) { swapAndGo(pi, policyOf(p).swapTarget(pi), skip); return; }
+      S.swapSkip = skip; S.phase = "swap"; render(); return;
     }
   }
-  concludePlay(pi, skip);
+  concludePlay(pi, skip, card);
 }
 
-function concludePlay(pi, skip) {
+/* La main passe — ou, sur un Passe (un Sens interdit à deux), le tour sauté
+   s'annonce d'abord. */
+function concludePlay(pi, skip, card) {
   if (S.players[pi].hand.length === 0) { endRound(pi); return; }
-  endTurn(skip);
+  if (!skip) { endTurn(); return; }
+  const next = at(1), q = S.players[next];
+  log(says(q, "passes ton tour.", "passe son tour."));
+  const why = card && card.kind === "rev" ? "Sens interdit à deux joueurs" : "Passe";
+  announce(`${why} : ${who(q, "passes ton", "passe son")} tour.`, next, () => endTurn(skip));
 }
 
 function swapHands(a, b) {
@@ -682,6 +718,15 @@ function swapHands(a, b) {
   log(says(S.players[a], `échanges ta main avec ${nameOf(b)}.`, `échange sa main avec ${nameOf(b)}.`));
 }
 
+/* Le 7 : l'échange de mains s'annonce, puis la main passe. */
+function swapAndGo(a, b, skip) {
+  swapHands(a, b);
+  const pa = S.players[a], pb = S.players[b];
+  const text = pa.ai ? `<b>${pa.name}</b> échange sa main avec ${pb.ai ? `<b>${pb.name}</b>` : "<b>toi</b>"}.`
+                     : `Tu échanges ta main avec <b>${pb.name}</b>.`;
+  announce(text, b, () => concludePlay(a, skip));
+}
+
 function rotateHands() {
   const hands = S.players.map((p) => p.hand);
   const L = nplayers();
@@ -689,31 +734,39 @@ function rotateHands() {
 }
 
 /* ---------------------------------------------------------- Contestation */
+/* En deux temps, annoncés chacun : la contestation, puis le verdict. */
 function doChallenge(by) {
   const w = S.wild4;
-  const guilty = S.players[w.by];
+  const guilty = S.players[w.by], judge = S.players[by];
   const n = S.pending;
+  const col = COLOR_NAME[w.colorBefore];
   S.pending = 0;
   S.pendingKind = null;
   S.wild4 = null;
 
-  if (w.bluff) {
-    drawTo(guilty, n);
-    const col = COLOR_NAME[w.colorBefore];
-    log("Bluff démasqué : " + (guilty.ai
-      ? `${guilty.name} avait du ${col} et pioche ${n} cartes.`
-      : `tu avais du ${col} et tu pioches ${n} cartes.`));
-    beginTurn();                       // le contestataire joue son tour normalement
-  } else {
-    drawTo(S.players[by], n + 2);
-    log("Contestation ratée : "
-        + says(S.players[by], `pioches ${n + 2} cartes.`, `pioche ${n + 2} cartes.`));
-    endTurn();
-  }
+  const of = guilty.ai ? `le +4 ${/^[AEIOUÉÈ]/.test(guilty.name) ? "d'" : "de "}<b>${guilty.name}</b>` : "ton +4";
+  announce(`${who(judge, "contestes", "conteste")} ${of} : du ${col} dans ${guilty.ai ? "sa" : "ta"} main ?`, w.by, () => {
+    if (w.bluff) {
+      drawTo(guilty, n);
+      log("Bluff démasqué : " + (guilty.ai
+        ? `${guilty.name} avait du ${col} et pioche ${n} cartes.`
+        : `tu avais du ${col} et tu pioches ${n} cartes.`));
+      // Puis le contestataire joue son tour normalement.
+      announce(`Bluff démasqué : ${guilty.ai ? `<b>${guilty.name}</b> avait du ${col} et pioche` : `tu avais du ${col} et tu pioches`} <b>${n} cartes</b>.`,
+               w.by, () => beginTurn());
+    } else {
+      drawTo(judge, n + 2);
+      log("Contestation ratée : " + says(judge, `pioches ${n + 2} cartes.`, `pioche ${n + 2} cartes.`));
+      announce(`Contestation ratée, pas de ${col} : ${who(judge, "pioches", "pioche")} <b>${n + 2} cartes</b> et ${judge.ai ? "passe son" : "passes ton"} tour.`,
+               by, () => endTurn());
+    }
+  });
 }
 
 /* --------------------------------------------------------- Fin de manche */
-function endRound(wi) {
+/* La manche est comptée tout de suite ; la feuille attend END_MS, le temps de
+   voir la dernière carte (une nouvelle manche lancée entre-temps l'annule). */
+async function endRound(wi) {
   // Un +2 ou un +4 posé en dernière carte est quand même subi, et ces cartes
   // comptent dans le total du joueur visé.
   if (S.pending > 0) {
@@ -742,7 +795,9 @@ function endRound(wi) {
 
   const over = !VAR.match || S.players.some((p) => p.score >= TARGET);
   render();
-  showScores(over);
+  const epoch = S.epoch;
+  await sleep(END_MS);
+  if (epoch === S.epoch && S.phase === "over") showScores(over);
 }
 
 /* Manche bloquée : plus personne ne peut jouer ni piocher. Introuvable en
@@ -913,8 +968,10 @@ const POLICIES = { sharp: sharpPolicy };
 async function aiTurn() {
   const p = S.players[S.current];
   const pol = policyOf(p);
+  const epoch = S.epoch;
   S.busy = true;
   await sleep(THINK_MS);
+  if (epoch !== S.epoch) return;       // partie relancée pendant la réflexion
 
   const legal = legalMoves(p);
   if (legal.length === 0) {
@@ -928,6 +985,7 @@ async function aiTurn() {
     }
     render();
     await sleep(PLAY_MS);
+    if (epoch !== S.epoch) return;
     if (canPlay(c) && pol.playDrawn(p, c)) {
       log(`${p.name} pioche et joue dans la foulée.`);
       aiPlay(p, c);
@@ -943,13 +1001,15 @@ async function aiTurn() {
 }
 
 async function aiPlay(p, card) {
-  const pi = S.current;
+  const pi = S.current, epoch = S.epoch;
   placeCard(p, card);
+  // Un joker : la couleur annoncée s'affiche avec lui, pas au tour suivant.
+  const color = isJoker(card) ? policyOf(p).color(p) : null;
+  if (color) S.color = color;
+  log(`${p.name} pose ${cardName(card)}` + (color ? ` et annonce le ${COLOR_NAME[color]}.` : "."));
   render();
   await sleep(PLAY_MS);
-
-  const color = isJoker(card) ? policyOf(p).color(p) : null;
-  log(`${p.name} pose ${cardName(card)}` + (color ? ` et annonce le ${COLOR_NAME[color]}.` : "."));
+  if (epoch !== S.epoch) return;
   S.busy = false;
   resolvePlay(pi, card, color);
 }
@@ -957,8 +1017,10 @@ async function aiPlay(p, card) {
 async function aiPenalty() {
   const p = S.players[S.current];
   const pol = policyOf(p);
+  const epoch = S.epoch;
   S.busy = true;
   await sleep(THINK_MS);
+  if (epoch !== S.epoch) return;
 
   if (canChallenge() && pol.challenge(p)) {
     log(`${p.name} conteste le +4 !`);
@@ -1073,8 +1135,7 @@ function onSubmitClick() {
 
 function onSwapPick(target) {
   if (S.busy || S.phase !== "swap") return;
-  swapHands(0, target);
-  concludePlay(0, S.swapSkip);
+  swapAndGo(0, target, S.swapSkip);
 }
 
 /* ================================================================== RENDU */
@@ -1136,9 +1197,13 @@ function buildBoard() {
 }
 
 function statusHtml() {
-  if (S.phase === "over") return "";
+  if (S.phase === "over") {
+    const w = S.players[S.winner];
+    return `${who(w, "remportes", "remporte")} la manche : <b>+${w.roundGain}</b>.`;
+  }
   const p = S.players[S.current];
   switch (S.phase) {
+    case "event": return S.event.text;
     case "ai": return `<b>${p.name}</b> réfléchit…`;
     case "play": return "À toi de jouer : pose une carte ou pioche.";
     case "drawn": return `Tu as pioché <b>${cardName(S.drawn)}</b> : joue-la ou passe.`;
@@ -1204,6 +1269,7 @@ function render() {
     if (pi === 0 || !p._host) return;
     p._host.classList.toggle("active", S.current === pi && S.phase !== "over");
     p._host.classList.toggle("pickable", S.phase === "swap");
+    p._host.classList.toggle("hit", !!S.event && S.event.seat === pi);
     p._tag.textContent = `${p.hand.length} carte${p.hand.length > 1 ? "s" : ""} · ${p.score} pt${p.score > 1 ? "s" : ""}`;
     p._uno.hidden = p.hand.length !== 1;
     p._fan.innerHTML = "";
@@ -1234,6 +1300,7 @@ function render() {
 
   // Ma main
   el("me").classList.toggle("active", S.current === 0 && S.phase !== "over");
+  el("me").classList.toggle("hit", !!S.event && S.event.seat === 0);
   el("myTag").textContent =
     `${S.players[0].hand.length} carte${S.players[0].hand.length > 1 ? "s" : ""} · ${S.players[0].score} pt${S.players[0].score > 1 ? "s" : ""}`;
   renderHand();
