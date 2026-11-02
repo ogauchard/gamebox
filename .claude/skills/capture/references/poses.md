@@ -171,6 +171,10 @@ throwAttack(6); throwAttack(6); throwAttack(6);
 render();
 ```
 
-Le choix de la cible : un lancer de 8 puis `onStopClick()`. Fin de partie réelle : `Object.assign(S.players[0], { ai:
-true, policy: "sharp" }); if (S.current === 0) aiTurn();` après le clic, `--budget 1500000` (une partie entre quatre
-redoutables dure environ 7 minutes de temps virtuel, 11 pour neuf sur dix).
+Le choix de la cible : un lancer de 8 puis `onStopClick()`. L'ordinateur qui s'arrête, ses dés encore sur la table :
+`S.current = 1; S.phase = "idle"; beginTurn();`, un lancer et un `doKeep(1, …)`, puis `S.plan = "stop"; S.busy = true;
+render();`. Fin de partie réelle : `Object.assign(S.players[0], { ai: true, policy: "sharp" }); if (S.current === 0)
+aiTurn();` après le clic, `--budget 2000000` (une partie entre quatre redoutables dure environ 14 minutes de temps
+virtuel, 22 pour neuf sur dix). L'annonce d'une attaque, puis son résultat (« −9 » sur la cible) : un lancer de 8,
+`stopAim(); doAttack(1, 2);` après avoir gelé l'IA et donné le tour au siège 1, `--budget 600` pour l'annonce,
+`--budget 5500` pour le résultat (dés de l'attaque posés dans `seq`).

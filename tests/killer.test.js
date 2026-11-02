@@ -104,11 +104,12 @@ ctx.doKeep = function (seat, uids) {
 const _stopAim = ctx.stopAim;
 ctx.stopAim = function () {
   const all = [...S.kept, ...S.dice];
-  const t = total(all), ref = refOutcome(t);
+  const t = total(all), ref = refOutcome(t), forced = S.dice.length === 1;
   if (all.length !== 5) bad({ stopDice: all.length });
   const r = _stopAim();
   const a = S.aim;
   if (a.total !== t || a.kind !== ref.kind || a.v !== ref.v || a.loss !== ref.loss) bad({ aim: a, ref });
+  if (a.last !== forced) bad({ aimLast: a.last, forced });
   return r;
 };
 
@@ -372,6 +373,7 @@ async function targetedTests() {
   onStopClick();
   ok(S.aim && S.aim.total === 8 && S.aim.kind === "attack" && S.aim.v === 3 && S.phase === "target",
      "s'arrêter sur 1 1 + 1 2 3 = 8 : une attaque aux 3, et le choix de la cible");
+  ok(!S.aim.last && byId.get("status").innerHTML === "Attaque aux <b>3</b> ! Choisis qui attaquer.", "un arrêt choisi n'est pas un dernier dé");
   onRollClick();
   ok(S.phase === "target", "pendant le choix de la cible, plus de lancer");
 
@@ -411,6 +413,17 @@ async function targetedTests() {
   ok(S.phase !== "keep" && S.aim && S.aim.total === 6 && S.aim.v === 5,
      "un dé à la fois jusqu'au cinquième : le dernier lancé, la visée s'arrête d'elle-même (1 1 1 1 2 = 6, attaque aux 5)");
   ok(S.phase === "target", "et l'on choisit sa cible");
+  ok(S.aim.last && byId.get("status").innerHTML === "Dernier dé, total <b>6</b> : attaque aux <b>5</b> ! Choisis qui attaquer.",
+     `le statut dit que la visée s'est arrêtée sur le dernier dé (${byId.get("status").innerHTML})`);
+  setup({ current: 1 });
+  throwAs(1, [1, 2, 3, 4, 5]);
+  keepAs(1, [1], [1, 2, 3, 4]);
+  keepAs(1, [1], [1, 2, 3]);
+  keepAs(1, [1], [1, 2]);
+  keepAs(1, [1], [3]);
+  g("render")();
+  ok(S.phase === "target" && byId.get("status").innerHTML === "Dernier dé, total <b>7</b> : <b>Nora</b> a une attaque aux <b>4</b> et choisit sa cible…",
+     `l'ordinateur aussi : son dernier dé est annoncé avant le choix de sa cible (${byId.get("status").innerHTML})`);
 
   /* ------------------------------------------------------ Régénération */
   setup();
@@ -633,17 +646,87 @@ async function targetedTests() {
   ok(g("chooseTarget")(1) !== 1, "s'attaquer soi-même est refusé : une autre cible est prise");
   delete g("POLICIES").evil;
 
-  /* Un tour entier de l'ordinateur, aiTurn rétabli : il vise, attaque, conclut. */
+  /* Ce que la table montre : les places vides du lancer, les dés de côté. */
+  const slotsShown = () => byId.get("dice").children.filter((c) => c.className === "slot").length;
+  const sideShown = () => {
+    const box = byId.get("tray").children.find((c) => c.className === "kept");
+    return box ? box.children[0].children.length : 0;
+  };
+  const deltaShown = (e) => (e.hidden ? "" : e.textContent);
+
+  /* L'issue d'une visée de l'ordinateur, en grand sur la table, puis l'écart
+     de PV sur le joueur concerné, le temps du résultat. */
+  setup({ current: 1 });
+  throwAs(1, [1, 2, 3, 4, 1]);
+  seq.push(5);
+  stopAs(1);
+  ok(S.phase === "regen" && byId.get("total").innerHTML === 'Total <b>11</b> · <span class="verdict ok">✚ régénération</span>' && !deltaShown(P(1)._delta),
+     `11 tout juste : la régénération est annoncée avant son dé (${byId.get("total").innerHTML})`);
+  for (let i = 0; i < 50 && !S.gain; i++) await tick();
+  ok(byId.get("total").innerHTML === 'Total <b>11</b> · <span class="verdict ok">✚ Nora +5 PV</span>' && deltaShown(P(1)._delta) === "+5"
+     && P(1)._delta.className === "delta ok" && [0, 2, 3].every((i) => !deltaShown(i ? P(i)._delta : byId.get("myDelta"))),
+     "puis son résultat, et « +5 » sur Nora seule");
+  await settle();
+  ok(!deltaShown(P(1)._delta), "au tour suivant, l'écart disparaît");
+  setup({ current: 1 });
+  throwAs(1, [3, 3, 3, 4, 4]);
+  stopAs(1);
+  ok(byId.get("total").innerHTML === 'Total <b>17</b> · <span class="verdict ko">✗ raté : Nora −6 PV</span>' && deltaShown(P(1)._delta) === "−6",
+     `17 : le raté, en grand sur la table et « −6 » sur Nora (${byId.get("total").innerHTML})`);
+  await settle();
+
+  /* Avant de relancer, l'ordinateur met ses dés gardés de côté : la table les
+     montre là, les places à relancer vides, et ce que la relance peut donner. */
+  setup({ current: 1 });
+  throwAs(1, [6, 6, 2, 3, 4]);
+  S.plan = S.dice.filter((d) => d.v === 6).map((d) => d.uid);
+  S.busy = true;
+  S.moving = true;
+  g("render")();
+  ok(byId.get("status").innerHTML === "<b>Nora</b> relance 3 dés…" && slotsShown() === 3 && sideShown() === 2,
+     `les deux 6 gardés passent de côté, trois places vides attendent la relance (${byId.get("status").innerHTML})`);
+  ok(byId.get("total").innerHTML === "De côté <b>12</b> · en relançant : 15 à 30" && g("GAUGE").every((c) => !c.classList.contains("now")),
+     `la jauge ne cercle plus de total, elle allume ce que la relance peut donner (${byId.get("total").innerHTML})`);
+  S.moving = false;
+
+  /* Un tour entier de l'ordinateur, aiTurn rétabli : il vise, attaque, conclut.
+     Chaque temporisation est relevée avec ce que l'écran montre pendant ce
+     temps : le tour doit se suivre étape par étape. */
   setup({ hp: [5, 25, 25, 25], dead: [false, false, true, true] });
   S.current = 1; S.phase = "idle";
   seq.push(1, 1, 1, 1, 1, 6, 6, 6, 1, 1, 2, 3);
   ctx.beginTurn();
+  const steps = [], _setTimeout = ctx.setTimeout;
+  ctx.setTimeout = (fn, ms) => {
+    steps.push({ ms, phase: S.phase, dice: S.dice.length, status: byId.get("status").innerHTML, aimed: byId.get("me").classList.contains("aimed"),
+                 slots: slotsShown(), side: sideShown(), total: byId.get("total").innerHTML, myDelta: deltaShown(byId.get("myDelta")) });
+    return _setTimeout(fn, ms);
+  };
   const turnAi = _aiTurn();
   ok(S.busy && !myTurn(), "pendant le tour de l'ordinateur, l'humain attend");
   await turnAi;
   for (let i = 0; i < 200 && S.current === 1; i++) await tick();
+  ctx.setTimeout = _setTimeout;
   ok(me().hp === -13 && S.current === 0 && S.lastChance, `l'ordinateur fait 5, attaque aux 6 le seul adversaire : trois 6, −18 (${me().hp})`);
   ok(byId.get("log").innerHTML.includes("Nora t'attaque aux 6"), "le journal le dit, en tutoyant la cible");
+  const C = (name) => g(name);
+  ok(steps.map((s) => s.ms).join(" ") === [C("THINK_MS"), C("ROLL_MS"), C("STOP_MS"), C("ISSUE_MS"), C("HIT_MS"), C("MOVE_MS"), C("RESULT_MS")].join(" "),
+     `le tour se déroule en sept temps : lancer, lecture, arrêt, annonce de l'attaque, un lancer d'attaque qui touche, ses touches de côté, résultat (${steps.map((s) => s.ms)})`);
+  const [, read, stop, aim, hit, move, result] = steps;
+  ok(hit.dice === 5 && hit.side === 0 && move.slots === 2 && move.side === 3 && move.status === hit.status,
+     `entre deux lancers d'attaque, les trois 6 passent de côté et deux places se vident avant la relance (${move.side} de côté, ${move.slots} places)`);
+  ok(read.phase === "keep" && read.dice === 5 && read.status === "<b>Nora</b> réfléchit…", "le lancer reste affiché pendant qu'il réfléchit");
+  ok(stop.phase === "keep" && stop.dice === 5 && stop.status === "<b>Nora</b> s'arrête sur <b>5</b> : une attaque aux <b>6</b>.",
+     `il montre qu'il s'arrête, ses dés encore sur la table, avant que la visée finisse (${stop.status})`);
+  ok(aim.phase === "attack" && aim.aimed && aim.status === "<b>Nora</b> <b>t'attaque</b> aux <b>6</b>…"
+     && aim.total === '<span class="verdict atk">⚔ Nora t\'attaque aux 6</span>',
+     `la cible est entourée, et l'attaque annoncée en grand sur la table avant le premier lancer (${aim.total})`);
+  ok(result.status === "<b>Nora</b> <b>t'attaque</b> aux <b>6</b> : <b>−18</b>." && result.myDelta === "−18"
+     && result.total === '3 dés touchés × 6 · <span class="verdict ko">Toi −18 PV</span>',
+     `le résultat reste affiché avant le tour suivant, sur la table et sur toi, la cible (${result.total} · ${result.myDelta})`);
+  ok(!steps.slice(0, -1).some((s) => s.myDelta), "l'écart de PV n'apparaît qu'au résultat");
+  ok(C("STOP_MS") >= 1000 && C("ISSUE_MS") >= 1500 && C("RESULT_MS") >= 2000,
+     "l'arrêt dure plus d'une seconde, l'annonce de l'issue une et demie, le résultat deux au moins");
 
   ok(illegal.length === 0, `cas ciblés : rien d'irrégulier (${JSON.stringify(illegal[0] || "")})`);
   ok(impure === 0, "cas ciblés : aucune politique ne modifie la partie");

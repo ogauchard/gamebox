@@ -961,7 +961,27 @@ stated in the rules panel:
 `S.phase`: `roll` (five dice to throw) → `keep` (a throw to sort: the human clicks dice into `S.sel`, the AI shows
 `S.plan` for `KEEP_MS`) → … → `stopAim()`, which sets `S.aim` and goes to `target`, or straight into `attack`, `regen`
 or `miss` — three async functions that play out with `wait()`, check `S.epoch` and their phase after every `await`,
-and call `endTurn()`. `beginTurn()` is the only place a turn starts; `nextTurn()` skips the dead and counts a round
+and call `endTurn()`.
+
+**Pacing** — the owner found the AI too quick to follow, so every step of its turn stays on screen long enough to
+read, and the steps that used to be skipped are shown: the throw (`ROLL_MS`, its 0.45 s animation included), the
+dice it keeps (`KEEP_MS`), then those dice **moving aside** before the rethrow (`S.moving`, `MOVE_MS`: in the tray,
+the places to rethrow empty, the gauge lighting what the rethrow can give — kept dice and new ones used to swap in a
+single frame), **its stop** (`S.plan = "stop"`, `STOP_MS`: « Nora s'arrête sur 8 : une attaque aux 3 », its dice
+still on the table — the stop used to jump straight to the outcome), then **the outcome announced** before it plays
+out (`issueWait()`: `ISSUE_MS` for the AI — « ⚔ Nora attaque Elias aux 3 » with the target ringed before the first
+attack throw, « ✚ régénération » before its die), each attack throw (`HIT_MS`), its hits moving aside the same way
+(`MOVE_MS`, every attack), the result (`RESULT_MS`). `S.moving` is display only: `doKeep` and `throwAttack` still
+keep and throw in one step. A stop on the **last die** is nobody's decision, so `stopAim()` marks it `S.aim.last`
+and the next step says « Dernier dé, total N : … » — the AI's target choice waits `STOP_MS` instead of `THINK_MS`,
+and so does the human's announce, since that die hasn't been seen yet (a human who chose to stop waits `THINK_MS`).
+The outcome and its result are written **on the table**, not only in the status line far below the dice: the line
+under the gauge turns into a coloured pill (`.verdict`: gold attack, green regeneration, red miss or damage), and
+during the result the HP change shows on the player it hit (`delta()`, `.delta`: « −9 » on the target's panel, or
+beside « Toi »). The suite records every delay of a whole AI turn with what the screen shows during it. The cost is
+game length (see below).
+
+`beginTurn()` is the only place a turn starts; `nextTurn()` skips the dead and counts a round
 each time it passes `S.starter`, dead or not. `throwAttack(v)` is one attack throw: the previous throw's hits go aside
 first, so they stay lit on the table until the next throw.
 
@@ -971,9 +991,12 @@ loss of a miss, value × hits on the target only), that nobody but the current p
 started the turn dying, and that the game ends exactly when it should.
 
 **Termination**: no `TURN_CAP`. Every turn has a chance of a miss or a hit, while a regeneration gives back 3.5 HP
-on average and only comes on 29 % of a sharp's turns: HP drain away. Four sharps take 26 rounds a game, nine in ten
-under 41, worst 70 in 500 — about 7.4 minutes on screen at the AI's pace (`stall` sums the delays), nine in ten
-under 11.
+on average and only comes on 29 % of a sharp's turns: HP drain away. Four sharps take 27 rounds a game, nine in ten
+under 44, worst 89 in 500 — about **13.5 minutes** on screen at the AI's pace (`stall` sums the delays), nine in ten
+under 22.1. The pacing came in three passes, the owner asking for more each time, measured each time: 7.7 min (nine
+in ten under 11.7) before it; 9.6 with only the stop, the target, slower attack throws and a longer result; 10.3 with
+the kept dice shown 1 s; 12.6 with the dice moving aside and every throw read 1 s; 13.5 with the outcome announced
+1.6 s and the result held 2.6 s. Re-run `stall` after touching a delay.
 
 ### Opponent AI
 
@@ -1021,7 +1044,9 @@ way.
 The shared layout (see *Shared layout*) with dice for cards, the same CSS dice as 5000. The table (`#board`) is, top to
 bottom: the dice set aside (small; during an attack, the hits, with a « N touchés » chip once five have been thrown
 again), the current throw — clickable `.pick` dice for the human, `.sel` lifted, `.hit` ringed in red during an
-attack, `.dead` once it is over —, the **gauge** of totals 5 to 30 (`#gauge`, built once: attacks gold, darker toward
+attack, `.dead` once it is over; a clickable die is an *enabled* `<button>`, so the shared `button:hover` would paint
+it the dark button colour (it did, pips unreadable): `.die:hover:not(:disabled)` puts its face back (`--face`) —,
+the **gauge** of totals 5 to 30 (`#gauge`, built once: attacks gold, darker toward
 the attack at 6, 11 and 24 green, misses red, deeper toward −6), and a line saying what the current total gives.
 The gauge circles the total you would stop on, and once dice are chosen it dims what the throw can no longer reach.
 `--die` sizes on the table in `cqh`/`cqw` (1.5 dice + 108 px high, 6 dice wide). Opponents show their HP, a gauge

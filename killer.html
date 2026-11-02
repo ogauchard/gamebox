@@ -28,19 +28,24 @@
   /* ------------------------------------------------------------------- Dés */
   /* Une grille de 3 × 3 : chaque point prend sa case. */
   .die {
+    --face: linear-gradient(150deg, #fffdf7 0%, #ece3d2 100%);
     position: relative;
     flex: 0 0 auto;
     width: var(--d); height: var(--d);
     border: 0;
     padding: calc(var(--d) * .13);
     border-radius: calc(var(--d) * .2);
-    background: linear-gradient(150deg, #fffdf7 0%, #ece3d2 100%);
+    background: var(--face);
     box-shadow: inset 0 calc(var(--d) * -.05) 0 rgba(0,0,0,.12), 0 2px 0 rgba(0,0,0,.25), 0 4px 10px rgba(0,0,0,.45);
     display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
     cursor: default;
     transition: transform .15s, box-shadow .15s, filter .15s;
   }
   .die:disabled { opacity: 1; }
+  /* Un dé à choisir est un bouton actif : le survol commun des boutons
+     (cartes.css) lui mettrait le fond sombre d'un bouton, les points dessus
+     devenaient illisibles. */
+  .die:hover:not(:disabled) { background: var(--face); }
   .die i {
     width: 76%; height: 76%; place-self: center;
     border-radius: 50%;
@@ -158,6 +163,33 @@
   #total b { color: var(--text); font-size: 18px; margin: 0 2px; }
   #total b.ko { color: var(--ko); }
   #total b.ok { color: var(--ok); }
+  /* L'issue d'une visée, puis son résultat : attaque, régénération, raté, dégâts. */
+  #total .verdict {
+    display: inline-block; vertical-align: middle;
+    padding: 1px 11px; border-radius: 999px;
+    font-size: 15px; font-weight: 800; line-height: 20px;
+    color: var(--ink); background: var(--accent);
+    animation: verdict .25s ease-out;
+  }
+  #total .verdict.ok { background: var(--ok); color: #0b2a12; }
+  #total .verdict.ko { background: var(--blood); color: #fff; }
+  #total .verdict.dim { background: var(--btn); color: var(--dim); }
+  @keyframes verdict { from { transform: scale(.8); opacity: 0; } }
+
+  /* L'écart de PV du tour, sur le joueur touché, le temps du résultat. */
+  .delta {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    font-size: 19px; font-weight: 900; line-height: 1;
+    padding: 4px 10px; border-radius: 999px;
+    color: #fff; background: var(--blood); box-shadow: 0 4px 12px rgba(0,0,0,.5);
+    pointer-events: none;
+    animation: delta .3s ease-out;
+  }
+  .delta.ok { background: #2f8a47; }
+  .delta.dim { background: var(--btn); color: var(--dim); }
+  .delta[hidden] { display: none; }
+  #me .delta { position: static; transform: none; font-size: 14px; padding: 1px 8px; box-shadow: none; }   /* pas de display : il battrait [hidden] */
+  @keyframes delta { from { opacity: 0; scale: .6; } }
 
   /* --------------------------------------------------------------- Le joueur */
   #me .meter { max-width: 360px; margin: 6px auto 0; }
@@ -188,6 +220,7 @@
     .die { transition: none; }
     .die.roll { animation: none; }
     .player.target { animation: none; }
+    #total .verdict, .delta { animation: none; }
   }
 </style>
 </head>
@@ -215,7 +248,7 @@
   <div id="log"></div>
   <div id="actions"></div>
   <div id="me">
-    <div class="name"><span>Toi</span><span class="tag" id="myTag"></span></div>
+    <div class="name"><span>Toi</span><span class="tag" id="myTag"></span><span class="delta" id="myDelta" hidden></span></div>
     <div class="meter" id="myMeter"><i></i></div>
     <div class="marks" id="myMarks"></div>
   </div>
@@ -327,10 +360,13 @@ const HIGH = 24;                 // au-dessus de 24 : une attaque ; 24 tout just
 const START_HP = 25;             // les mêmes PV pour tous (l'article les fait tirer aux dés)
 const AI_NAMES = ["Nora", "Elias", "Yuki", "Sacha", "Milo"];
 const THINK_MS = 550;            // avant un lancer de l'ordinateur, ou le choix de sa cible
-const ROLL_MS = 800;             // lecture d'un lancer
-const KEEP_MS = 700;             // les dés qu'il garde, montrés avant qu'il relance
-const HIT_MS = 750;              // un lancer d'attaque
-const RESULT_MS = 1400;          // la fin d'un tour, avant le suivant
+const ROLL_MS = 1000;            // lecture d'un lancer, ses 0,45 s d'animation comprises
+const KEEP_MS = 1000;            // les dés qu'il garde, montrés avant qu'il relance : une phrase à lire
+const MOVE_MS = 450;             // les dés gardés (ou touchés) passent de côté, les places à relancer se vident
+const STOP_MS = 1300;            // où la visée s'arrête : l'ordinateur qui s'arrête, ou le dernier dé
+const ISSUE_MS = 1600;           // l'issue de sa visée annoncée — la cible entourée, ou la régénération — avant qu'elle se joue
+const HIT_MS = 1000;             // un lancer d'attaque
+const RESULT_MS = 2600;          // la fin d'un tour, l'écart de PV sur le joueur touché, avant le suivant
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /* Une fois mort, on regarde la fin : l'ordinateur joue deux fois plus vite. */
@@ -365,8 +401,9 @@ const S = {
   free: DICE,         // dés à lancer au prochain jet
   folded: 0,          // touches de l'attaque déjà relancées par cinq (les cinq de côté repartent)
   sel: new Set(),     // les uids que l'humain a choisi de garder dans le lancer en cours
-  plan: null,         // les uids que l'ordinateur va garder, montrés avant qu'il relance
-  aim: null,          // la visée finie : { total, dice, kind, v | loss }
+  plan: null,         // les uids que l'ordinateur va garder, montrés avant qu'il relance, ou "stop"
+  moving: false,      // les dés gardés de S.plan, ou les touches de l'attaque, montrés de côté avant le lancer suivant
+  aim: null,          // la visée finie : { total, dice, last (sur le dernier dé), kind, v | loss }
   target: -1,         // la cible de l'attaque en cours (-1 : personne à attaquer)
   hits: 0,            // dés touchés par l'attaque en cours
   dmg: null,          // ses dégâts, une fois l'attaque finie
@@ -439,6 +476,7 @@ function beginTurn() {
   S.folded = 0;
   S.sel = new Set();
   S.plan = null;
+  S.moving = false;
   S.aim = null;
   S.target = -1;
   S.hits = 0;
@@ -507,7 +545,8 @@ function doStop(seat) {
 function stopAim() {
   const dice = [...S.kept, ...S.dice];
   const total = sum(dice);
-  S.aim = { total, dice, ...outcomeOf(total) };
+  // Un seul dé sur la table : la visée s'arrête d'elle-même, personne ne l'a décidé.
+  S.aim = { total, dice, last: S.dice.length === 1, ...outcomeOf(total) };
   S.kept = [];
   S.dice = [];
   S.free = 0;
@@ -540,6 +579,11 @@ function throwAttack(v) {
   return hits;
 }
 
+/* Avant que l'issue d'une visée se joue — les lancers d'attaque, le dé de la
+   régénération —, l'ordinateur l'annonce (ISSUE_MS) ; l'humain sait ce qu'il
+   vient de faire, sauf sur le dernier dé, qu'il n'a pas encore vu. */
+const issueWait = () => wait(cur().ai ? ISSUE_MS : S.aim.last ? STOP_MS : THINK_MS);
+
 /* L'attaque, jusqu'au lancer qui ne touche rien ; la cible perd la valeur ×
    les dés touchés. Sans cible, elle se perd. */
 async function attack(j) {
@@ -551,7 +595,7 @@ async function attack(j) {
   S.kept = [];
   S.free = DICE;
   render();
-  await wait(THINK_MS);
+  await issueWait();
   if (gone()) return;
   if (j < 0) {
     S.dmg = 0;
@@ -561,6 +605,11 @@ async function attack(j) {
     while (throwAttack(v)) {
       render();
       await wait(HIT_MS);
+      if (gone()) return;
+      S.moving = true;                             // les touches passent de côté avant qu'on relance le reste
+      render();
+      await wait(MOVE_MS);
+      S.moving = false;
       if (gone()) return;
     }
     const t = S.players[j];
@@ -585,7 +634,7 @@ async function regenerate() {
   S.phase = "regen";
   S.busy = true;
   render();
-  await wait(THINK_MS);
+  await issueWait();
   if (gone()) return;
   S.dice = newDice(1);
   S.gain = S.dice[0].v;
@@ -637,8 +686,13 @@ function endTurn() {
 }
 
 /* Le tour d'un siège tenu par l'ordinateur : lancer, montrer les dés qu'il
-   garde, relancer ou s'arrêter, puis choisir sa cible. La régénération, le
-   raté et l'attaque se déroulent ensuite d'eux-mêmes. */
+   garde et relancer, ou montrer qu'il s'arrête, puis choisir sa cible. La
+   régénération, le raté et l'attaque se déroulent ensuite d'eux-mêmes. Chaque
+   étape reste affichée le temps de la lire : le lancer (ROLL_MS), ce qu'il en
+   fait (KEEP_MS, STOP_MS), les dés gardés qui passent de côté avant la relance
+   (MOVE_MS), et sur le dernier dé, que personne ne décide, le choix de la
+   cible attend STOP_MS. L'issue est ensuite annoncée (issueWait) avant de se
+   jouer, et son résultat reste affiché RESULT_MS. */
 async function aiTurn() {
   const epoch = S.epoch, seat = S.current;
   const gone = () => epoch !== S.epoch || S.current !== seat || S.phase === "over";
@@ -652,16 +706,21 @@ async function aiTurn() {
     await wait(ROLL_MS);
     if (gone()) return;
     const keep = decide(seat);
-    if (!keep) { doStop(seat); break; }
-    S.plan = keep;
+    S.plan = keep || "stop";
     render();
-    await wait(KEEP_MS);
+    await wait(keep ? KEEP_MS : STOP_MS);
+    if (gone()) return;
+    if (!keep) { doStop(seat); break; }
+    S.moving = true;                               // les dés gardés passent de côté, leurs places se vident
+    render();
+    await wait(MOVE_MS);
+    S.moving = false;
     if (gone()) return;
     doKeep(seat, keep);
   }
   if (S.phase !== "target") return;
   render();
-  await wait(THINK_MS);
+  await wait(S.aim.last ? STOP_MS : THINK_MS);
   if (gone()) return;
   doAttack(seat, chooseTarget(seat));
 }
@@ -1003,9 +1062,12 @@ function buildBoard() {
     box.appendChild(marks);
     const bubble = mk("span", "bubble");
     box.appendChild(bubble);
+    const delta = mk("span", "delta");
+    delta.hidden = true;
+    box.appendChild(delta);
     box.addEventListener("click", () => onTargetClick(pi));
     host.appendChild(box);
-    Object.assign(p, { _box: box, _tag: tag, _meter: meter, _marks: marks, _bubble: bubble });
+    Object.assign(p, { _box: box, _tag: tag, _meter: meter, _marks: marks, _bubble: bubble, _delta: delta });
   });
 }
 
@@ -1025,6 +1087,24 @@ function renderMeter(meter, p) {
   meter.style.setProperty("--w", `${Math.max(0, Math.min(100, p.hp / START_HP * 100))}%`);
 }
 
+/* L'écart de PV que le tour vient de faire, montré sur le joueur touché le
+   temps du résultat : { seat, text, cls }, ou null. */
+function delta() {
+  if (S.phase === "attack" && S.dmg !== null && S.target >= 0) return { seat: S.target, text: S.dmg ? `−${S.dmg}` : "0", cls: S.dmg ? "" : "dim" };
+  if (S.phase === "regen" && S.gain) return { seat: S.current, text: `+${S.gain}`, cls: "ok" };
+  if (S.phase === "miss") return { seat: S.current, text: `−${S.aim.loss}`, cls: "" };
+  return null;
+}
+/* Masqué entre deux résultats : à chaque nouvel écart, son apparition rejoue. */
+function renderDelta(host, d, seat) {
+  const on = !!d && d.seat === seat;
+  host.hidden = !on;
+  if (on) {
+    host.className = "delta" + (d.cls ? " " + d.cls : "");
+    host.textContent = d.text;
+  }
+}
+
 /* « à l'agonie », « ☠ mort », et les retours d'entre les morts. */
 function renderMarks(host, p) {
   host.innerHTML = "";
@@ -1037,17 +1117,25 @@ let shownUids = new Set();
 
 /* Le sujet d'une phrase de statut : « Tu gardes », « <b>Nora</b> garde ». */
 const who = (p, second, third) => (p.ai ? `<b>${p.name}</b> ${third}` : `Tu ${second}`);
+/* Les dés qui passent de côté pendant S.moving : ceux que l'ordinateur garde,
+   ou les touches du lancer d'attaque. */
+const moved = () => S.dice.filter((d) => (S.phase === "attack" ? d.v === S.aim.v : Array.isArray(S.plan) && S.plan.includes(d.uid)));
+/* Ce que donne un total, dans une phrase : « une attaque aux 3 », « raté, −2 PV ». */
+const aimText = (o) => (o.kind === "attack" ? `une attaque aux <b>${o.v}</b>` : o.kind === "regen" ? "régénération" : `raté, <b>−${o.loss} PV</b>`);
+/* La visée s'est arrêtée d'elle-même sur le dernier dé : on le dit avant la suite. */
+const lastDie = () => (S.aim && S.aim.last ? `Dernier dé, total <b>${S.aim.total}</b> : ` : "");
 
 /* Le total qu'on aurait en s'arrêtant, et ce qu'une relance peut donner
    quand des dés sont choisis : { now, lo, hi } (lo/hi absents sinon). */
 function aimRange() {
   if (S.phase === "keep") {
-    const pick = S.plan || [...S.sel];
+    const pick = Array.isArray(S.plan) ? S.plan : [...S.sel];
     const s = sum(S.kept), now = s + sum(S.dice);
     const kept = S.dice.filter((d) => pick.includes(d.uid)), n = S.dice.length - kept.length;
     if (!kept.length || !n) return { now };
     const k = s + sum(kept);
-    return { now, lo: k + n, hi: k + 6 * n };
+    // Les dés gardés passent de côté : le total en cours n'est plus, seul compte ce que la relance peut donner.
+    return { now: S.moving ? undefined : now, k, lo: k + n, hi: k + 6 * n };
   }
   return S.aim ? { now: S.aim.total } : {};
 }
@@ -1075,6 +1163,11 @@ function statusHtml() {
     case "keep": {
       if (p.ai) {
         if (!S.plan) return `<b>${p.name}</b> réfléchit…`;
+        if (S.plan === "stop") {
+          const t = sum(S.kept) + sum(S.dice);
+          return `<b>${p.name}</b> s'arrête sur <b>${t}</b> : ${aimText(outcomeOf(t))}.`;
+        }
+        if (S.moving) return `<b>${p.name}</b> relance ${diceLabel(S.dice.length - S.plan.length)}…`;
         const kept = S.dice.filter((d) => S.plan.includes(d.uid));
         return `<b>${p.name}</b> garde ${kept.map((d) => d.v).join(" ")} et relance ${diceLabel(S.dice.length - kept.length)}.`;
       }
@@ -1083,22 +1176,22 @@ function statusHtml() {
       return `Relance ${S.dice.length - S.sel.size === 1 ? "le dernier dé" : `les ${S.dice.length - S.sel.size} autres dés`}, ou arrête-toi.`;
     }
     case "target":
-      return p.ai ? `<b>${p.name}</b> a une attaque aux <b>${S.aim.v}</b> et choisit sa cible…`
-                  : `Attaque aux <b>${S.aim.v}</b> ! Choisis qui attaquer.`;
+      return p.ai ? `${lastDie()}<b>${p.name}</b> a une attaque aux <b>${S.aim.v}</b> et choisit sa cible…`
+                  : `${lastDie()}${S.aim.last ? "attaque" : "Attaque"} aux <b>${S.aim.v}</b> ! Choisis qui attaquer.`;
     case "attack": {
       const v = S.aim.v, t = S.players[S.target];
       if (!t) return `${who(p, "as", "a")} une attaque aux <b>${v}</b>, mais plus personne à attaquer.`;
       const suicide = S.lastChance ? "Attaque suicide ! " : "";
       const head = `${suicide}${p.ai ? `<b>${p.name}</b> ${t.ai ? `attaque <b>${t.name}</b>` : "<b>t'attaque</b>"}` : `Tu attaques <b>${t.name}</b>`} aux <b>${v}</b>`;
-      if (S.dmg === null) return `${head}…`;
+      if (S.dmg === null) return `${S.dice.length ? "" : lastDie()}${head}…`;
       return S.dmg ? `${head} : <b>−${S.dmg}</b>.` : `${head} : aucun ${v}, rien.`;
     }
     case "regen":
-      if (!S.gain) return `${S.aim.total} tout juste : ${who(p, "te régénères", "se régénère")}…`;
+      if (!S.gain) return `${S.aim.last ? "Dernier dé : " : ""}${S.aim.total} tout juste : ${who(p, "te régénères", "se régénère")}…`;
       return `${who(p, "te régénères", "se régénère")} : <b>+${S.gain}</b> PV`
            + (S.lastChance ? (p.hp >= 0 ? ", et revien" + (p.ai ? "t" : "s") + " d'entre les morts !" : ` : pas assez, ${p.ai ? "c'est la mort" : "tu meurs"}.`) : ".");
     case "miss":
-      return `Raté ! ${who(p, "perds", "perd")} <b>${S.aim.loss}</b> PV`
+      return `${lastDie()}${S.aim.last ? "raté" : "Raté"} ! ${who(p, "perds", "perd")} <b>${S.aim.loss}</b> PV`
            + (S.lastChance ? ` et ${p.ai ? "meurt" : "meurs"}.` : p.hp < 0 ? `, ${p.ai ? "à l'agonie" : "te voilà à l'agonie"}.` : ".");
     default: return "";
   }
@@ -1110,7 +1203,7 @@ function renderTable(next) {
   // Ce qui est de côté : les dés de la visée, ou les touches de l'attaque.
   const tray = el("tray");
   tray.innerHTML = "";
-  const side = S.phase === "regen" && S.aim ? S.aim.dice : S.kept;
+  const side = S.phase === "regen" && S.aim ? S.aim.dice : S.moving ? [...S.kept, ...moved()] : S.kept;
   if (S.folded) tray.appendChild(mk("span", "carried", `${S.folded} touchés`));
   if (side.length) {
     const box = mk("div", "kept");
@@ -1128,12 +1221,13 @@ function renderTable(next) {
   // Le lancer en cours, ou les cinq dés de la visée finie.
   const host = el("dice");
   host.innerHTML = "";
-  const shown = S.phase === "target" || S.phase === "miss" || (S.phase === "attack" && !S.dice.length && S.aim) ? S.aim.dice : S.dice;
+  const shown = S.moving ? []
+              : S.phase === "target" || S.phase === "miss" || (S.phase === "attack" && !S.dice.length && S.aim) ? S.aim.dice : S.dice;
   if (shown.length) {
     for (const d of shown) {
       next.add(d.uid);
       let cls = "";
-      if (S.phase === "keep" && (S.sel.has(d.uid) || (S.plan && S.plan.includes(d.uid)))) cls += " sel";
+      if (S.phase === "keep" && (S.sel.has(d.uid) || (Array.isArray(S.plan) && S.plan.includes(d.uid)))) cls += " sel";
       if (mine) cls += " pick";
       if (S.phase === "attack" && S.dice.length && d.v === S.aim.v) cls += " hit";
       if (S.phase === "miss" || (S.phase === "attack" && S.dmg !== null && S.dice.length)) cls += " dead";
@@ -1146,7 +1240,8 @@ function renderTable(next) {
       host.appendChild(b);
     }
   } else {
-    const n = S.phase === "roll" ? DICE : S.phase === "regen" ? 1 : S.phase === "attack" ? S.free : 0;
+    const n = S.moving ? S.dice.length - moved().length
+            : S.phase === "roll" ? DICE : S.phase === "regen" ? 1 : S.phase === "attack" ? S.free : 0;
     for (let i = 0; i < n; i++) host.appendChild(mk("div", "slot"));
   }
 
@@ -1162,14 +1257,26 @@ function renderTable(next) {
     c.textContent = t === r.now || t === LOW || t === HIGH ? t : "";
   });
 
+  // L'issue de la visée, puis son résultat : une pastille, là où l'on regarde les dés.
   const line = el("total");
+  const pill = (cls, text) => `<span class="verdict ${cls}">${text}</span>`;
+  const label = (q) => (q.ai ? q.name : "Toi");
   if (S.phase === "over" || !p) line.innerHTML = "";
   else if (S.phase === "roll") line.innerHTML = "Total des cinq dés : sous <b>11</b> ou au-dessus de <b>24</b>";
+  else if (S.phase === "target") line.innerHTML = `Total <b>${S.aim.total}</b> · ${pill("atk", `⚔ attaque aux ${S.aim.v}`)}`;
   else if (S.phase === "attack") {
-    line.innerHTML = `Attaque aux <b>${S.aim.v}</b> · ${diceLabel(S.hits)} touché${S.hits > 1 ? "s" : ""}`
-                   + (S.dmg !== null ? ` · <b class="ko">−${S.dmg}</b>` : "");
+    const v = S.aim.v, t = S.players[S.target];
+    const hits = `${diceLabel(S.hits)} touché${S.hits > 1 ? "s" : ""}`;
+    if (!t) line.innerHTML = pill("dim", "⚔ plus personne à attaquer");
+    else if (S.dmg !== null) line.innerHTML = `${hits} × ${v} · ` + (S.dmg ? pill("ko", `${label(t)} −${S.dmg} PV`) : pill("dim", `${label(t)} : rien`));
+    else if (!S.dice.length) line.innerHTML = pill("atk", `⚔ ${p.ai ? `${p.name} ${t.ai ? `attaque ${t.name}` : "t'attaque"}` : `Tu attaques ${t.name}`} aux ${v}`);
+    else line.innerHTML = `Attaque aux <b>${v}</b> · ${hits}`;
   } else if (S.phase === "regen") {
-    line.innerHTML = `Total <b>${S.aim.total}</b> · régénération` + (S.gain ? ` <b class="ok">+${S.gain}</b>` : "");
+    line.innerHTML = `Total <b>${S.aim.total}</b> · ` + pill("ok", S.gain ? `✚ ${label(p)} +${S.gain} PV` : "✚ régénération");
+  } else if (S.phase === "miss") {
+    line.innerHTML = `Total <b>${S.aim.total}</b> · ` + pill("ko", `✗ raté : ${label(p)} −${S.aim.loss} PV`);
+  } else if (S.moving) {
+    line.innerHTML = `De côté <b>${r.k}</b> · en relançant : ${r.lo} à ${r.hi}`;
   } else if (r.now !== undefined) {
     const o = outcomeOf(r.now);
     const cls = o.kind === "miss" ? ' class="ko"' : o.kind === "regen" ? ' class="ok"' : "";
@@ -1212,6 +1319,7 @@ function render() {
   if (!S.players.length) return;
   const next = new Set();
   const choosing = myTurn() && S.phase === "target";
+  const d = delta();
   S.players.forEach((p, pi) => {
     if (pi === 0 || !p._box) return;
     p._box.classList.toggle("active", S.current === pi && S.phase !== "over");
@@ -1221,6 +1329,7 @@ function render() {
     p._tag.textContent = p.dead ? "mort" : hpLabel(p.hp);
     renderMeter(p._meter, p);
     renderMarks(p._marks, p);
+    renderDelta(p._delta, d, pi);
     const l = p.last;
     p._bubble.hidden = !l || p.dead;
     if (l) {
@@ -1233,6 +1342,7 @@ function render() {
   el("myTag").textContent = me.dead ? "mort" : hpLabel(me.hp);
   renderMeter(el("myMeter"), me);
   renderMarks(el("myMarks"), me);
+  renderDelta(el("myDelta"), d, 0);
   el("me").classList.toggle("dead", me.dead);
   el("me").classList.toggle("aimed", S.phase === "attack" && S.target === 0);
 
