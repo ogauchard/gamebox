@@ -135,9 +135,8 @@ alone (`await` a few ticks); other seats: `doThrow`/`doKeep(seat, uids)`/`doStop
 `rollDie()` replaced as for 5000. Rikiki through `onBidClick(k)` (a second click on the same number, or
 `onAnnounceClick`, bids) and `onCardClick(uid)` (likewise a second click, or `onPlayClick`, plays); other seats:
 `doBid`/`doPlay`; a one-card round plays itself (phase `"front"`, your card included). Solitaire through
-`onCardClick(uid)` (a first click selects the card and what lies on it; a click on any card of a target column, or a
-second click on the same card, moves it), `onSlotClick({ at, i })` for an empty column or a foundation,
-`onStockClick`, `onUndoClick`, `onHintClick`; the computer plays through `chooseMove(name)` then `playMove(mv)`. A
+`onCardClick(uid)` (one click sends the card and what lies on it to `bestTarget()`, a foundation card excepted),
+`onDrop(src, dst)` — where a drag-and-drop ends — for any other place, `onStockClick`, `onUndoClick`, `onHintClick`; the computer plays through `chooseMove(name)` then `playMove(mv)`. A
 position posed by hand needs a face-down card or a talon card, or its first move starts the auto-finish (that bit while
 writing the suite). `loadDomGame(file)` in the harness loads any of the eight card games and the two dice games.
 
@@ -952,9 +951,22 @@ racing on the same deal), so there is no `#opponents`, no `#me`, no `PLAYERS`; `
 `doDraw()` and `doMove(src, dst)`, each pushing a `snapshot()` on `S.undo` first. A source is `{ at: "w" }` (the
 waste's top), `{ at: "f", i }` (a foundation's top) or `{ at: "c", i, k }` (card k of column i and everything on it);
 a destination is `{ at: "f", i }` or `{ at: "c", i }`. `canPlace`/`canMove` is the only rule: the renderer, the clicks,
-the hint and the tests all go through it. A click selects (`S.sel`) and rings the possible places; a click on one of
-them — any card of a target column, or the empty slot — moves there; a second click on the same card sends it to
-`bestTarget()`: the foundations, then an occupied column, then an empty one.
+the hint and the tests all go through it.
+
+**One click moves, a drag chooses** (the owner's request: there used to be a click to select, then a click on the
+place or a second click on the card). A click sends the card, with what lies on it, to `bestTarget()`: the
+foundations, then an occupied column, then an empty one. With nowhere to go it shakes (`S.nogo`, `.nogo`) and the
+status says so, until the next action. **A foundation card never comes down on a click**, only by dragging: a stray tap
+on the top row would undo a foundation. The drag is a thin pointer layer on `#table` (`onPointerDown/Move/Up`): a press
+on a face-up card becomes a drag past `DRAG_PX` (6 px), below that the browser's click does the rest. Once it starts,
+`#table` takes the pointer capture — `render()` rebuilds the cards but never the table, and the touch implicit capture
+on the card would die with it — the cards go into a `.ghost` layer on `body` (`position: fixed`, `--cw` copied in px),
+`S.drag` makes `render()` hide them in place (`.lifted`, showing the card beneath on the waste or a foundation) and
+ring the legal places, and the one the first card covers most is marked `.over`. Released, they go to that place
+(`onDrop`) if it covers **at least a quarter of the card** — so a card put down just beside its column doesn't jump to
+the neighbour — otherwise the ghost glides home (`HOME_MS`). `swallow` eats the click a browser may send right after the
+`pointerup`, and only that one (reset on a timer). `cardNodes`/`placeNodes`, filled by `render()`, are what the layer
+measures; the suite drives the real handlers over a hand-made geometry by patching `FakeEl.prototype.getBoundingClientRect`.
 
 Each card carries `seen`: the player has seen it once (drawn from the talon, or hidden again by Undo). Undo restores
 piles, faces and counters, never `seen` — the player saw the card. `S.trail` holds a hash of each position reached
@@ -1018,8 +1030,8 @@ hidden and seven visible cards), at most 118 px. Column cards are absolutely pos
 visible cards above them, offsets `--dy` and `--uy`; `--uy` shrinks (`clamp` on `100cqh`) when a column wouldn't fit,
 so even six hidden cards under a King-to-2 run fits a 1366×650 laptop, corners tight. On phones seven cards across
 leave half the height free, so `--uy-max` goes from .36 to .56 of a card: a wider strip under the finger. The corner
-index is on one line, all that shows of a covered card. Cards are `<button>`s with `touch-action: manipulation` (two
-quick taps must not zoom), and `.card:hover` puts back their own face (`--face`), which the shared button hover would
+index is on one line, all that shows of a covered card. Cards are `<button>`s with `touch-action: none` (a finger on a
+card drags it: no scroll, no double-tap zoom), and `.card:hover` puts back their own face (`--face`), which the shared button hover would
 paint over. The hint ring is static plus a glow animation: `fit.js` switches animations off, and an animation-only ring
 vanished from the captures. The `fit.js` sweep fits at every size, the worst column included.
 

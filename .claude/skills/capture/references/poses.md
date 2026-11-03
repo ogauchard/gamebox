@@ -212,12 +212,23 @@ virtuel, 22 pour neuf sur dix). L'annonce d'une attaque, puis son résultat (« 
 ## Solitaire : partie avancée, indice, colonne extrême
 
 On y joue seul : rien à geler. Pour une partie avancée, laisser l'indice jouer quelques dizaines de coups, puis
-choisir une carte (les places possibles s'entourent) ou demander l'indice :
+demander l'indice :
 
 ```js
 el("btnStart").click();
 for (let i = 0; i < 40 && S.phase === "play"; i++) { const mv = chooseMove("sharp"); if (!mv) break; playMove(mv); }
-onHintClick();            // ou : onCardClick(S.cols[k][j].uid) sur une carte visible
+onHintClick();
+```
+
+Un glisser en cours (le calque, la place vide, les places entourées) : de vrais `PointerEvent` sur une carte puis sur
+la table. Un clic envoyé dans la foulée du `pointerup` est avalé, comme celui du navigateur : le différer.
+
+```js
+const pe = (type, x, y, t) => (t || el("table")).dispatchEvent(new PointerEvent(type,
+  { bubbles: true, pointerId: 1, pointerType: "mouse", button: 0, clientX: x, clientY: y }));
+const card = cardNodes.get(S.cols[6][S.cols[6].length - 1].uid), r = card.getBoundingClientRect();
+pe("pointerdown", r.left + 20, r.top + 10, card);
+pe("pointermove", r.left - 200, r.top + 40);   // au-delà de DRAG_PX : le glisser part ; pas de pointerup
 ```
 
 Le pire cas de hauteur, six cartes cachées sous une suite du Roi au 2 (la colonne se resserre) :

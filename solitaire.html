@@ -92,7 +92,8 @@
     overflow: hidden;
     font: inherit;
     cursor: pointer;
-    touch-action: manipulation;
+    /* Le doigt fait glisser la carte : ni défilement, ni zoom au double toucher. */
+    touch-action: none;
   }
   /* Le survol des boutons de cartes.css repeindrait la carte. */
   .card:hover:not(:disabled) { background: var(--face); }
@@ -117,9 +118,19 @@
   .col .card { top: calc(var(--a, 0) * var(--dy) + var(--b, 0) * var(--uy)); }
   #waste .card { left: calc(var(--x, 0) * var(--cw) * .32); }
 
-  /* La carte choisie, les places où elle peut aller, et l'indice. */
-  .card.sel { box-shadow: 0 0 0 3px var(--accent), 0 6px 14px rgba(0,0,0,.55); }
+  /* Le glisser : les cartes prises suivent le doigt dans un calque posé sur la
+     page (--cw y est fixé en px), leur place reste vide ; les places où elles
+     peuvent aller s'entourent, celle qu'elles recouvrent d'un trait plein. */
+  .ghost { position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none; will-change: transform; }
+  .ghost .card { box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 12px 26px rgba(0,0,0,.55); }
+  .ghost.home { transition: transform .15s ease-out; }
+  body.dragging, body.dragging * { cursor: grabbing !important; }
+  .card.lifted { visibility: hidden; }
   .card.target, .empty.target { outline: 3px dashed var(--accent); outline-offset: 1px; }
+  .over > .target { outline-style: solid; }
+  /* Une carte touchée qui ne peut aller nulle part tremble. */
+  @keyframes nogo { 25%, 75% { transform: translateX(-5%); } 50% { transform: translateX(5%); } }
+  .card.nogo { animation: nogo .28s ease-in-out; }
   @keyframes glow {
     from { box-shadow: 0 0 0 2px var(--hint); }
     to { box-shadow: 0 0 0 4px var(--hint), 0 0 16px var(--hint); }
@@ -146,7 +157,8 @@
     #actions button { max-width: 150px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .card.land, .card.flip, .card.hint, .empty.hint { animation: none; }
+    .card.land, .card.flip, .card.hint, .empty.hint, .card.nogo { animation: none; }
+    .ghost.home { transition: none; }
   }
 </style>
 </head>
@@ -185,7 +197,8 @@
        les dégager, descends les colonnes en <b>alternant rouge et noir</b>.</p>
     <p>Tu joues <b>seul</b>. Le talon se tire <b>trois cartes par trois</b>, et se retourne autant de
        fois que tu veux.</p>
-    <p class="hint">Annuler sans limite, un indice si tu bloques, et les cartes montent seules à la fin.</p>
+    <p class="hint">Touche une carte pour l'envoyer à sa meilleure place, fais-la glisser pour choisir. Annuler
+       sans limite, un indice si tu bloques, et les cartes montent seules à la fin.</p>
     <div class="actions">
       <button class="primary" id="btnStart">Commencer</button>
       <button id="btnRules2">Voir les règles</button>
@@ -219,9 +232,10 @@
        pas : <b>Nouvelle partie</b> en distribue une autre.</p>
     <h3>Jouer</h3>
     <ul>
-      <li>Touche une carte pour la choisir : les places où elle peut aller s'entourent. Touche l'une
-          d'elles, ou touche la carte une seconde fois pour l'envoyer à la meilleure place, les
-          fondations d'abord.</li>
+      <li>Touche une carte : elle part d'elle-même à la meilleure place, avec celles posées dessus —
+          les fondations d'abord, puis une colonne. Si elle ne peut aller nulle part, elle tremble.</li>
+      <li>Pour la poser ailleurs, <b>fais-la glisser</b> : les places où elle peut aller s'entourent.
+          Une carte des fondations ne redescend qu'ainsi, en la faisant glisser sur une colonne.</li>
       <li><b>Annuler</b> défait le dernier coup, autant de fois que tu veux.</li>
       <li><b>Indice</b> montre un bon coup. Il ne regarde pas les cartes cachées : il ne sait que ce que
           tu sais, les cartes du talon déjà vues comprises.</li>
@@ -300,7 +314,8 @@ const S = {
   found: [],          // quatre fondations, une par couleur (indice = couleur), de l'As au Roi
   cols: [],           // sept colonnes ; les cartes cachées en tête, puis les visibles
   phase: "idle",      // idle | play | auto (les cartes montent seules) | over
-  sel: null,          // la carte choisie : { at: "w" } | { at: "f", i } | { at: "c", i, k }
+  drag: null,         // les cartes qu'on fait glisser : { at: "w" } | { at: "f", i } | { at: "c", i, k }
+  nogo: null,         // la carte touchée qui ne peut aller nulle part (même forme), jusqu'à l'action suivante
   hint: null,         // l'indice affiché, jusqu'à l'action suivante : { mv, card, onto } | { none: true }
   undo: [],           // un instantané avant chaque coup et chaque tirage
   trail: [],          // empreintes des positions de la partie, tirages exclus : l'indice n'y revient pas
@@ -365,8 +380,8 @@ function canPlace(cards, dst, src) {
 const canMove = (src, dst) => canPlace(cardsAt(src), dst, src);
 const sameSrc = (a, b) => a.at === b.at && (a.at === "w" || (a.i === b.i && (a.at !== "c" || a.k === b.k)));
 
-/* La meilleure place d'une carte touchée deux fois : les fondations, puis une
-   colonne occupée, puis une colonne vide. */
+/* La meilleure place d'une carte touchée : les fondations, puis une colonne
+   occupée, puis une colonne vide. */
 function bestTarget(src) {
   const ok = DESTS.filter((d) => canMove(src, d));
   return ok.find((d) => d.at === "f") || ok.find((d) => S.cols[d.i].length) || ok[0] || null;
@@ -431,7 +446,8 @@ function doDraw() {
   }
   S.moves++;
   S.idle++;
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hint = null;
   render();
   return true;
@@ -467,7 +483,8 @@ function doMove(src, dst) {
   }
   S.moves++;
   S.idle = 0;
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hint = null;
   S.trail.push(stateKey());
   log(line);
@@ -489,7 +506,8 @@ function afterMove() {
 async function autoFinish() {
   const epoch = S.epoch;
   S.phase = "auto";
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hint = null;
   log("Tout est découvert : les cartes montent seules.");
   render();
@@ -512,7 +530,8 @@ async function autoFinish() {
 /* La victoire s'annonce dans le statut ; la feuille vient END_MS plus tard. */
 async function win() {
   S.phase = "over";
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hint = null;
   S.wins++;
   S.time = Date.now() - S.t0;
@@ -903,36 +922,135 @@ function locate(uid) {
   return S.stock.some((c) => c.uid === uid) ? { at: "s" } : null;
 }
 
-/* Un clic choisit la carte (avec celles posées dessus) ; un clic sur une
-   place entourée l'y pose ; un second clic sur la même l'envoie à la
-   meilleure place. Une carte cachée ne se choisit pas. */
+/* Un clic envoie la carte (avec celles posées dessus) à sa meilleure place ;
+   pour une autre, on la fait glisser. Une carte qui ne peut aller nulle part
+   tremble, et le statut le dit. Une carte des fondations ne redescend qu'en
+   glissant : touchée, elle reste — un toucher de trop la ferait descendre
+   sans qu'on le veuille. Une carte cachée ne fait rien. */
 function onCardClick(uid) {
   if (S.phase !== "play") return;
   const loc = locate(uid);
   if (!loc) return;
   if (loc.at === "s") { onStockClick(); return; }
-  if (S.sel) {
-    if (sameSrc(S.sel, loc)) {
-      const dst = bestTarget(S.sel);
-      if (dst) { doMove(S.sel, dst); return; }
-      S.sel = null;
-      render();
-      return;
-    }
-    const dst = loc.at === "w" ? null : { at: loc.at, i: loc.i };
-    if (dst && canMove(S.sel, dst)) { doMove(S.sel, dst); return; }
-  }
+  if (!cardsAt(loc).length) return;
+  const dst = loc.at === "f" ? null : bestTarget(loc);
+  if (dst) { doMove(loc, dst); return; }
   S.hint = null;
-  S.sel = cardsAt(loc).length ? loc : null;
+  S.nogo = loc;
   render();
 }
 
-/* Un clic sur une place (colonne, fondation vide) : on y pose la carte
-   choisie si on peut, sinon on la lâche. */
-function onSlotClick(dst) {
-  if (S.phase !== "play") return;
-  if (S.sel && canMove(S.sel, dst)) { doMove(S.sel, dst); return; }
-  if (S.sel) { S.sel = null; render(); }
+/* Des cartes lâchées sur une place : elles y vont si la règle le permet,
+   sinon elles restent où elles étaient. Le glisser-déposer finit ici, et les
+   tests passent par là. */
+function onDrop(src, dst) {
+  if (S.phase !== "play") return false;
+  if (dst && doMove(src, dst)) return true;
+  S.drag = null;
+  render();
+  return false;
+}
+
+/* Le glisser-déposer. Un appui sur une carte visible ne devient un glisser
+   qu'au-delà de DRAG_PX ; en deçà, le navigateur en fait un clic. Le glisser
+   parti, la table capture le pointeur (le rendu reconstruit les cartes, jamais
+   la table) ; les cartes prises suivent le doigt dans un calque posé sur la
+   page, leur place reste vide et les places permises s'entourent. Lâchées,
+   elles vont à la place permise qu'elles recouvrent le plus — au moins le
+   quart de la carte, pour qu'une carte reposée à côté de chez elle ne parte
+   pas chez la voisine —, sinon elles reviennent. */
+const DRAG_PX = 6;
+const HOME_MS = 150;             // des cartes lâchées sans place reviennent en HOME_MS
+let press = null;                // l'appui en cours : { id, src, x, y, ghost } ; ghost et sa place une fois le glisser parti
+let swallow = false;             // un glisser vient de finir : le clic qui le suit aussitôt ne compte pas
+
+function onPointerDown(e) {
+  if (press && press.ghost) return;              // un autre doigt fait déjà glisser des cartes
+  press = null;
+  if (S.phase !== "play" || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const node = e.target && e.target.closest ? e.target.closest(".card") : null;
+  const src = node && node.dataset.uid ? locate(+node.dataset.uid) : null;
+  if (!src || src.at === "s" || !cardsAt(src).length) return;
+  press = { id: e.pointerId, src, x: e.clientX, y: e.clientY, ghost: null };
+}
+
+function onPointerMove(e) {
+  if (!press || e.pointerId !== press.id) return;
+  const dx = e.clientX - press.x, dy = e.clientY - press.y;
+  if (!press.ghost) {
+    if (Math.hypot(dx, dy) < DRAG_PX) return;
+    if (S.phase !== "play" || !cardsAt(press.src).length) { press = null; return; }
+    startDrag();
+  }
+  press.ghost.style.transform = `translate(${press.left + dx}px, ${press.top + dy}px)`;
+  const over = S.drag ? dropTarget(press, dx, dy) : null;
+  placeNodes.forEach((node, key) => node.classList.toggle("over", !!over && key === over.at + over.i));
+}
+
+function onPointerUp(e) {
+  if (!press || e.pointerId !== press.id) return;
+  const p = press;
+  press = null;
+  if (p.ghost) endDrag(p, e.type === "pointerup" ? dropTarget(p, e.clientX - p.x, e.clientY - p.y) : null);
+}
+
+/* Les cartes prises passent dans le calque, chacune là où elle était à
+   l'écran ; la table les montre ensuite vides à leur place. */
+function startDrag() {
+  const cards = cardsAt(press.src);
+  const nodes = cards.map((c) => cardNodes.get(c.uid));
+  const first = nodes[0].getBoundingClientRect();
+  const ghost = mk("div", "ghost");
+  ghost.style.setProperty("--cw", first.width + "px");
+  cards.forEach((c, k) => {
+    const r = nodes[k].getBoundingClientRect();
+    const b = cardEl(c, "", false);
+    b.style.left = r.left - first.left + "px";
+    b.style.top = r.top - first.top + "px";
+    ghost.appendChild(b);
+  });
+  document.body.appendChild(ghost);
+  Object.assign(press, { ghost, left: first.left, top: first.top, w: first.width, h: first.height });
+  try { el("table").setPointerCapture(press.id); } catch { /* pointeur déjà relâché */ }
+  document.body.classList.add("dragging");
+  S.hint = null;
+  S.nogo = null;
+  S.drag = press.src;
+  render();
+}
+
+/* La place permise que la première carte prise, déplacée de (dx, dy),
+   recouvre le plus ; null sous le quart de la carte. */
+function dropTarget(p, dx, dy) {
+  const L = p.left + dx, T = p.top + dy;
+  let best = null, most = p.w * p.h / 4;
+  for (const d of DESTS) {
+    if (!S.drag || !canMove(S.drag, d)) continue;
+    const r = placeNodes.get(d.at + d.i).getBoundingClientRect();
+    const w = Math.min(L + p.w, r.right) - Math.max(L, r.left);
+    const h = Math.min(T + p.h, r.bottom) - Math.max(T, r.top);
+    if (w > 0 && h > 0 && w * h >= most) { most = w * h; best = d; }
+  }
+  return best;
+}
+
+/* Le doigt levé : les cartes vont à leur place, ou reviennent d'où elles
+   viennent. Un glisser annulé entre-temps (Annuler, l'indice) n'a plus rien
+   à poser. */
+function endDrag(p, dst) {
+  // Le navigateur envoie ce clic dans la foulée du pointerup, avant toute minuterie.
+  swallow = true;
+  setTimeout(() => { swallow = false; }, 0);
+  document.body.classList.remove("dragging");
+  placeNodes.forEach((node) => node.classList.remove("over"));
+  const src = S.drag;
+  if (!src || (dst && onDrop(src, dst))) { p.ghost.remove(); return; }
+  p.ghost.classList.add("home");
+  p.ghost.style.transform = `translate(${p.left}px, ${p.top}px)`;
+  setTimeout(() => {
+    p.ghost.remove();
+    if (S.drag === src) onDrop(src, null);
+  }, HOME_MS);
 }
 
 function onStockClick() {
@@ -944,7 +1062,8 @@ function onUndoClick() {
   if (S.phase !== "play" || !S.undo.length) return;
   restore(S.undo.pop());
   S.undos++;
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hint = null;
   log("Coup annulé.");
   render();
@@ -952,7 +1071,8 @@ function onUndoClick() {
 
 function onHintClick() {
   if (S.phase !== "play") return;
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hints++;
   const mv = chooseMove("sharp");
   S.hint = mv ? hintOf(mv) : { none: true };
@@ -968,7 +1088,8 @@ function mk(tag, cls, text) {
   return e;
 }
 
-/* Une carte ; `click` : elle répond elle-même (sinon le clic va à sa place). */
+/* Une carte ; `click` : elle répond elle-même au clic et au glisser (sinon le
+   clic va à sa place : le talon). */
 function cardEl(c, cls, click) {
   const b = mk("button", "card" + (c.up ? (RED[c.suit] ? " red" : "") : " back") + (cls ? " " + cls : ""));
   if (c.up) {
@@ -978,7 +1099,14 @@ function cardEl(c, cls, click) {
     b.appendChild(corner);
     b.appendChild(mk("span", "pip", SUIT_SYM[c.suit]));
   }
-  if (click) b.addEventListener("click", (e) => { if (e) e.stopPropagation(); onCardClick(c.uid); });
+  if (click) {
+    b.dataset.uid = c.uid;
+    cardNodes.set(c.uid, b);
+    b.addEventListener("click", () => {
+      if (swallow) { swallow = false; return; }
+      onCardClick(c.uid);
+    });
+  }
   return b;
 }
 
@@ -1003,11 +1131,13 @@ function statusHtml() {
   switch (S.phase) {
     case "play": {
       if (S.hint) return hintText(S.hint);
-      if (S.sel) {
-        const cards = cardsAt(S.sel);
+      const src = S.drag || S.nogo;
+      if (src) {
+        const cards = cardsAt(src);
         const what = cards.length > 1 ? `La suite du ${cardHtml(cards[0])}` : cardHtml(cards[0]);
-        return bestTarget(S.sel)
-          ? `${what} : touche où la poser, ou touche-la encore pour l'envoyer à la meilleure place.`
+        if (!S.drag && src.at === "f") return `Pour faire redescendre ${what}, fais-la glisser sur une colonne.`;
+        return bestTarget(src)
+          ? `${what} : lâche-la sur une place entourée.`
           : `${what} ne peut aller nulle part pour l'instant.`;
       }
       if (stuck()) return "Le talon a fait un tour sans que rien ne bouge. Un indice, ou une nouvelle partie ?";
@@ -1025,13 +1155,22 @@ function statusHtml() {
    place se retourne (flip). Le rendu reconstruit toute la table. */
 let lastPlace = new Map();
 let lastUp = new Set();
+/* Ce que le glisser-déposer mesure à l'écran : uid -> carte qui répond,
+   « f0 »…« f3 », « c0 »…« c6 » -> la place. */
+let cardNodes = new Map();
+let placeNodes = new Map();
 
 function render() {
   if (!S.cols.length) return;
   const next = new Map(), up = new Set();
   const live = S.phase === "play";
-  const targets = live && S.sel ? DESTS.filter((d) => canMove(S.sel, d)) : [];
+  const targets = live && S.drag ? DESTS.filter((d) => canMove(S.drag, d)) : [];
   const isTarget = (at, i) => targets.some((d) => d.at === at && d.i === i);
+  // Les cartes d'une source : le dessus de la défausse ou d'une fondation, une colonne à partir de k.
+  const holds = (src, at, i, k) => !!src && src.at === at && (at === "w" || src.i === i) && (at !== "c" || k >= src.k);
+  const lift = (at, i, k) => (holds(S.drag, at, i, k) ? " lifted" : "") + (holds(S.nogo, at, i, k) ? " nogo" : "");
+  cardNodes = new Map();
+  placeNodes = new Map();
   const hint = live && S.hint && S.hint.mv ? S.hint.mv : null;
   const hintTalon = !!hint && (hint.draw || hint.draws > 0);
   const hSrc = hint && !hintTalon ? hint.src : null;
@@ -1061,12 +1200,17 @@ function render() {
   // La défausse : les cartes du dernier tirage en éventail, celle du dessus jouable.
   const waste = el("waste");
   waste.innerHTML = "";
+  // Les cartes hors de l'éventail sont visibles, même non montrées : elles ne se retournent pas en se montrant.
   const fan = S.waste.length ? Math.min(S.waste.length, Math.max(1, S.fan)) : 0;
-  S.waste.forEach((c, k) => { if (k < S.waste.length - fan) next.set(c.uid, "w"); });
+  S.waste.forEach((c, k) => { if (k < S.waste.length - fan) { next.set(c.uid, "w"); up.add(c.uid); } });
+  // Le dessus seul montré et qu'on fait glisser : la carte d'en dessous se montre, ou la place vide.
+  if (fan === 1 && holds(S.drag, "w")) {
+    const u = S.waste[S.waste.length - 2];
+    waste.appendChild(u ? cardEl(u, track(u, "w"), false) : mk("div", "empty"));
+  }
   for (let k = 0; k < fan; k++) {
     const c = S.waste[S.waste.length - fan + k];
-    let extra = "";
-    if (k === fan - 1 && S.sel && S.sel.at === "w") extra += " sel";
+    let extra = k === fan - 1 ? lift("w") : "";
     if (k === fan - 1 && hSrc && hSrc.at === "w") extra += " hint";
     const b = cardEl(c, track(c, "w", extra), true);
     b.style.setProperty("--x", k);
@@ -1081,16 +1225,22 @@ function render() {
     const slot = mk("div", "slot");
     let extra = isTarget("f", s) ? " target" : "";
     if (hDst && hDst.at === "f" && hDst.i === s) extra += " hint";
-    f.forEach((c, k) => { if (k < f.length - 1) next.set(c.uid, "f" + s); });
+    f.forEach((c, k) => { if (k < f.length - 1) { next.set(c.uid, "f" + s); up.add(c.uid); } });
+    const empty = () => mk("div", "empty" + (RED[s] ? " red" : "") + extra, SUIT_SYM[s]);
     if (f.length) {
       const c = f[f.length - 1];
-      if (S.sel && S.sel.at === "f" && S.sel.i === s) extra += " sel";
+      // Le dessus qu'on fait glisser laisse voir la carte d'en dessous, ou la place vide.
+      if (holds(S.drag, "f", s)) {
+        const u = f[f.length - 2];
+        slot.appendChild(u ? cardEl(u, track(u, "f" + s), false) : empty());
+      }
+      extra += lift("f", s);
       if (hSrc && hSrc.at === "f" && hSrc.i === s) extra += " hint";
       slot.appendChild(cardEl(c, track(c, "f" + s, extra), true));
     } else {
-      slot.appendChild(mk("div", "empty" + (RED[s] ? " red" : "") + extra, SUIT_SYM[s]));
+      slot.appendChild(empty());
     }
-    slot.addEventListener("click", () => onSlotClick({ at: "f", i: s }));
+    placeNodes.set("f" + s, slot);
     found.appendChild(slot);
   });
 
@@ -1108,14 +1258,14 @@ function render() {
     if (!col.length) box.appendChild(mk("div", "empty" + extra, "R"));
     col.forEach((c, k) => {
       let cls = k === col.length - 1 ? extra : "";
-      if (S.sel && S.sel.at === "c" && S.sel.i === i && k >= S.sel.k) cls += " sel";
+      cls += lift("c", i, k);
       if (hSrc && hSrc.at === "c" && hSrc.i === i && k >= hSrc.k) cls += " hint";
       const b = cardEl(c, track(c, "c" + i, cls), true);
       b.style.setProperty("--a", Math.min(k, d));
       b.style.setProperty("--b", Math.max(0, k - d));
       box.appendChild(b);
     });
-    box.addEventListener("click", () => onSlotClick({ at: "c", i }));
+    placeNodes.set("c" + i, box);
     tab.appendChild(box);
   });
 
@@ -1167,7 +1317,8 @@ function newGame(deck = shuffle(buildDeck())) {
   S.fan = 0;
   S.found = [[], [], [], []];
   S.phase = "play";
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hint = null;
   S.undo = [];
   S.moves = 0;
@@ -1199,6 +1350,10 @@ el("btnRules").addEventListener("click", () => { el("rulesOverlay").hidden = fal
 el("btnRules2").addEventListener("click", () => { el("rulesOverlay").hidden = false; });
 el("btnCloseRules").addEventListener("click", () => { el("rulesOverlay").hidden = true; });
 el("stock").addEventListener("click", onStockClick);
+el("table").addEventListener("pointerdown", onPointerDown);
+el("table").addEventListener("pointermove", onPointerMove);
+el("table").addEventListener("pointerup", onPointerUp);
+el("table").addEventListener("pointercancel", onPointerUp);
 el("btnUndo").addEventListener("click", onUndoClick);
 el("btnHint").addEventListener("click", onHintClick);
 el("btnNext").addEventListener("click", () => startGame());

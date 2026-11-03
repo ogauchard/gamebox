@@ -2,7 +2,7 @@
  * Lancer : node tests/solitaire.test.js
  *
  * Trois parties dans ce fichier :
- *   1. des parties au hasard par les gestionnaires de clic, sous invariants :
+ *   1. des parties au hasard par les clics et les glisser-déposer, sous invariants :
  *      conservation du paquet, légalité de chaque coup au moment où il est
  *      joué (contre une règle réécrite ici), tirages par trois, talon retourné
  *      dans le même ordre, Annuler qui rend exactement la position d'avant ;
@@ -13,7 +13,7 @@
  */
 "use strict";
 
-const { loadSolitaire, checker, globalClashes } = require("./harness");
+const { loadSolitaire, checker, globalClashes, FakeEl } = require("./harness");
 
 const { g, S, byId, tick } = loadSolitaire();
 const { ok, okOnce, report } = checker();
@@ -176,28 +176,43 @@ function checkState(where) {
   okOnce(S.fan <= Math.min(3, S.waste.length), `l'éventail ne montre que des cartes du dernier tirage (${where})`);
 }
 
-/* Un déplacement par les clics : on choisit la carte, puis la place — en
-   touchant une carte de la colonne visée, la place elle-même, ou, quand c'est
-   la meilleure, la carte une seconde fois. */
-let secondClicks = 0;
-function clickMove(src, dst) {
+/* Un déplacement par les gestes du joueur : un clic sur la carte quand la
+   place visée est sa meilleure (une carte des fondations ne redescend pas au
+   clic), sinon un glisser-déposer. */
+let oneClicks = 0, drops = 0;
+function uiMove(src, dst) {
   const card = cardsAt(src)[0];
-  call("onCardClick", card.uid);
-  okOnce(S.sel && call("sameSrc", S.sel, src), "un clic sur une carte jouable la choisit");
   const best = call("bestTarget", src);
   const pile = dst.at === "f" ? S.found[dst.i] : S.cols[dst.i];
   const before = pile.length;
-  if (best && best.at === dst.at && best.i === dst.i && Math.random() < 0.4) {
-    secondClicks++;
+  if (src.at !== "f" && best && best.at === dst.at && best.i === dst.i && Math.random() < 0.6) {
+    oneClicks++;
     call("onCardClick", card.uid);
-  } else if (dst.at === "c" && pile.length && Math.random() < 0.6) {
-    call("onCardClick", pick(pile).uid);
-  } else if (dst.at === "f" && pile.length && Math.random() < 0.5) {
-    call("onCardClick", pile[pile.length - 1].uid);
   } else {
-    call("onSlotClick", dst);
+    drops++;
+    call("onDrop", src, dst);
   }
-  okOnce(pile.length > before && pile.includes(card), "le second clic pose la carte à la place visée");
+  okOnce(pile.length > before && pile.includes(card), "le clic ou le glisser pose la carte à la place visée");
+  okOnce(!S.drag && !S.nogo, "après un coup, plus rien n'est pris ni ne tremble");
+}
+
+/* Un clic sur une carte visible quelconque : elle part à sa meilleure place,
+   ou rien ne bouge et elle tremble ; une carte des fondations reste. */
+let clicksNowhere = 0;
+function clickAny() {
+  const src = pick(sources());
+  if (!src) return;
+  const card = cardsAt(src)[0];
+  const best = src.at === "f" ? null : call("bestTarget", src);
+  const before = ser();
+  call("onCardClick", card.uid);
+  if (best) {
+    const pile = best.at === "f" ? S.found[best.i] : S.cols[best.i];
+    okOnce(pile.includes(card), "un clic envoie la carte à sa meilleure place");
+  } else {
+    clicksNowhere++;
+    okOnce(ser() === before && S.nogo && call("sameSrc", S.nogo, src), "sans place, ou aux fondations, un clic ne bouge rien et la carte tremble");
+  }
 }
 
 /* -------------------------------------------- 1. Parties au hasard, aux clics */
@@ -212,15 +227,17 @@ async function randomGame() {
       continue;
     }
     if (r < 0.12) {
-      // Un coup quelconque, souvent illégal : doMove doit en juger comme la règle d'ici.
+      // Des cartes lâchées n'importe où, souvent à tort : doMove doit en juger comme la règle d'ici.
       const src = pick(sources().concat([{ at: "c", i: rnd(7), k: rnd(8) }, { at: "f", i: rnd(4) }]));
-      call("doMove", src, pick(DESTS));
+      call("onDrop", src, pick(DESTS));
+    } else if (r < 0.2) {
+      clickAny();
     } else {
       const moves = legalMoves();
       const up = moves.filter((m) => m.dst.at === "f");
       if (moves.length && r < 0.8) {
         const m = up.length && Math.random() < 0.6 ? pick(up) : pick(moves);
-        clickMove(m.src, m.dst);
+        uiMove(m.src, m.dst);
       } else {
         call("onStockClick");
       }
@@ -253,7 +270,7 @@ async function aiGame(name) {
     } else {
       for (let k = 0; k < (mv.draws || 0); k++) call("onStockClick");
       okOnce(canMove(mv.src, mv.dst), "un coup du talon est légal une fois ses tirages faits");
-      clickMove(mv.src, mv.dst);
+      uiMove(mv.src, mv.dst);
     }
     checkState(`partie de ${name}`);
   }
@@ -303,7 +320,8 @@ function pose(p) {
   S.undo = [];
   S.moves = 0;
   S.idle = 0;
-  S.sel = null;
+  S.drag = null;
+  S.nogo = null;
   S.hint = null;
   S.phase = "play";
   S.trail = [call("stateKey")];
@@ -335,14 +353,11 @@ async function targeted() {
   ok(!canMove(C(0, 0), col(1)), "une carte cachée ne se déplace pas");
   ok(!canMove(C(0, 2), F(1)) && !canMove(C(0, 1), F(0)), "une suite ne monte pas aux fondations");
   call("onCardClick", S.cols[0][1].uid);
-  ok(S.sel && S.sel.k === 1, "un clic sur le Roi choisit la suite à partir de lui");
-  ok(statusText().includes("suite du R♠"), "le statut nomme la suite choisie");
-  call("onSlotClick", col(1));
-  ok(S.cols[1].map(label).join() === "R♠,D♥,V♣" && S.cols[0].length === 1, "la suite entière passe sur la colonne vide");
+  ok(S.cols[1].map(label).join() === "R♠,D♥,V♣" && S.cols[0].length === 1, "un clic sur le Roi envoie toute sa suite sur la colonne vide");
   ok(S.cols[0][0].up && S.cols[0][0].seen, "la carte découverte se retourne d'elle-même");
   ok(byId.get("log").innerHTML.includes("On découvre"), "le journal dit la carte découverte");
 
-  // Les fondations : une carte seule, de sa couleur, à la suite ; elle peut redescendre.
+  // Les fondations : une carte seule, de sa couleur, à la suite ; elle peut redescendre, en glissant.
   pose({ cols: [["AS"], ["2S"], ["2H"], ["6S"], ["4C"]], found: [0, 5, 3, 0], stock: ["9D"] });
   ok(canMove(C(0, 0), F(0)) && !canMove(C(0, 0), F(1)), "un As monte sur la fondation de sa couleur");
   ok(!canMove(C(1, 0), F(0)), "un 2 attend son As");
@@ -350,31 +365,53 @@ async function targeted() {
   ok(canMove(F(1), col(3)) && !canMove(F(1), F(2)), "une carte des fondations redescend sur une colonne, pas sur une autre fondation");
   ok(!canMove(F(2), col(4)), "redescendre suit la règle des colonnes (3♣ sur 4♣ refusé)");
   call("onCardClick", S.cols[0][0].uid);
-  call("onCardClick", S.cols[0][0].uid);
-  ok(S.found[0].length === 1, "deux clics sur un As l'envoient aux fondations");
-  call("onCardClick", S.cols[1][0].uid);
-  call("onSlotClick", F(0));
-  ok(S.found[0].length === 2, "un 2 choisi puis la fondation : il monte");
+  ok(S.found[0].length === 1, "un clic sur un As l'envoie aux fondations");
+  ok(call("onDrop", C(1, 0), F(0)) && S.found[0].length === 2, "un 2 lâché sur sa fondation : il monte");
   call("onCardClick", S.found[1][4].uid);
-  call("onCardClick", S.cols[3][0].uid);
-  ok(S.cols[3].map(label).join() === "6♠,5♥" && S.found[1].length === 4, "5♥ choisi aux fondations puis 6♠ : il redescend");
+  ok(S.found[1].length === 5 && S.cols[3].length === 1, "un clic sur une carte des fondations ne la fait pas redescendre");
+  ok(S.nogo && S.nogo.at === "f" && statusText().includes("fais-la glisser sur une colonne"), "le statut dit qu'elle redescend en glissant");
+  ok(byId.get("found").children[1].children[0].className.includes("nogo"), "elle tremble");
+  ok(call("onDrop", F(1), col(3)) && S.cols[3].map(label).join() === "6♠,5♥" && S.found[1].length === 4, "5♥ lâché sur 6♠ : il redescend");
+  ok(!S.nogo && !byId.get("found").children[1].children[0].className.includes("nogo"), "l'action suivante arrête le tremblement");
 
-  // Le second clic : les fondations d'abord, puis une colonne occupée.
+  // Le clic : les fondations d'abord, puis une colonne occupée, puis une colonne vide.
   pose({ cols: [["5H"], ["6S"], []], found: [0, 4, 0, 0], stock: ["9D"] });
   call("onCardClick", S.cols[0][0].uid);
-  ok(S.sel && byId.get("found").children[1].children[0].className.includes("target"), "les places possibles s'entourent");
-  call("onCardClick", S.cols[0][0].uid);
-  ok(S.found[1].length === 5 && S.cols[1].length === 1, "5♥ touché deux fois va aux fondations plutôt que sur 6♠");
+  ok(S.found[1].length === 5 && S.cols[1].length === 1, "5♥ touché va aux fondations plutôt que sur 6♠");
   pose({ cols: [["RS"], ["9H"], [], ["8D", "7C"]], stock: ["9D"] });
+  const nine = ser();
   call("onCardClick", S.cols[1][0].uid);
-  call("onCardClick", S.cols[3][1].uid);
-  ok(S.sel && S.sel.i === 3 && S.sel.k === 1 && S.cols[1].length === 1, "un clic sur une carte qui n'est pas une place possible la choisit à son tour");
-  call("onCardClick", S.cols[1][0].uid);
-  call("onCardClick", S.cols[1][0].uid);
-  ok(!S.sel && S.cols[1].length === 1, "9♥ n'a nulle part où aller : le second clic le lâche");
+  ok(ser() === nine && S.nogo && S.nogo.i === 1, "9♥ n'a nulle part où aller : un clic ne le bouge pas");
+  ok(statusText().includes("ne peut aller nulle part") && byId.get("tableau").children[1].children[0].className.includes("nogo"),
+    "il tremble, et le statut le dit");
+  call("onCardClick", S.cols[3][0].uid);
+  ok(ser() === nine && S.nogo.i === 3 && S.nogo.k === 0 && statusText().includes("suite du 8♦"), "la suite du 8♦ non plus");
   call("onCardClick", S.cols[0][0].uid);
-  call("onCardClick", S.cols[0][0].uid);
-  ok(S.cols[2].length === 1 && !S.cols[0].length, "le second clic envoie un Roi sur la colonne vide, faute de mieux");
+  ok(S.cols[2].length === 1 && !S.cols[0].length && !S.nogo, "un clic envoie un Roi sur la colonne vide, faute de mieux");
+
+  // Un glisser en cours : les cartes prises laissent leur place vide, les places permises s'entourent.
+  pose({ cols: [["#4C", "7H"], ["8S"], ["8D"], ["8C"], []], waste: ["5D", "6C"], found: [13, 4, 0, 0], stock: ["9D"] });
+  S.fan = 1;
+  S.drag = C(0, 1);
+  call("render");
+  const tab = byId.get("tableau").children;
+  ok(tab[0].children[1].className.includes("lifted") && !tab[0].children[0].className.includes("lifted"), "la carte prise laisse sa place vide, pas celle d'en dessous");
+  ok(tab[1].children[0].className.includes("target") && tab[3].children[0].className.includes("target"), "les places permises s'entourent (8♠, 8♣)");
+  ok(!tab[2].children[0].className.includes("target") && !tab[4].children[0].className.includes("target"), "pas les autres (8♦, colonne vide)");
+  ok(statusText().includes("lâche-la sur une place entourée"), "le statut dit où la lâcher");
+  S.drag = W;
+  call("render");
+  const waste = byId.get("waste").children;
+  ok(waste.length === 2 && label(S.waste[0]) === "5♦" && waste[1].className.includes("lifted") && !waste[0].className.includes("lifted"),
+    "le dessus de la défausse pris, la carte d'en dessous se montre");
+  S.drag = F(0);
+  call("render");
+  const spades = byId.get("found").children[0].children;
+  ok(spades.length === 2 && !spades[0].className.includes("lifted") && spades[1].className.includes("lifted"),
+    "le dessus d'une fondation pris, la carte d'en dessous se montre");
+  ok(byId.get("tableau").children[4].children[0].className.includes("target"), "un Roi des fondations peut aller sur la colonne vide");
+  ok(!call("onDrop", F(0), col(1)) && !S.drag && S.found[0].length === 13, "lâché où il ne va pas : il reste, le glisser est fini");
+  ok(!byId.get("found").children[0].children[0].className.includes("lifted"), "et il se remontre à sa place");
 
   // Le talon : trois cartes par trois, la défausse retournée dans le même ordre, sans limite.
   pose({ stock: ["2C", "3C", "4C", "5C", "6C"], cols: [["RD"]] });
@@ -397,19 +434,16 @@ async function targeted() {
   pose({ stock: ["5D", "8C", "7H", "9D"], cols: [["8S"], ["9H"]] });
   call("onStockClick");
   call("onCardClick", S.waste[2].uid);
-  call("onCardClick", S.cols[0][0].uid);
   ok(S.cols[0].length === 2 && S.fan === 2, "7♥ de la défausse sur 8♠ ; l'éventail garde deux cartes");
   call("onCardClick", S.waste[0].uid);
-  ok(S.sel && S.sel.at === "w", "toute carte de l'éventail vaut celle du dessus");
-  call("onSlotClick", col(1));
-  ok(S.cols[1].length === 2 && byId.get("waste").children.length === 1, "8♣ sur 9♥ ; il reste une carte, montrée seule");
+  ok(S.cols[1].map(label).join() === "9♥,8♣", "toute carte de l'éventail vaut celle du dessus : 8♣ part sur 9♥");
+  ok(byId.get("waste").children.length === 1, "il reste une carte, montrée seule");
 
   // Annuler : la position revient, la carte recachée reste connue.
   pose({ cols: [["#4C", "7H"], ["8S"]], stock: ["9D"] });
   const hidden = S.cols[0][0];
   const before = ser();
   call("onCardClick", S.cols[0][1].uid);
-  call("onSlotClick", col(1));
   ok(hidden.up && S.trail.length === 2, "le coup découvre le 4♣ et entre dans la trace");
   call("onUndoClick");
   ok(ser() === before && !hidden.up && hidden.seen, "Annuler recache le 4♣, qui reste connu");
@@ -429,7 +463,6 @@ async function targeted() {
   call("render");
   ok(S.phase === "play", "une carte cachée : pas de fin automatique");
   call("onCardClick", S.cols[2][1].uid);
-  call("onCardClick", S.cols[2][1].uid);
   ok(S.phase === "auto" && S.found[3].length === 13, "R♦ monte, la dernière carte cachée se retourne : les cartes montent seules");
   ok(statusText().includes("montent seules"), "le statut l'annonce");
   await tick();
@@ -444,16 +477,13 @@ async function targeted() {
 
   pose({ stock: ["RD"], cols: [["DD"]], found: [13, 13, 13, 11] });
   call("onCardClick", S.cols[0][0].uid);
-  call("onCardClick", S.cols[0][0].uid);
   ok(S.phase === "play" && S.found[3].length === 12, "tout est découvert mais le talon n'est pas vide : pas de fin automatique");
   const wins = S.wins;
   call("onStockClick");
   call("onCardClick", S.waste[0].uid);
-  call("onCardClick", S.waste[0].uid);
   ok(S.phase === "over" && S.wins === wins + 1, "la dernière carte posée à la main : gagné");
   byId.get("scoreOverlay").hidden = true;
   pose({ cols: [["RH"]], found: [13, 12, 13, 13] });
-  call("onCardClick", S.cols[0][0].uid);
   call("onCardClick", S.cols[0][0].uid);
   call("newGame");
   await ticks(4);
@@ -485,8 +515,7 @@ async function targeted() {
   ok(S.hint.none && statusText().includes("plus de coup utile"), "indice : rien d'utile, il le dit");
   // Jamais vers une position déjà jouée : 5♥ redescendu à la main n'est pas renvoyé aux fondations.
   pose({ cols: [["6S"], ["#3D", "VD"]], found: [4, 5, 4, 0] });
-  call("onCardClick", S.found[1][4].uid);
-  call("onCardClick", S.cols[0][0].uid);
+  call("onDrop", F(1), col(0));
   ok(S.cols[0].length === 2, "5♥ redescend sur 6♠");
   call("onHintClick");
   ok(!(S.hint.mv && S.hint.mv.dst && S.hint.mv.dst.at === "f"), "l'indice ne propose pas de revenir à la position d'avant");
@@ -501,16 +530,127 @@ async function targeted() {
   ok(reach([], 0).length === 0, "talon vide : rien");
 }
 
+/* ------------------------------------------- 4. Le glisser-déposer, au pointeur */
+/* Les vrais gestionnaires de pointeur de la table, sur une géométrie posée
+   ici : la colonne i occupe x = 100 i à 100 i + 80, de y = 200 à 800, la
+   fondation s x = 300 + 100 s, y = 0 à 112 ; une carte fait 80 × 112, la
+   carte k d'une colonne à y = 200 + 30 k. */
+const R = (left, top, w, h) => ({ left, top, width: w, height: h, right: left + w, bottom: top + h });
+FakeEl.prototype.getBoundingClientRect = function () {
+  for (const [key, node] of g("placeNodes")) {
+    if (node === this) return key[0] === "f" ? R(300 + 100 * +key[1], 0, 80, 112) : R(100 * +key[1], 200, 80, 600);
+  }
+  for (const [uid, node] of g("cardNodes")) {
+    if (node !== this) continue;
+    const at = call("locate", uid);
+    return at.at === "c" ? R(100 * at.i, 200 + 30 * at.k, 80, 112) : at.at === "f" ? R(300 + 100 * at.i, 0, 80, 112) : R(100, 0, 80, 112);
+  }
+  return R(0, 0, 0, 0);
+};
+FakeEl.prototype.remove = function () { this.removed = true; };
+
+async function pointers() {
+  const body = new FakeEl("body");
+  g("document").body = body;
+  const table = byId.get("table");
+  const nodeOf = (c) => g("cardNodes").get(c.uid);
+  const fire = (type, x, y, node, id = 1) => {
+    for (const fn of table._listeners[type]) {
+      fn({ type, pointerId: id, pointerType: "touch", button: 0, clientX: x, clientY: y, target: node ? { closest: () => node } : table });
+    }
+  };
+  const ghost = () => body.children[body.children.length - 1];
+  const over = (key) => g("placeNodes").get(key).className.includes("over");
+
+  // 7♥ glissé sur 8♣, qui n'est pas sa meilleure place (8♠ l'est).
+  pose({ cols: [["8S"], ["#4C", "7H"], ["8C"]], stock: ["9D"] });
+  const seven = S.cols[1][1];
+  fire("pointerdown", 140, 260, nodeOf(seven));
+  fire("pointermove", 143, 262);
+  ok(!S.drag && !body.children.length, "sous le seuil, un appui n'est pas encore un glisser");
+  fire("pointermove", 240, 270);
+  ok(S.drag && call("sameSrc", S.drag, C(1, 1)) && ghost() && ghost().children.length === 1, "au-delà du seuil, la carte part dans le calque");
+  ok(nodeOf(seven).className.includes("lifted") && body.className.includes("dragging"), "sa place reste vide");
+  ok(over("c2") && !over("c0") && nodeOf(S.cols[2][0]).className.includes("target"), "la place qu'elle recouvre est marquée, parmi les places entourées");
+  fire("pointerdown", 40, 260, nodeOf(S.cols[0][0]), 2);
+  fire("pointermove", 400, 600, null, 2);
+  ok(S.drag && S.drag.i === 1 && over("c2"), "un second doigt ne dérange pas le glisser");
+  fire("pointerup", 240, 270);
+  ok(S.cols[2].map(label).join() === "8♣,7♥" && S.cols[1][0].up, "lâchée sur 8♣, elle y va, et la carte d'en dessous se retourne");
+  ok(!S.drag && ghost().removed && !body.className.includes("dragging") && !over("c2"), "le calque disparaît");
+  nodeOf(seven).click();
+  ok(S.cols[2].length === 2, "le clic qui suit aussitôt un glisser ne compte pas");
+  fire("pointerdown", 240, 270, nodeOf(seven));
+  fire("pointermove", 40, 270);
+  fire("pointerup", 40, 270);
+  ok(S.cols[0].map(label).join() === "8♠,7♥", "glissée de 8♣ sur 8♠");
+  await tick();
+  nodeOf(seven).click();
+  ok(S.cols[2].map(label).join() === "8♣,7♥", "un instant après, un clic compte de nouveau : 7♥ part sur 8♣");
+
+  // Un appui sans bouger : rien pour le glisser, le clic fait le reste.
+  fire("pointerdown", 240, 260, nodeOf(seven));
+  fire("pointerup", 240, 260);
+  ok(!S.drag && !g("press") && S.cols[2].length === 2, "un appui sans bouger n'est pas un glisser");
+
+  // Lâchée là où elle ne va pas, ou à peine décalée vers une place permise : elle revient.
+  pose({ cols: [["8S"], ["#4C", "7H"], ["8C"]], stock: ["9D"] });
+  const still = ser();
+  const n = body.children.length;
+  fire("pointerdown", 140, 260, nodeOf(S.cols[1][1]));
+  fire("pointermove", 640, 60);
+  fire("pointerup", 640, 60);
+  ok(body.children.length === n + 1 && ghost().className.includes("home") && !ghost().removed, "lâchée sans place, elle revient à sa place");
+  await ticks(2);
+  ok(ghost().removed && !S.drag && ser() === still && !nodeOf(S.cols[1][1]).className.includes("lifted"), "revenue, la table la remontre");
+  fire("pointerdown", 140, 260, nodeOf(S.cols[1][1]));
+  fire("pointermove", 170, 260);
+  ok(!over("c2"), "décalée d'un huitième de carte vers 8♣, rien n'est marqué");
+  fire("pointerup", 170, 260);
+  await ticks(2);
+  ok(ser() === still, "et elle revient : moins d'un quart de carte ne suffit pas");
+  fire("pointerdown", 140, 260, nodeOf(S.cols[1][1]));
+  fire("pointermove", 240, 270);
+  fire("pointercancel", 240, 270);
+  await ticks(2);
+  ok(ser() === still && !S.drag && ghost().removed, "un glisser interrompu par le navigateur ne pose rien");
+
+  // Aux fondations et retour.
+  pose({ cols: [["AS"], [], [], ["6S"]], found: [0, 5, 0, 0], stock: ["9D"] });
+  fire("pointerdown", 40, 260, nodeOf(S.cols[0][0]));
+  fire("pointermove", 340, 60);
+  ok(over("f0"), "un As au-dessus de sa fondation la marque");
+  fire("pointerup", 340, 60);
+  ok(S.found[0].length === 1, "lâché, il y monte");
+  const five = S.found[1][4];
+  fire("pointerdown", 440, 50, nodeOf(five));
+  fire("pointermove", 340, 280);
+  const hearts = byId.get("found").children[1].children;
+  ok(hearts.length === 2 && label(S.found[1][3]) === "4♥" && !hearts[0].className.includes("lifted") && hearts[1].className.includes("lifted"),
+    "5♥ pris aux fondations : le 4♥ se montre dessous");
+  call("onUndoClick");
+  ok(!S.drag && S.cols[0].length === 1, "Annuler pendant un glisser défait le dernier coup et lâche les cartes");
+  fire("pointerup", 340, 280);
+  ok(S.found[1].length === 5 && S.cols[3].length === 1 && ghost().removed, "le doigt levé ensuite ne pose rien");
+  fire("pointerdown", 440, 50, nodeOf(five));
+  fire("pointermove", 340, 280);
+  ok(over("c3"), "5♥ au-dessus de 6♠ le marque");
+  fire("pointerup", 340, 280);
+  ok(S.cols[3].map(label).join() === "6♠,5♥" && S.found[1].length === 4, "lâché, il redescend");
+}
+
 /* ---------------------------------------------------------------- Lancement */
 (async () => {
   ok(globalClashes("solitaire.html").length === 0, `aucun nom de premier niveau ne masque window.* (${globalClashes("solitaire.html").join(", ")})`);
 
   for (let i = 0; i < 40; i++) await randomGame();
   console.log(`parties au hasard : ${draws} tirages, ${recycles} talons retournés, ${flips} cartes découvertes, ` +
-    `${kingsToEmpty} Rois sur colonne vide, ${fromFound} redescentes, ${runs} suites, ${secondClicks} seconds clics`);
+    `${kingsToEmpty} Rois sur colonne vide, ${fromFound} redescentes, ${runs} suites, ${oneClicks} clics, ${drops} glissers, ` +
+    `${clicksNowhere} clics sans place`);
   ok(mismatches === 0, `chaque déplacement est jugé comme la règle (${mismatches} écarts)`);
   ok(badDraws === 0, `chaque tirage prend les trois cartes du dessus, et le talon se retourne dans le même ordre (${badDraws} écarts)`);
-  ok(draws > 100 && recycles > 10 && flips > 50 && runs > 10 && secondClicks > 10, "les parties au hasard couvrent tirages, retournements, découvertes et suites");
+  ok(draws > 100 && recycles > 10 && flips > 50 && runs > 10 && oneClicks > 10 && drops > 10 && clicksNowhere > 10,
+    "les parties au hasard couvrent tirages, retournements, découvertes, suites, clics et glissers");
 
   // Pour aller vite : l'indice regarde moins loin ; ces parties vérifient la règle, pas la force.
   g("AI").nodes = 800;
@@ -529,5 +669,6 @@ async function targeted() {
 
   await targeted();
   ok(g("_peeks") === 0, `les indices des cas ciblés ne lisent aucune carte cachée (${g("_peeks")})`);
+  await pointers();
   report("Solitaire");
 })();
